@@ -110,13 +110,13 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)external\imgui;$(ProjectDir)external\imgui\backends;$(ProjectDir)external\sdl\include;$(ProjectDir)external\sdl_mixer\include;$(ProjectDir)core;$(ProjectDir)core\imgui;$(ProjectDir)core\math;$(ProjectDir)core\sdl;$(ProjectDir)core\sound;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)external\imgui;$(ProjectDir)external\imgui\backends;$(ProjectDir)external\sdl\include;$(ProjectDir)external\sdl_mixer\include;$(ProjectDir)external\fmod\inc;$(ProjectDir)core;$(ProjectDir)core\imgui;$(ProjectDir)core\math;$(ProjectDir)core\sdl;$(ProjectDir)core\sound;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(ProjectDir)external\sdl\lib\x64\;$(ProjectDir)external\sdl_mixer\lib\x64\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>SDL2.lib;SDL2main.lib;SDL2_mixer.lib;opengl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(ProjectDir)external\sdl\lib\x64\;$(ProjectDir)external\sdl_mixer\lib\x64\;$(ProjectDir)external\fmod\lib\x64\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>SDL2.lib;SDL2main.lib;SDL2_mixer.lib;opengl32.lib;fmod_vc.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -150,6 +150,14 @@
     <Library Include="external\sdl\lib\x64\SDL2main.lib" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="external\fmod\inc\fmod.h" />
+    <ClInclude Include="external\fmod\inc\fmod.hpp" />
+    <ClInclude Include="external\fmod\inc\fmod_codec.h" />
+    <ClInclude Include="external\fmod\inc\fmod_common.h" />
+    <ClInclude Include="external\fmod\inc\fmod_dsp.h" />
+    <ClInclude Include="external\fmod\inc\fmod_dsp_effects.h" />
+    <ClInclude Include="external\fmod\inc\fmod_errors.h" />
+    <ClInclude Include="external\fmod\inc\fmod_output.h" />
     <ClInclude Include="external\imgui\backends\imgui_impl_opengl3.h" />
     <ClInclude Include="external\imgui\backends\imgui_impl_opengl3_loader.h" />
     <ClInclude Include="external\imgui\backends\imgui_impl_sdl2.h" />
