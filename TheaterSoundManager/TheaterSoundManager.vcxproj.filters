@@ -372,5 +372,8 @@
     <ClInclude Include="external\fmod\inc\fmod_output.h">
       <Filter>Fichiers d%27en-tête</Filter>
     </ClInclude>
+    <ClInclude Include="core\tsm_announcement.h">
+      <Filter>Fichiers d%27en-tête</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

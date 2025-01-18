@@ -150,6 +150,7 @@
     <Library Include="external\sdl\lib\x64\SDL2main.lib" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="core\tsm_announcement.h" />
     <ClInclude Include="external\fmod\inc\fmod.h" />
     <ClInclude Include="external\fmod\inc\fmod.hpp" />
     <ClInclude Include="external\fmod\inc\fmod_codec.h" />

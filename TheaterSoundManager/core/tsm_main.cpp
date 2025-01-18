@@ -25,31 +25,30 @@
 #include <fmod.hpp>
 #include <fmod_errors.h>
 
-const char* glsl_version = "#version 130";
+// Announcement
+#include "tsm_announcement.h"
+
+const char* glsl_version = "#version 460";
 
 namespace fs = std::filesystem;
 
-// Structure pour stocker les informations des musiques
 struct MusicTrack {
     std::string filepath;
     std::string filename;
     FMOD::Sound* sound;
-    std::vector<float> waveform; // Données de la forme d'onde
 };
 
 std::vector<MusicTrack> musicTracks;
 std::mutex musicTracksMutex;
 
-// Fonction pour ouvrir le sélecteur de fichiers natif de Windows
 std::vector<std::string> OpenFileDialog(const char* filter = "Audio Files\0*.mp3;*.wav;*.ogg;*.flac\0All Files\0*.*\0") {
     std::vector<std::string> filenames;
 
-    OPENFILENAMEA ofn;       // structure pour l'API
-    CHAR szFile[8192] = { 0 }; // buffer pour le nom de fichier
-
+    OPENFILENAMEA ofn;       
+    CHAR szFile[8192] = { 0 }; 
     ZeroMemory(&ofn, sizeof(ofn));
     ofn.lStructSize = sizeof(ofn);
-    ofn.hwndOwner = NULL; // Pas de fenêtre propriétaire
+    ofn.hwndOwner = NULL; 
     ofn.lpstrFilter = filter;
     ofn.lpstrFile = szFile;
     ofn.nMaxFile = sizeof(szFile);
@@ -62,11 +61,9 @@ std::vector<std::string> OpenFileDialog(const char* filter = "Audio Files\0*.mp3
         p += directory.length() + 1;
 
         if (*p == '\0') {
-            // Un seul fichier sélectionné
             filenames.push_back(directory);
         }
         else {
-            // Plusieurs fichiers sélectionnés
             while (*p) {
                 std::string filename = p;
                 p += filename.length() + 1;
@@ -80,11 +77,10 @@ std::vector<std::string> OpenFileDialog(const char* filter = "Audio Files\0*.mp3
 
 bool init_sdl(SDL_Window** window, SDL_GLContext* gl_context, const char* title, int width, int height)
 {
-    // Configuration du contexte OpenGL
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 6);
 
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
@@ -128,7 +124,6 @@ void cleanup_sdl(SDL_Window* window, SDL_GLContext gl_context)
     SDL_Quit();
 }
 
-// Fonction pour vérifier les erreurs FMOD
 void ERRCHECK(FMOD_RESULT result)
 {
     if (result != FMOD_OK)
@@ -137,71 +132,8 @@ void ERRCHECK(FMOD_RESULT result)
     }
 }
 
-// Fonction pour générer la forme d'onde de manière asynchrone
-void GenerateWaveform(FMOD::System* fmodSystem, MusicTrack& track, std::mutex& mutex)
-{
-    std::lock_guard<std::mutex> lock(mutex);
-    FMOD::Sound* sound = nullptr;
-    FMOD_RESULT result;
-
-    // Ouvrir le son sans streaming pour un accès aléatoire plus rapide
-    result = fmodSystem->createSound(track.filepath.c_str(), FMOD_DEFAULT | FMOD_ACCURATETIME, nullptr, &sound);
-    if (result != FMOD_OK)
-    {
-        std::cerr << "Erreur FMOD::createSound: " << FMOD_ErrorString(result) << std::endl;
-        return;
-    }
-
-    unsigned int length = 0;
-    result = sound->getLength(&length, FMOD_TIMEUNIT_PCM);
-    ERRCHECK(result);
-
-    int numChannels = 0;
-    result = sound->getFormat(nullptr, nullptr, &numChannels, nullptr);
-    ERRCHECK(result);
-
-    int numSamples = 1024; // Nombre de points pour le tracé
-    track.waveform.resize(numSamples);
-
-    unsigned int totalSamples = length;
-    unsigned int samplesPerPoint = totalSamples / numSamples;
-
-    std::vector<short> sampleBuffer(numChannels);
-
-    for (int i = 0; i < numSamples; ++i)
-    {
-        unsigned int position = i * samplesPerPoint;
-        if (position >= totalSamples)
-            position = totalSamples - 1;
-
-        // Définir la position de lecture
-        result = sound->seekData(position * numChannels * sizeof(short));
-        ERRCHECK(result);
-
-        unsigned int read = 0;
-        result = sound->readData(sampleBuffer.data(), numChannels * sizeof(short), &read);
-        if (result != FMOD_OK && result != FMOD_ERR_FILE_EOF)
-        {
-            ERRCHECK(result);
-            break;
-        }
-
-        // Calculer la moyenne des canaux
-        float sampleValue = 0.0f;
-        for (int ch = 0; ch < numChannels; ++ch)
-        {
-            sampleValue += static_cast<float>(sampleBuffer[ch]) / 32768.0f;
-        }
-        sampleValue /= numChannels;
-        track.waveform[i] = sampleValue;
-    }
-
-    sound->release();
-}
-
 int main(int argc, char** argv)
 {
-    // SDL
     SDL_Window* window = nullptr;
     SDL_GLContext gl_context = nullptr;
 
@@ -210,7 +142,6 @@ int main(int argc, char** argv)
         return -1;
     }
 
-    // FMOD
     FMOD::System* fmodSystem = nullptr;
     FMOD_RESULT result;
 
@@ -220,26 +151,20 @@ int main(int argc, char** argv)
     result = fmodSystem->init(512, FMOD_INIT_NORMAL, nullptr);
     ERRCHECK(result);
 
-    // ImGui
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 	io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
-	//Io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-	//Io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableSetMousePos;
 	io.ConfigDockingWithShift = true;
 
-    // Style personnalisé
-    //ImGui::StyleColorsLight();
     ImGuiStyle& style = ImGui::GetStyle();
     style.WindowRounding = 5.0f;
     style.FrameRounding = 5.0f;
     style.ScrollbarRounding = 5.0f;
     style.GrabRounding = 5.0f;
 
-    // Palette de couleurs inspirée de GreenHorusTheme avec une pointe de couleur pastel
     ImVec4* colors = style.Colors;
     colors[ImGuiCol_WindowBg] = ImVec4(0.1f, 0.105f, 0.11f, 1.0f);
     colors[ImGuiCol_Header] = ImVec4(0.2f, 0.205f, 0.21f, 1.0f);
@@ -267,7 +192,6 @@ int main(int argc, char** argv)
     colors[ImGuiCol_TabActive] = ImVec4(0.35f, 0.63f, 0.39f, 1.0f);
     colors[ImGuiCol_TabHovered] = ImVec4(0.35f, 0.63f, 0.39f, 1.0f);
 
-    // Couleur dominante pastel (par exemple, un bleu doux)
     ImVec4 dominantColor = ImVec4(0.5f, 0.7f, 0.9f, 1.0f);
     colors[ImGuiCol_SliderGrab] = dominantColor;
     colors[ImGuiCol_SliderGrabActive] = ImVec4(0.4f, 0.6f, 0.8f, 1.0f);
@@ -285,23 +209,19 @@ int main(int argc, char** argv)
     ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
     ImGui_ImplOpenGL3_Init(glsl_version);
 
-    // Variables pour la gestion des musiques
     std::vector<MusicTrack> musicTracks;
     int currentTrackIndex = -1;
     bool isPlaying = false;
-    float volume = 1.0f; // Volume entre 0.0f et 1.0f
+    float volume = 1.0f;
 
-    // Variables pour la lecture des segments
     Uint32 segmentStartTime = 0;
-    int segmentDurationSec = 120; // 2 minutes en secondes
-    int fadeDurationSec = 5;      // 5 secondes
-    Uint32 segmentDuration = segmentDurationSec * 1000; // en millisecondes
-    Uint32 fadeDuration = fadeDurationSec * 1000;       // en millisecondes
+    int segmentDurationSec = 120;
+    int fadeDurationSec = 5;     
+    Uint32 segmentDuration = segmentDurationSec * 1000; 
+    Uint32 fadeDuration = fadeDurationSec * 1000;     
 
-    // Générateur aléatoire
     std::default_random_engine generator(std::chrono::system_clock::now().time_since_epoch().count());
 
-    // Variables pour gérer le fondu enchaîné
     bool isFadingOut = false;
     bool isFadingIn = false;
     Uint32 fadeStartTime = 0;
@@ -310,16 +230,14 @@ int main(int argc, char** argv)
     FMOD::Channel* currentChannel = nullptr;
     FMOD::Channel* nextChannel = nullptr;
 
-    // Options de lecture
-    bool isRandomOrder = true;           // Lecture aléatoire des musiques
-    bool isRandomSegment = false;        // Lecture de segments aléatoires
-    bool dontPlayTwice = false;          // Ne pas rejouer les musiques déjà jouées
-    bool useTimer = false;               // Utiliser un timer pour arrêter la lecture
-    int timerDurationMin = 10;           // Durée du timer en minutes
+    bool isRandomOrder = true;           
+    bool isRandomSegment = false;        
+    bool dontPlayTwice = false;          
+    bool useTimer = false;               
+    int timerDurationMin = 10;           
     Uint32 timerStartTime = 0;
-    std::vector<int> playedTracks;       // Liste des musiques déjà jouées
+    std::vector<int> playedTracks;       
 
-    // Main loop
     bool running = true;
 
     ImVec4 clear_color = ImVec4(0.90f, 0.90f, 0.90f, 1.00f);
@@ -342,7 +260,6 @@ int main(int argc, char** argv)
             continue;
         }
 
-        // Gestion des segments et des transitions
         if (isPlaying && currentTrackIndex >= 0)
         {
             unsigned int channelPosition = 0;
@@ -355,14 +272,11 @@ int main(int argc, char** argv)
             Uint32 currentTime = SDL_GetTicks();
             Uint32 elapsedTime = currentTime - segmentStartTime;
 
-            // Commencer la transition si nécessaire
             if (!isFadingOut && elapsedTime >= (segmentDuration - fadeDuration))
             {
-                // Commencer le fondu sortant de la musique actuelle
                 isFadingOut = true;
                 fadeStartTime = SDL_GetTicks();
 
-                // Sélectionner la prochaine musique
                 if (!musicTracks.empty())
                 {
                     if (dontPlayTwice)
@@ -420,14 +334,12 @@ int main(int argc, char** argv)
                         }
                     }
 
-                    // Charger la prochaine musique
                     result = fmodSystem->playSound(musicTracks[nextTrackIndex].sound, nullptr, true, &nextChannel);
                     ERRCHECK(result);
 
                     result = nextChannel->setVolume(0.0f);
                     ERRCHECK(result);
 
-                    // Si lecture de segments aléatoires
                     if (isRandomSegment)
                     {
                         unsigned int soundLength = 0;
@@ -443,14 +355,12 @@ int main(int argc, char** argv)
                         }
                         else
                         {
-                            // Si le segment est plus long que la musique, commencer au début
                             result = nextChannel->setPosition(0, FMOD_TIMEUNIT_MS);
                             ERRCHECK(result);
                         }
                     }
                     else
                     {
-                        // Commencer au début
                         result = nextChannel->setPosition(0, FMOD_TIMEUNIT_MS);
                         ERRCHECK(result);
                     }
@@ -462,7 +372,6 @@ int main(int argc, char** argv)
                 }
             }
 
-            // Gestion des fondues
             if (isFadingOut)
             {
                 Uint32 fadeElapsed = SDL_GetTicks() - fadeStartTime;
@@ -474,21 +383,18 @@ int main(int argc, char** argv)
                     isFadingOut = false;
                     isFadingIn = false;
 
-                    // Arrêter la musique actuelle
                     if (currentChannel)
                     {
                         result = currentChannel->stop();
                         ERRCHECK(result);
                     }
 
-                    // Passer à la musique suivante
                     currentChannel = nextChannel;
                     nextChannel = nullptr;
                     currentTrackIndex = nextTrackIndex;
                     segmentStartTime = SDL_GetTicks();
                 }
 
-                // Ajuster les volumes
                 float currentVol = (1.0f - fadeProgress) * volume;
                 float nextVol = fadeProgress * volume;
 
@@ -523,9 +429,8 @@ int main(int argc, char** argv)
                     ERRCHECK(result);
                 }
             }
-            else
+            else if (!isAnnouncementPlaying)
             {
-                // Maintenir le volume de la piste actuelle
                 if (currentChannel)
                 {
                     result = currentChannel->setVolume(volume);
@@ -534,13 +439,11 @@ int main(int argc, char** argv)
             }
         }
 
-        // Vérification du timer
         if (useTimer && timerStartTime > 0)
         {
             Uint32 elapsedTimer = SDL_GetTicks() - timerStartTime;
             if (elapsedTimer >= timerDurationMin * 60000)
             {
-                // Arrêter la lecture
                 if (currentChannel)
                 {
                     result = currentChannel->stop();
@@ -548,20 +451,17 @@ int main(int argc, char** argv)
                     currentChannel = nullptr;
                     isPlaying = false;
                 }
-                timerStartTime = 0; // Réinitialiser le timer
+                timerStartTime = 0;
             }
         }
 
-        // Mettre à jour FMOD
         result = fmodSystem->update();
         ERRCHECK(result);
 
-        // Démarrer une nouvelle frame ImGui
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
 
-        // Dockspace
         const ImGuiWindowFlags dockspace_flags = ImGuiWindowFlags_NoBringToFrontOnFocus |
 		ImGuiWindowFlags_MenuBar |
 		ImGuiWindowFlags_AlwaysAutoResize;
@@ -577,7 +477,6 @@ int main(int argc, char** argv)
 
         if (ImGui::Begin("MainDockSpace", nullptr, dockspace_flags))
         {
-            //ImGui::PopStyleVar(3);
             ImGui::End();
         }
 
@@ -586,46 +485,36 @@ int main(int argc, char** argv)
         ImGuiID dockspace_id = ImGui::GetID("MainDockSpace");   
         ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
 
-        // Interface utilisateur
         ImGui::Begin("Theater Sound Manager");
 
-        // Bouton pour ajouter des musiques via le sélecteur de fichiers natif
         if (ImGui::Button("Ajouter des musiques"))
-{
-    std::vector<std::string> selectedFiles = OpenFileDialog();
-    for (const auto& filepath : selectedFiles)
-    {
-        std::string filename = fs::path(filepath).filename().string();
-
-        // Créer le son en streaming pour économiser la mémoire
-        FMOD::Sound* sound = nullptr;
-        result = fmodSystem->createSound(filepath.c_str(), FMOD_DEFAULT | FMOD_CREATESTREAM, nullptr, &sound);
-        if (result == FMOD_OK)
         {
+            std::vector<std::string> selectedFiles = OpenFileDialog();
+            for (const auto& filepath : selectedFiles)
             {
-                std::lock_guard<std::mutex> lock(musicTracksMutex);
-                musicTracks.push_back({ filepath, filename, sound });
+                std::string filename = fs::path(filepath).filename().string();
+
+                FMOD::Sound* sound = nullptr;
+                result = fmodSystem->createSound(filepath.c_str(), FMOD_DEFAULT | FMOD_CREATESTREAM, nullptr, &sound);
+                if (result == FMOD_OK)
+                {
+                    {
+                        std::lock_guard<std::mutex> lock(musicTracksMutex);
+                        musicTracks.push_back({ filepath, filename, sound });
+                    }
+                }
+                else
+                {
+                    std::cerr << "Erreur FMOD::createSound: " << FMOD_ErrorString(result) << std::endl;
+                }
             }
-
-            // Générer la forme d'onde dans un thread séparé
-            std::thread waveformThread(GenerateWaveform, fmodSystem, std::ref(musicTracks.back()), std::ref(musicTracksMutex));
-            waveformThread.detach();
         }
-        else
-        {
-            std::cerr << "Erreur FMOD::createSound: " << FMOD_ErrorString(result) << std::endl;
-        }
-    }
-}
 
-
-        // Affichage de la playlist avec options
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Text("Playlist :");
         static int selectedTrackIndex = -1;
 
-        // Utiliser un enfant pour rendre la playlist scrollable
         ImGui::BeginChild("PlaylistChild", ImVec2(0, 200), true, ImGuiWindowFlags_HorizontalScrollbar);
 
         if (ImGui::BeginTable("PlaylistTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable))
@@ -666,7 +555,7 @@ int main(int argc, char** argv)
                         }
                         isPlaying = false;
                     }
-                    --i; // Ajuster l'index après suppression
+                    --i;
                 }
                 ImGui::SameLine();
                 if (ImGui::Button("Haut") && i > 0)
@@ -700,9 +589,6 @@ int main(int argc, char** argv)
 
         ImGui::EndChild();
 
-       // ImGui::PopStyleVar(2);
-
-        // Contrôles de lecture
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Text("Contrôles de lecture :");
@@ -711,14 +597,12 @@ int main(int argc, char** argv)
         {
             if (!musicTracks.empty())
             {
-                // Arrêter la musique actuelle
                 if (currentChannel)
                 {
                     result = currentChannel->stop();
                     ERRCHECK(result);
                 }
 
-                // Passer à la musique précédente
                 if (isRandomOrder)
                 {
                     std::uniform_int_distribution<int> distribution(0, musicTracks.size() - 1);
@@ -729,7 +613,6 @@ int main(int argc, char** argv)
                     currentTrackIndex = (currentTrackIndex - 1 + musicTracks.size()) % musicTracks.size();
                 }
 
-                // Jouer la nouvelle musique
                 result = fmodSystem->playSound(musicTracks[currentTrackIndex].sound, nullptr, false, &currentChannel);
                 ERRCHECK(result);
                 result = currentChannel->setVolume(volume);
@@ -748,7 +631,6 @@ int main(int argc, char** argv)
                 result = fmodSystem->playSound(musicTracks[currentTrackIndex].sound, nullptr, true, &currentChannel);
                 ERRCHECK(result);
 
-                // Commencer avec un volume de 0 pour le fondu
                 result = currentChannel->setVolume(0.0f);
                 ERRCHECK(result);
 
@@ -758,7 +640,6 @@ int main(int argc, char** argv)
                 isPlaying = true;
                 segmentStartTime = SDL_GetTicks();
 
-                // Démarrer le fondu d'entrée
                 isFadingIn = true;
                 fadeStartTime = SDL_GetTicks();
 
@@ -801,14 +682,12 @@ int main(int argc, char** argv)
         {
             if (!musicTracks.empty())
             {
-                // Arrêter la musique actuelle
                 if (currentChannel)
                 {
                     result = currentChannel->stop();
                     ERRCHECK(result);
                 }
 
-                // Passer à la musique suivante
                 if (isRandomOrder)
                 {
                     std::uniform_int_distribution<int> distribution(0, musicTracks.size() - 1);
@@ -819,7 +698,6 @@ int main(int argc, char** argv)
                     currentTrackIndex = (currentTrackIndex + 1) % musicTracks.size();
                 }
 
-                // Jouer la nouvelle musique
                 result = fmodSystem->playSound(musicTracks[currentTrackIndex].sound, nullptr, false, &currentChannel);
                 ERRCHECK(result);
                 result = currentChannel->setVolume(volume);
@@ -829,20 +707,16 @@ int main(int argc, char** argv)
             }
         }
 
-        // Contrôle du volume
         ImGui::SliderFloat("Volume", &volume, 0.0f, 1.0f);
 
-        // Paramètres personnalisables
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Text("Paramètres :");
         ImGui::SliderInt("Durée du segment (secondes)", &segmentDurationSec, 10, 600);
         ImGui::SliderInt("Durée du fondu (secondes)", &fadeDurationSec, 1, 30);
-        // Mettre à jour les durées en millisecondes
         segmentDuration = segmentDurationSec * 1000;
         fadeDuration = fadeDurationSec * 1000;
 
-        // Options de lecture
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Text("Options de lecture :");
@@ -854,7 +728,6 @@ int main(int argc, char** argv)
             ImGui::SliderInt("Durée du timer (minutes)", &timerDurationMin, 1, 120);
         }
 
-        // Barre de progression et informations sur la lecture
         ImGui::Spacing();
         ImGui::Separator();
         if (isPlaying && currentTrackIndex >= 0)
@@ -877,30 +750,10 @@ int main(int argc, char** argv)
 
             ImGui::Text("Lecture en cours : %s", musicTracks[currentTrackIndex].filename.c_str());
 
-            // Barre de progression
             float progress = static_cast<float>(elapsedTime) / static_cast<float>(segmentDuration);
             if (progress > 1.0f) progress = 1.0f;
 
-            if (!musicTracks[currentTrackIndex].waveform.empty())
-            {
-                ImGui::PlotLines("##Waveform", musicTracks[currentTrackIndex].waveform.data(),
-                    musicTracks[currentTrackIndex].waveform.size(), 0, nullptr, -1.0f, 1.0f, ImVec2(0, 80));
-
-                // Dessiner le curseur de position
-                unsigned int soundLength = 0;
-                musicTracks[currentTrackIndex].sound->getLength(&soundLength, FMOD_TIMEUNIT_MS);
-
-                float waveformProgress = static_cast<float>(channelPosition) / static_cast<float>(soundLength);
-                ImDrawList* draw_list = ImGui::GetWindowDrawList();
-                ImVec2 pos = ImGui::GetCursorScreenPos();
-                float waveformWidth = ImGui::GetContentRegionAvail().x;
-                float cursorX = pos.x + waveformWidth * waveformProgress;
-                draw_list->AddLine(ImVec2(cursorX, pos.y), ImVec2(cursorX, pos.y + 80), IM_COL32(255, 0, 0, 255));
-            }
-            else
-            {
-                ImGui::ProgressBar(progress, ImVec2(0.0f, 0.0f));
-            }
+            ImGui::ProgressBar(progress, ImVec2(0.0f, 0.0f));
 
             ImGui::Text("Temps restant sur le segment : %d min %02d s", minutes, seconds);
         }
@@ -911,7 +764,86 @@ int main(int argc, char** argv)
 
         ImGui::End();
 
-        // Rendu ImGui
+        ImGui::Begin("Gestionnaire d'annonces");
+
+        if (ImGui::Button("Ajouter une annonce")) {
+            std::vector<std::string> selectedFiles = OpenFileDialog("Fichiers audio\0*.mp3;*.wav\0");
+            for (const auto& filepath : selectedFiles) {
+                LoadAnnouncement(filepath, fmodSystem);
+            }
+        }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Text("Annonces programmées :");
+
+        ImGui::SliderFloat("Volume musique pendant annonce", &musicDuckingVolume, 0.0f, 1.0f);
+
+        if (ImGui::BeginTable("AnnouncementsTable", 6, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable)) {
+            ImGui::TableSetupColumn("Nom");
+            ImGui::TableSetupColumn("Heure");
+            ImGui::TableSetupColumn("Volume");
+            ImGui::TableSetupColumn("Actif");
+            ImGui::TableSetupColumn("Test");
+            ImGui::TableSetupColumn("Actions");
+            ImGui::TableHeadersRow();
+
+            for (size_t i = 0; i < announcements.size(); i++) {
+                ImGui::TableNextRow();
+                ImGui::PushID(static_cast<int>(i));
+
+                ImGui::TableSetColumnIndex(0);
+                ImGui::Text("%s", announcements[i].filename.c_str());
+
+                ImGui::TableSetColumnIndex(1);
+                int hour = announcements[i].hour;
+                int minute = announcements[i].minute;
+                if (ImGui::DragInt("##hour", &hour, 1, 0, 23)) {
+                    announcements[i].hour = hour;
+                }
+                ImGui::SameLine();
+                ImGui::Text(":");
+                ImGui::SameLine();
+                if (ImGui::DragInt("##minute", &minute, 1, 0, 59)) {
+                    announcements[i].minute = minute;
+                }
+
+                ImGui::TableSetColumnIndex(2);
+                float annVolume = announcements[i].volume;
+                if (ImGui::SliderFloat("##volume", &annVolume, 0.0f, 1.0f)) {
+                    announcements[i].volume = annVolume;
+                }
+
+                ImGui::TableSetColumnIndex(3);
+                bool isEnabled = announcements[i].isEnabled;
+                if (ImGui::Checkbox("##enabled", &isEnabled)) {
+                    announcements[i].isEnabled = isEnabled;
+                }
+
+                ImGui::TableSetColumnIndex(4);
+                if (ImGui::Button("Tester##test")) {
+                    PlayAnnouncement(fmodSystem, announcements[i].sound, announcements[i].volume, 
+                        currentChannel, musicDuckingVolume);
+                }
+
+                ImGui::TableSetColumnIndex(5);
+                if (ImGui::Button("Supprimer##delete")) {
+                    if (announcements[i].sound) {
+                        announcements[i].sound->release();
+                    }
+                    announcements.erase(announcements.begin() + i);
+                    i--; 
+                }
+
+                ImGui::PopID();
+            }
+            ImGui::EndTable();
+        }
+
+        ImGui::End();
+
+        CheckAndPlayAnnouncements(fmodSystem, currentChannel);
+
         ImGui::Render();
         glViewport(0, 0, static_cast<int>(io.DisplaySize.x), static_cast<int>(io.DisplaySize.y));
         glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
@@ -930,17 +862,23 @@ int main(int argc, char** argv)
         SDL_GL_SwapWindow(window);
     }
 
-    // Nettoyage
-    for (auto& track : musicTracks)
-    {
-        if (track.sound)
-        {
+    for (auto& announcement : announcements) {
+        if (announcement.sound) {
+            announcement.sound->release();
+        }
+    }
+    announcements.clear();
+
+    for (auto& track : musicTracks) {
+        if (track.sound) {
             track.sound->release();
         }
     }
 
-    fmodSystem->close();
-    fmodSystem->release();
+    if (fmodSystem) {
+        fmodSystem->close();
+        fmodSystem->release();
+    }
 
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL2_Shutdown();
