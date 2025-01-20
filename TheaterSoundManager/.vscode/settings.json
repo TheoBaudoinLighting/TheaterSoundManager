@@ -65,6 +65,19 @@
         "xutility": "cpp",
         "mutex": "cpp",
         "stop_token": "cpp",
-        "thread": "cpp"
+        "thread": "cpp",
+        "array": "cpp",
+        "bitset": "cpp",
+        "complex": "cpp",
+        "condition_variable": "cpp",
+        "coroutine": "cpp",
+        "expected": "cpp",
+        "fstream": "cpp",
+        "map": "cpp",
+        "source_location": "cpp",
+        "span": "cpp",
+        "variant": "cpp",
+        "xtree": "cpp",
+        "shared_mutex": "cpp"
     }
 }
