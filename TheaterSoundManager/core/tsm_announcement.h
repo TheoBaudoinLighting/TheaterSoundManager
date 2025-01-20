@@ -72,6 +72,8 @@ private:
     float sfxVolume;
     bool useStartSfx;
     bool useEndSfx;
+    std::string startSfxFilename;
+    std::string endSfxFilename;
 
 public:
     void loadStartSfx(const std::string& filepath);
@@ -83,6 +85,7 @@ public:
         if (startSfx) {
             startSfx->release();
             startSfx = nullptr;
+            startSfxFilename.clear();
         }
     }
 
@@ -91,6 +94,7 @@ public:
         if (endSfx) {
             endSfx->release();
             endSfx = nullptr;
+            endSfxFilename.clear();
         }
     }
 
@@ -99,4 +103,8 @@ public:
     void setUseEndSfx(bool use) { useEndSfx = use; }
     bool getUseStartSfx() const { return useStartSfx; }
     bool getUseEndSfx() const { return useEndSfx; }
+    bool hasStartSfx() const { return startSfx != nullptr; }
+    bool hasEndSfx() const { return endSfx != nullptr; }
+    std::string getStartSfxFilename() const { return startSfxFilename; }
+    std::string getEndSfxFilename() const { return endSfxFilename; }
 };

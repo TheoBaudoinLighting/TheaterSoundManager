@@ -344,6 +344,7 @@ void AnnouncementManager::loadStartSfx(const std::string& filepath) {
     FMOD_RESULT result = fmodSystem->createSound(filepath.c_str(), FMOD_DEFAULT, nullptr, &startSfx);
     
     if (result == FMOD_OK) {
+        startSfxFilename = fs::path(filepath).filename().string();
         spdlog::info("Start SFX loaded successfully!");
     } else {
         spdlog::error("FMOD::createSound error for start SFX: {}", std::to_string(static_cast<int>(result)));
@@ -371,6 +372,7 @@ void AnnouncementManager::loadEndSfx(const std::string& filepath) {
     FMOD_RESULT result = fmodSystem->createSound(filepath.c_str(), FMOD_DEFAULT, nullptr, &endSfx);
     
     if (result == FMOD_OK) {
+        endSfxFilename = fs::path(filepath).filename().string();
         spdlog::info("End SFX loaded successfully!");
     } else {
         spdlog::error("FMOD::createSound error for end SFX: {}", std::to_string(static_cast<int>(result)));
