@@ -505,6 +505,29 @@ int main(int argc, char** argv)
                 announcementManager.setAnnouncementVolumeMultiplier(volumeMultiplier);
             }
 
+            ImGui::Text("SFX de début/fin d'annonce :");
+
+            if (ImGui::Button("Charger SFX début")) {
+                auto files = OpenFileDialog("Audio Files\0*.mp3;*.wav\0All\0*.*\0");
+                if (!files.empty()) {
+                    announcementManager.loadStartSfx(files[0]);
+                }
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Charger SFX fin")) {
+                auto files = OpenFileDialog("Audio Files\0*.mp3;*.wav\0All\0*.*\0");
+                if (!files.empty()) {
+                    announcementManager.loadEndSfx(files[0]);
+                }
+            }
+
+            float sfxVol = announcementManager.getSfxVolume();
+            if (ImGui::SliderFloat("Volume SFX", &sfxVol, 0.0f, 2.0f, "%.2f")) {
+                announcementManager.setSfxVolume(sfxVol);
+            }
+
+            ImGui::Separator();
+
             if (ImGui::Button("Ajouter une annonce")) {
                 auto files = OpenFileDialog("Audio Files\0*.mp3;*.wav\0All\0*.*\0");
                 for(auto& f : files) {

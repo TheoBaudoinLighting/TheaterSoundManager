@@ -66,4 +66,14 @@ private:
 
     static constexpr const char* ANNOUNCEMENT_RESOURCE = "announcements";
     static constexpr const char* PLAYING_RESOURCE = "announcement_playing";
+
+    FMOD::Sound* startSfx;
+    FMOD::Sound* endSfx;
+    float sfxVolume;
+
+public:
+    void loadStartSfx(const std::string& filepath);
+    void loadEndSfx(const std::string& filepath);
+    void setSfxVolume(float volume) { sfxVolume = volume; }
+    float getSfxVolume() const { return sfxVolume; }
 };

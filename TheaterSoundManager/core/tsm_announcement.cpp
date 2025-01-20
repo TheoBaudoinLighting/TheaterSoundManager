@@ -16,6 +16,9 @@ AnnouncementManager::AnnouncementManager(FMOD::System* system)
     , announcementVolumeMultiplier(3.0f)
     , isAnnouncementPlaying(false)
     , currentMusicOriginalVolume(1.0f)
+    , startSfx(nullptr)
+    , endSfx(nullptr)
+    , sfxVolume(1.0f)
 {
 }
 
@@ -26,6 +29,14 @@ AnnouncementManager::~AnnouncementManager() {
             announcement.sound->release();
             announcement.sound = nullptr;
         }
+    }
+    if (startSfx) {
+        startSfx->release();
+        startSfx = nullptr;
+    }
+    if (endSfx) {
+        endSfx->release();
+        endSfx = nullptr;
     }
     announcements.clear();
 }
@@ -130,6 +141,21 @@ void AnnouncementManager::playAnnouncement(FMOD::Sound* annSound, float announce
         }
     }
 
+    if (startSfx) {
+        FMOD::Channel* sfxChannel = nullptr;
+        if (fmodSystem->playSound(startSfx, nullptr, false, &sfxChannel) == FMOD_OK && sfxChannel) {
+            sfxChannel->setVolume(sfxVolume);
+            
+            bool isPlaying = true;
+            while (isPlaying) {
+                sfxChannel->isPlaying(&isPlaying);
+                if (isPlaying) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                }
+            }
+        }
+    }
+
     FMOD::Channel* annChannel = nullptr;
     FMOD_RESULT result = fmodSystem->playSound(annSound, nullptr, true, &annChannel);
     if (result == FMOD_OK && annChannel) {
@@ -149,6 +175,21 @@ void AnnouncementManager::playAnnouncement(FMOD::Sound* annSound, float announce
                     }
                     if (playing) {
                         std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    }
+                }
+
+                if (endSfx) {
+                    FMOD::Channel* sfxChannel = nullptr;
+                    if (fmodSystem->playSound(endSfx, nullptr, false, &sfxChannel) == FMOD_OK && sfxChannel) {
+                        sfxChannel->setVolume(sfxVolume);
+                        
+                        bool sfxPlaying = true;
+                        while (sfxPlaying) {
+                            sfxChannel->isPlaying(&sfxPlaying);
+                            if (sfxPlaying) {
+                                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                            }
+                        }
                     }
                 }
 
@@ -281,5 +322,59 @@ void AnnouncementManager::forEachAnnouncement(std::function<void(Announcement&)>
     TSM_LOCK(PLAYBACK, "iteration_annonces");
     for (auto& announcement : announcements) {
         func(announcement);
+    }
+}
+
+void AnnouncementManager::loadStartSfx(const std::string& filepath) {
+    if (!fmodSystem) return;
+    TSM_LOCK_NAMED(PLAYBACK, "chargement_sfx_debut", lock);
+
+    if (!fs::exists(filepath)) {
+        spdlog::error("Error: SFX file does not exist: {}", filepath);
+        return;
+    }
+
+    if (startSfx) {
+        startSfx->release();
+        startSfx = nullptr;
+    }
+
+    FMOD_RESULT result = fmodSystem->createSound(filepath.c_str(), FMOD_DEFAULT, nullptr, &startSfx);
+    
+    if (result == FMOD_OK) {
+        spdlog::info("Start SFX loaded successfully!");
+    } else {
+        spdlog::error("FMOD::createSound error for start SFX: {}", std::to_string(static_cast<int>(result)));
+        if (startSfx) {
+            startSfx->release();
+            startSfx = nullptr;
+        }
+    }
+}
+
+void AnnouncementManager::loadEndSfx(const std::string& filepath) {
+    if (!fmodSystem) return;
+    TSM_LOCK_NAMED(PLAYBACK, "chargement_sfx_fin", lock);
+
+    if (!fs::exists(filepath)) {
+        spdlog::error("Error: SFX file does not exist: {}", filepath);
+        return;
+    }
+
+    if (endSfx) {
+        endSfx->release();
+        endSfx = nullptr;
+    }
+
+    FMOD_RESULT result = fmodSystem->createSound(filepath.c_str(), FMOD_DEFAULT, nullptr, &endSfx);
+    
+    if (result == FMOD_OK) {
+        spdlog::info("End SFX loaded successfully!");
+    } else {
+        spdlog::error("FMOD::createSound error for end SFX: {}", std::to_string(static_cast<int>(result)));
+        if (endSfx) {
+            endSfx->release();
+            endSfx = nullptr;
+        }
     }
 }
