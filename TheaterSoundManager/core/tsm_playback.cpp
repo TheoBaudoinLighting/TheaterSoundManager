@@ -29,12 +29,11 @@ PlaybackManager::PlaybackManager(FMOD::System* system)
     rng.seed(std::random_device()());
 }
 
-PlaybackManager::~PlaybackManager()
-{
-    if (!fmodSystem) return;
-    stopPlayback();
-
-    {
+PlaybackManager::~PlaybackManager() {
+    try {
+        stopPlayback();
+        SDL_Delay(50);
+        
         TSM_LOCK(PLAYBACK, "PlaybackResource");
         for (auto& track : musicTracks) {
             if (track.sound) {
@@ -43,6 +42,8 @@ PlaybackManager::~PlaybackManager()
             }
         }
         musicTracks.clear();
+    } catch (...) {
+        spdlog::error("Exception dans ~PlaybackManager");
     }
 }
 
@@ -248,6 +249,8 @@ void PlaybackManager::startFadeOut()
 
 void PlaybackManager::update()
 {
+    if (!fmodSystem) return;
+
     {
         TSM_LOCK(PLAYBACK, "PlaybackResource");
         bool mainPlaying = channelManager.isPlaying();

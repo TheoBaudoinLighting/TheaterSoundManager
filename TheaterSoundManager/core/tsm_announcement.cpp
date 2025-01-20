@@ -62,7 +62,7 @@ void AnnouncementManager::doVolumeFade(FMOD::Channel* channel, float startVolume
         int stepDuration = durationMs / steps;
         float volumeDelta = (endVolume - startVolume) / steps;
 
-        for (int i = 0; i < steps; i++) {
+        for (int i = 0; i < steps && !shouldStopThreads; i++) {
             channel->isPlaying(&isPlaying);
             if (!isPlaying) return;
             
@@ -71,9 +71,11 @@ void AnnouncementManager::doVolumeFade(FMOD::Channel* channel, float startVolume
             std::this_thread::sleep_for(std::chrono::milliseconds(stepDuration));
         }
 
-        channel->isPlaying(&isPlaying);
-        if (isPlaying) {
-            channel->setVolume(endVolume);
+        if (!shouldStopThreads) {
+            channel->isPlaying(&isPlaying);
+            if (isPlaying) {
+                channel->setVolume(endVolume);
+            }
         }
     }).detach();
 }
@@ -180,6 +182,8 @@ void AnnouncementManager::playAnnouncement(FMOD::Sound* annSound, float announce
                     }
                 }
 
+                if (shouldStopThreads) return;
+
                 if (endSfx && useEndSfx) {
                     FMOD::Channel* sfxChannel = nullptr;
                     if (fmodSystem->playSound(endSfx, nullptr, false, &sfxChannel) == FMOD_OK && sfxChannel) {
@@ -225,6 +229,8 @@ void AnnouncementManager::playAnnouncement(FMOD::Sound* annSound, float announce
 }
 
 void AnnouncementManager::checkAndPlayAnnouncements(PlaybackManager& playbackMgr) {
+    if (shouldStopThreads || !fmodSystem) return;
+
     auto now = std::chrono::system_clock::now();
     std::time_t nowT = std::chrono::system_clock::to_time_t(now);
     std::tm localTime;

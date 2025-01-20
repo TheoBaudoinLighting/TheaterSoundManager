@@ -140,6 +140,7 @@
     <ClCompile Include="core\tsm_announcement.cpp" />
     <ClCompile Include="core\tsm_main.cpp" />
     <ClCompile Include="core\tsm_playback.cpp" />
+    <ClCompile Include="core\ui\tsm_ui_manager.cpp" />
     <ClCompile Include="external\imgui\backends\imgui_impl_opengl3.cpp" />
     <ClCompile Include="external\imgui\backends\imgui_impl_sdl2.cpp" />
     <ClCompile Include="external\imgui\imgui.cpp" />
@@ -156,9 +157,15 @@
     <ClInclude Include="core\imgui\tsm_imgui.h" />
     <ClInclude Include="core\tsm_announcement.h" />
     <ClInclude Include="core\tsm_channels.h" />
+    <ClInclude Include="core\tsm_file_utils.h" />
     <ClInclude Include="core\tsm_lock_manager.h" />
     <ClInclude Include="core\tsm_logger.h" />
     <ClInclude Include="core\tsm_playback.h" />
+    <ClInclude Include="core\ui\tsm_ui_announcement.h" />
+    <ClInclude Include="core\ui\tsm_ui_main.h" />
+    <ClInclude Include="core\ui\tsm_ui_manager.h" />
+    <ClInclude Include="core\ui\tsm_ui_registry.h" />
+    <ClInclude Include="core\ui\tsm_ui_template.h" />
     <ClInclude Include="external\fmod\inc\fmod.h" />
     <ClInclude Include="external\fmod\inc\fmod.hpp" />
     <ClInclude Include="external\fmod\inc\fmod_codec.h" />

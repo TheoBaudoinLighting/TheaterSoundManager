@@ -32,6 +32,12 @@ public:
         ResourceType type;                  
     };
 
+    void releaseAllLocks() {
+        std::unique_lock<std::shared_mutex> guard(managerMutex);
+        activeLocks.clear();
+        cv.notify_all();
+    }
+
     static TSMLockManager& getInstance() {
         static TSMLockManager instance;
         return instance;

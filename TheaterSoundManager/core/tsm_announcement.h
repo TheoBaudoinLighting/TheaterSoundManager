@@ -44,11 +44,18 @@ public:
 
     void forEachAnnouncement(std::function<void(Announcement&)> func);
 
+    void prepareForShutdown() {
+        shouldStopThreads = true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
 private:
     void playAnnouncement(FMOD::Sound* annSound, float announcementVol, FMOD::Channel* currentMusicChannel, float currentMusicVolume);
     bool isChannelPlaying(FMOD::Channel* channel) const;
     void doVolumeFade(FMOD::Channel* channel, float startVolume, float endVolume, int durationMs);
     bool waitForChannelToFinish(FMOD::Channel* channel);
+
+    std::atomic<bool> shouldStopThreads{false};
 
     mutable std::mutex announcementsMutex;
     std::mutex isPlayingMutex;
@@ -61,7 +68,7 @@ private:
     bool isAnnouncementPlaying;
     float currentMusicOriginalVolume;
 
-    static const int FADE_DURATION_MS = 1000;
+    static const int FADE_DURATION_MS = 1500;
     static const int FADE_STEPS = 50;
 
     static constexpr const char* ANNOUNCEMENT_RESOURCE = "announcements";
