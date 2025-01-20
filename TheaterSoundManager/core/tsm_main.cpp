@@ -494,18 +494,24 @@ int main(int argc, char** argv)
 
             ImGui::Begin("Annonces");
 
-            ImGui::Text("Réglages Annonces :");
+            // Section Paramètres
             float duckFactor = announcementManager.getMusicDuckFactor();
-            if (ImGui::SliderFloat("Duck Factor", &duckFactor, 0.f, 1.f, "%.2f")) {
+            if (ImGui::SliderFloat("Duck Factor", &duckFactor, 0.f, 1.f)) {
                 announcementManager.setMusicDuckFactor(duckFactor);
             }
 
             float volumeMultiplier = announcementManager.getAnnouncementVolumeMultiplier();
-            if (ImGui::SliderFloat("Multiplier Annonce", &volumeMultiplier, 0.5f, 5.f, "%.2fx")) {
+            if (ImGui::SliderFloat("Multiplier Annonce", &volumeMultiplier, 0.5f, 5.f)) {
                 announcementManager.setAnnouncementVolumeMultiplier(volumeMultiplier);
             }
 
-            ImGui::Text("SFX de début/fin d'annonce :");
+            ImGui::Separator();
+
+            // Section SFX
+            bool useStartSfx = announcementManager.getUseStartSfx();
+            if (ImGui::Checkbox("Utiliser SFX début", &useStartSfx)) {
+                announcementManager.setUseStartSfx(useStartSfx);
+            }
 
             if (ImGui::Button("Charger SFX début")) {
                 auto files = OpenFileDialog("Audio Files\0*.mp3;*.wav\0All\0*.*\0");
@@ -513,7 +519,17 @@ int main(int argc, char** argv)
                     announcementManager.loadStartSfx(files[0]);
                 }
             }
+
             ImGui::SameLine();
+            if (ImGui::Button("Supprimer SFX début")) {
+                announcementManager.releaseStartSfx();
+            }
+
+            bool useEndSfx = announcementManager.getUseEndSfx();
+            if (ImGui::Checkbox("Utiliser SFX fin", &useEndSfx)) {
+                announcementManager.setUseEndSfx(useEndSfx);
+            }
+
             if (ImGui::Button("Charger SFX fin")) {
                 auto files = OpenFileDialog("Audio Files\0*.mp3;*.wav\0All\0*.*\0");
                 if (!files.empty()) {
@@ -521,71 +537,106 @@ int main(int argc, char** argv)
                 }
             }
 
+            ImGui::SameLine();
+            if (ImGui::Button("Supprimer SFX fin")) {
+                announcementManager.releaseEndSfx();
+            }
+
             float sfxVol = announcementManager.getSfxVolume();
-            if (ImGui::SliderFloat("Volume SFX", &sfxVol, 0.0f, 2.0f, "%.2f")) {
+            if (ImGui::SliderFloat("Volume SFX", &sfxVol, 0.0f, 2.0f)) {
                 announcementManager.setSfxVolume(sfxVol);
             }
 
             ImGui::Separator();
 
+            // Section Annonces
             if (ImGui::Button("Ajouter une annonce")) {
                 auto files = OpenFileDialog("Audio Files\0*.mp3;*.wav\0All\0*.*\0");
                 for(auto& f : files) {
                     announcementManager.loadAnnouncement(f);
                 }
             }
-            ImGui::Separator();
 
-            if (ImGui::BeginTable("AnnTable", 6, ImGuiTableFlags_Borders|ImGuiTableFlags_RowBg)) {
-                ImGui::TableSetupColumn("Actif",   ImGuiTableColumnFlags_WidthFixed, 40.f);
-                ImGui::TableSetupColumn("Heure",   ImGuiTableColumnFlags_WidthFixed, 40.f);
-                ImGui::TableSetupColumn("Minute",  ImGuiTableColumnFlags_WidthFixed, 40.f);
-                ImGui::TableSetupColumn("Volume",  ImGuiTableColumnFlags_WidthFixed, 60.f);
+            if (ImGui::BeginTable("AnnTable", 7, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+                ImGui::TableSetupColumn("Actif", ImGuiTableColumnFlags_WidthFixed, 40.f);
+                ImGui::TableSetupColumn("Heure", ImGuiTableColumnFlags_WidthFixed, 40.f);
+                ImGui::TableSetupColumn("Min", ImGuiTableColumnFlags_WidthFixed, 40.f);
+                ImGui::TableSetupColumn("Vol", ImGuiTableColumnFlags_WidthFixed, 60.f);
                 ImGui::TableSetupColumn("Fichier", ImGuiTableColumnFlags_WidthStretch);
-                ImGui::TableSetupColumn("Test Audio", ImGuiTableColumnFlags_WidthFixed, 60.f);
+                ImGui::TableSetupColumn("Test", ImGuiTableColumnFlags_WidthFixed, 40.f);
+                ImGui::TableSetupColumn("Suppr", ImGuiTableColumnFlags_WidthFixed, 40.f);
                 ImGui::TableHeadersRow();
 
-                {
-                    int i = 0; 
-                    announcementManager.forEachAnnouncement([&](AnnouncementManager::Announcement& ann) {
-                        ImGui::TableNextRow();
+                int idx = 0;
+                bool needsRemoval = false;
+                size_t indexToRemove = 0;
 
-                        ImGui::TableSetColumnIndex(0);
-                        ImGui::Checkbox(std::string("##enabled"+std::to_string(i)).c_str(), &ann.isEnabled);
+                announcementManager.forEachAnnouncement([&](AnnouncementManager::Announcement& ann) {
+                    ImGui::TableNextRow();
 
-                        ImGui::TableSetColumnIndex(1);
-                        ImGui::PushID(i*100+1);
-                        ImGui::InputInt("##hour", &ann.hour, 1);
-                        ImGui::PopID();
+                    // Colonne Actif
+                    ImGui::TableSetColumnIndex(0);
+                    bool enabled = ann.isEnabled;
+                    if (ImGui::Checkbox(("##enabled" + std::to_string(idx)).c_str(), &enabled)) {
+                        ann.isEnabled = enabled;
+                    }
 
-                        ImGui::TableSetColumnIndex(2);
-                        ImGui::PushID(i*100+2);
-                        ImGui::InputInt("##min", &ann.minute, 1);
-                        ImGui::PopID();
+                    // Colonne Heure
+                    ImGui::TableSetColumnIndex(1);
+                    int hour = ann.hour;
+                    if (ImGui::InputInt(("##hour" + std::to_string(idx)).c_str(), &hour)) {
+                        ann.hour = std::clamp(hour, 0, 23);
+                    }
 
-                        ImGui::TableSetColumnIndex(3);
-                        ImGui::PushID(i*100+3);
-                        ImGui::SliderFloat("##vol", &ann.volume, 0.f, 2.f, "%.2f");
-                        ImGui::PopID();
+                    // Colonne Minute
+                    ImGui::TableSetColumnIndex(2);
+                    int minute = ann.minute;
+                    if (ImGui::InputInt(("##min" + std::to_string(idx)).c_str(), &minute)) {
+                        ann.minute = std::clamp(minute, 0, 59);
+                    }
 
-                        ImGui::TableSetColumnIndex(4);
-                        ImGui::TextUnformatted(ann.filename.c_str());
+                    // Colonne Volume
+                    ImGui::TableSetColumnIndex(3);
+                    ImGui::SetNextItemWidth(-1);
+                    float vol = ann.volume;
+                    if (ImGui::SliderFloat(("##vol" + std::to_string(idx)).c_str(), &vol, 0.f, 2.f)) {
+                        ann.volume = vol;
+                    }
 
-                        ImGui::TableSetColumnIndex(5);
-                        ImGui::PushID(i*100+4);
-                        if (ImGui::Button("Test")) {
-                            announcementManager.testAnnouncement(i, playbackManager);
-                        }
-                        ImGui::PopID();
-                        
-                        i++;
-                    });
+                    // Colonne Fichier
+                    ImGui::TableSetColumnIndex(4);
+                    ImGui::TextUnformatted(ann.filename.c_str());
+
+                    // Colonne Test
+                    ImGui::TableSetColumnIndex(5);
+                    if (ImGui::Button(("T##" + std::to_string(idx)).c_str())) {
+                        announcementManager.testAnnouncement(idx, playbackManager);
+                    }
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("Tester l'annonce");
+                    }
+
+                    // Colonne Supprimer
+                    ImGui::TableSetColumnIndex(6);
+                    if (ImGui::Button(("X##" + std::to_string(idx)).c_str())) {
+                        needsRemoval = true;
+                        indexToRemove = idx;
+                    }
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("Supprimer l'annonce");
+                    }
+
+                    idx++;
+                });
+
+                if (needsRemoval) {
+                    announcementManager.removeAnnouncement(indexToRemove);
                 }
+
                 ImGui::EndTable();
             }
 
-            ImGui::TextWrapped("Les annonces se déclenchent automatiquement à l'heure / minute indiquées.");
-
+            ImGui::TextWrapped("Les annonces se déclenchent automatiquement à l'heure indiquée.");
             ImGui::End();
 
             ImGui::Render();

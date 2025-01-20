@@ -70,10 +70,33 @@ private:
     FMOD::Sound* startSfx;
     FMOD::Sound* endSfx;
     float sfxVolume;
+    bool useStartSfx;
+    bool useEndSfx;
 
 public:
     void loadStartSfx(const std::string& filepath);
     void loadEndSfx(const std::string& filepath);
     void setSfxVolume(float volume) { sfxVolume = volume; }
+
+    void releaseStartSfx() {
+        TSM_LOCK_NAMED(PLAYBACK, "liberation_sfx_debut", lock);
+        if (startSfx) {
+            startSfx->release();
+            startSfx = nullptr;
+        }
+    }
+
+    void releaseEndSfx() {
+        TSM_LOCK_NAMED(PLAYBACK, "liberation_sfx_fin", lock);
+        if (endSfx) {
+            endSfx->release();
+            endSfx = nullptr;
+        }
+    }
+
     float getSfxVolume() const { return sfxVolume; }
+    void setUseStartSfx(bool use) { useStartSfx = use; }
+    void setUseEndSfx(bool use) { useEndSfx = use; }
+    bool getUseStartSfx() const { return useStartSfx; }
+    bool getUseEndSfx() const { return useEndSfx; }
 };

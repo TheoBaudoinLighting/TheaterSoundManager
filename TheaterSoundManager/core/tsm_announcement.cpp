@@ -19,6 +19,8 @@ AnnouncementManager::AnnouncementManager(FMOD::System* system)
     , startSfx(nullptr)
     , endSfx(nullptr)
     , sfxVolume(1.0f)
+, useStartSfx(true)
+, useEndSfx(true)
 {
 }
 
@@ -141,7 +143,7 @@ void AnnouncementManager::playAnnouncement(FMOD::Sound* annSound, float announce
         }
     }
 
-    if (startSfx) {
+    if (startSfx && useStartSfx) {
         FMOD::Channel* sfxChannel = nullptr;
         if (fmodSystem->playSound(startSfx, nullptr, false, &sfxChannel) == FMOD_OK && sfxChannel) {
             sfxChannel->setVolume(sfxVolume);
@@ -178,7 +180,7 @@ void AnnouncementManager::playAnnouncement(FMOD::Sound* annSound, float announce
                     }
                 }
 
-                if (endSfx) {
+                if (endSfx && useEndSfx) {
                     FMOD::Channel* sfxChannel = nullptr;
                     if (fmodSystem->playSound(endSfx, nullptr, false, &sfxChannel) == FMOD_OK && sfxChannel) {
                         sfxChannel->setVolume(sfxVolume);
