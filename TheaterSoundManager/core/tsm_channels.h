@@ -12,6 +12,28 @@ public:
     ChannelManager();
     ~ChannelManager();
 
+    ChannelManager(ChannelManager&& other) noexcept
+    {
+        fmodSystem     = other.fmodSystem;
+        currentChannel = other.currentChannel;
+
+        other.currentChannel = nullptr;
+    }
+
+    ChannelManager& operator=(ChannelManager&& other) noexcept
+    {
+        if (this != &other)
+        {
+            TSM_LOCK(PLAYBACK, GLOBAL_PLAYBACK_RESOURCE);
+            stopPlayback();
+            fmodSystem = other.fmodSystem;
+            currentChannel = other.currentChannel;
+            other.currentChannel = nullptr;
+        }
+        return *this;
+    }
+
+
     void setSystem(FMOD::System* system) { fmodSystem = system; }
     bool startPlayback(FMOD::Sound* sound, float initialVolume = 0.0f);
     bool stopPlayback();
@@ -53,6 +75,7 @@ public:
         
         return true;
     }
+
 
 private:
     FMOD::System* fmodSystem;

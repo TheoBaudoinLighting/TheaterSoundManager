@@ -253,16 +253,13 @@ void PlaybackManager::update()
         bool mainPlaying = channelManager.isPlaying();
         bool nextPlaying = nextChannelManager.isPlaying();
 
-        if (!mainPlaying && !nextPlaying) {
+        if (!mainPlaying && !nextPlaying && !isFadingOut && !isFadingIn) {
             return;
         }
     }
 
-    ChannelInfo info = getChannelInfo();
-    if (!info.isPlaying) {
-        return;
-    }
-
+    ChannelInfo info = getChannelInfo(); 
+    
     unsigned int soundLength = 0;
     if (currentTrackIndex >= 0 && (size_t)currentTrackIndex < musicTracks.size()) {
         soundLength = musicTracks[currentTrackIndex].lengthMs;
@@ -271,18 +268,27 @@ void PlaybackManager::update()
     Uint32 currentTime = SDL_GetTicks();
     Uint32 elapsedTime = currentTime - segmentStartTime;
 
-    if (!isFadingOut) {
-        bool nearSongEnd = (soundLength > 0 && (info.position + fadeDuration) >= soundLength);
-        bool segOK = ((int)soundLength > segmentDuration);
-        bool nearSegmentEnd = (segOK && (elapsedTime + fadeDuration) >= (Uint32)segmentDuration);
+    bool nearSongEnd = false;
+    bool nearSegmentEnd = false;
 
-        if (nearSongEnd || nearSegmentEnd) {
-            startFadeOut();
+    if (soundLength > 0 && (info.position + fadeDuration) >= soundLength) {
+        nearSongEnd = true;
+    }
+
+    if (randomSegment) {
+        bool segOK = (soundLength > 0 && (int)soundLength > segmentDuration);
+        if (segOK && (elapsedTime + fadeDuration) >= (Uint32)segmentDuration) {
+            nearSegmentEnd = true;
         }
+    }
+
+    if (!isFadingOut && (nearSongEnd || nearSegmentEnd)) {
+        startFadeOut();
     }
 
     internalUpdateFade();
 }
+
 
 void PlaybackManager::internalUpdateFade()
 {

@@ -1,0 +1,64 @@
+[2025-01-20 02:07:34.548] [info] [29740] Logger initialized successfully
+[2025-01-20 02:07:40.528] [info] [29740] Loading music file: Entrance(Fantasia Gardens) - Belle (Beauty and the beast).mp3
+[2025-01-20 02:07:40.530] [info] [29740] Successfully loaded: %s (length = %u ms)
+[2025-01-20 02:07:40.531] [info] [29740] Loading music file: Entrance(Fantasia Gardens) - Casey junior (Dumbo).mp3
+[2025-01-20 02:07:40.532] [info] [29740] Successfully loaded: %s (length = %u ms)
+[2025-01-20 02:07:40.532] [info] [29740] Loading music file: Entrance(Fantasia Gardens) - Enchanted suite.mp3
+[2025-01-20 02:07:40.533] [info] [29740] Successfully loaded: %s (length = %u ms)
+[2025-01-20 02:07:40.533] [info] [29740] Loading music file: Entrance(Fantasia Gardens) - Flight through neverland (Peter Pan).mp3
+[2025-01-20 02:07:40.534] [info] [29740] Successfully loaded: %s (length = %u ms)
+[2025-01-20 02:07:40.534] [info] [29740] Loading music file: Entrance(Fantasia Gardens) - Happy ending (Little mermaid).mp3
+[2025-01-20 02:07:40.535] [info] [29740] Successfully loaded: %s (length = %u ms)
+[2025-01-20 02:07:40.535] [info] [29740] Loading music file: Entrance(Fantasia Gardens) - Heigh ho (Snow white).mp3
+[2025-01-20 02:07:40.536] [info] [29740] Successfully loaded: %s (length = %u ms)
+[2025-01-20 02:07:40.536] [info] [29740] Loading music file: Entrance(Fantasia Gardens) - Hi diddle dee dee (Pinocchio).mp3
+[2025-01-20 02:07:40.537] [info] [29740] Successfully loaded: %s (length = %u ms)
+[2025-01-20 02:15:48.741] [info] [29740] Attempting to load announcement:
+[2025-01-20 02:15:48.741] [info] [29740] Full path: C:\Users\theob\Desktop\Annonces_Clean\5min_buffet.wav
+[2025-01-20 02:15:48.741] [info] [29740] Filename: 5min_buffet.wav
+[2025-01-20 02:15:48.742] [info] [29740] Announcement loaded successfully!
+[2025-01-20 02:15:48.742] [info] [29740] Attempting to load announcement:
+[2025-01-20 02:15:48.742] [info] [29740] Full path: C:\Users\theob\Desktop\Annonces_Clean\10_min_buffet.wav
+[2025-01-20 02:15:48.742] [info] [29740] Filename: 10_min_buffet.wav
+[2025-01-20 02:15:48.743] [info] [29740] Announcement loaded successfully!
+[2025-01-20 02:15:48.743] [info] [29740] Attempting to load announcement:
+[2025-01-20 02:15:48.743] [info] [29740] Full path: C:\Users\theob\Desktop\Annonces_Clean\15_min_buffet.wav
+[2025-01-20 02:15:48.743] [info] [29740] Filename: 15_min_buffet.wav
+[2025-01-20 02:15:48.744] [info] [29740] Announcement loaded successfully!
+[2025-01-20 02:15:48.744] [info] [29740] Attempting to load announcement:
+[2025-01-20 02:15:48.744] [info] [29740] Full path: C:\Users\theob\Desktop\Annonces_Clean\annonce_5 _min_cl.wav
+[2025-01-20 02:15:48.744] [info] [29740] Filename: annonce_5 _min_cl.wav
+[2025-01-20 02:15:48.745] [info] [29740] Announcement loaded successfully!
+[2025-01-20 02:15:48.745] [info] [29740] Attempting to load announcement:
+[2025-01-20 02:15:48.745] [info] [29740] Full path: C:\Users\theob\Desktop\Annonces_Clean\annonce_10_min_cl.wav
+[2025-01-20 02:15:48.745] [info] [29740] Filename: annonce_10_min_cl.wav
+[2025-01-20 02:15:48.746] [info] [29740] Announcement loaded successfully!
+[2025-01-20 02:15:48.746] [info] [29740] Attempting to load announcement:
+[2025-01-20 02:15:48.746] [info] [29740] Full path: C:\Users\theob\Desktop\Annonces_Clean\annonce_15_min_cl.wav
+[2025-01-20 02:15:48.746] [info] [29740] Filename: annonce_15_min_cl.wav
+[2025-01-20 02:15:48.747] [info] [29740] Announcement loaded successfully!
+[2025-01-20 02:15:48.747] [info] [29740] Attempting to load announcement:
+[2025-01-20 02:15:48.747] [info] [29740] Full path: C:\Users\theob\Desktop\Annonces_Clean\Annonce_de_bienvenue_01.wav
+[2025-01-20 02:15:48.747] [info] [29740] Filename: Annonce_de_bienvenue_01.wav
+[2025-01-20 02:15:48.748] [info] [29740] Announcement loaded successfully!
+[2025-01-20 02:15:48.748] [info] [29740] Attempting to load announcement:
+[2025-01-20 02:15:48.748] [info] [29740] Full path: C:\Users\theob\Desktop\Annonces_Clean\jeux_01.wav
+[2025-01-20 02:15:48.748] [info] [29740] Filename: jeux_01.wav
+[2025-01-20 02:15:48.749] [info] [29740] Announcement loaded successfully!
+[2025-01-20 02:15:48.749] [info] [29740] Attempting to load announcement:
+[2025-01-20 02:15:48.749] [info] [29740] Full path: C:\Users\theob\Desktop\Annonces_Clean\pause_01.wav
+[2025-01-20 02:15:48.749] [info] [29740] Filename: pause_01.wav
+[2025-01-20 02:15:48.750] [info] [29740] Announcement loaded successfully!
+[2025-01-20 02:15:48.750] [info] [29740] Attempting to load announcement:
+[2025-01-20 02:15:48.750] [info] [29740] Full path: C:\Users\theob\Desktop\Annonces_Clean\photo_01.wav
+[2025-01-20 02:15:48.750] [info] [29740] Filename: photo_01.wav
+[2025-01-20 02:15:48.751] [info] [29740] Announcement loaded successfully!
+[2025-01-20 02:15:48.751] [info] [29740] Attempting to load announcement:
+[2025-01-20 02:15:48.751] [info] [29740] Full path: C:\Users\theob\Desktop\Annonces_Clean\premiere_dance_01.wav
+[2025-01-20 02:15:48.752] [info] [29740] Filename: premiere_dance_01.wav
+[2025-01-20 02:15:48.752] [info] [29740] Announcement loaded successfully!
+[2025-01-20 02:15:48.752] [info] [29740] Attempting to load announcement:
+[2025-01-20 02:15:48.753] [info] [29740] Full path: C:\Users\theob\Desktop\Annonces_Clean\remerciement_spontanees_01.wav
+[2025-01-20 02:15:48.753] [info] [29740] Filename: remerciement_spontanees_01.wav
+[2025-01-20 02:15:48.753] [info] [29740] Announcement loaded successfully!
+[2025-01-20 02:17:09.760] [info] [29740] Cleaning up announcements...
