@@ -39,27 +39,30 @@ bool AnnouncementManager::isChannelPlaying(FMOD::Channel* channel) const {
 
 void AnnouncementManager::doVolumeFade(FMOD::Channel* channel, float startVolume, float endVolume, int durationMs) {
     if (!channel) return;
-    
-    bool isPlaying = false;
-    channel->isPlaying(&isPlaying);
-    if (!isPlaying) return;
 
-    int stepDuration = durationMs / FADE_STEPS;
-    float volumeDelta = (endVolume - startVolume) / FADE_STEPS;
-
-    for (int i = 0; i < FADE_STEPS; i++) {
+    std::thread([this, channel, startVolume, endVolume, durationMs]() {
+        bool isPlaying = false;
         channel->isPlaying(&isPlaying);
         if (!isPlaying) return;
-        
-        float currentVolume = startVolume + (volumeDelta * i);
-        channel->setVolume(currentVolume);
-        std::this_thread::sleep_for(std::chrono::milliseconds(stepDuration));
-    }
 
-    channel->isPlaying(&isPlaying);
-    if (isPlaying) {
-        channel->setVolume(endVolume);
-    }
+        const int steps = 50;
+        int stepDuration = durationMs / steps;
+        float volumeDelta = (endVolume - startVolume) / steps;
+
+        for (int i = 0; i < steps; i++) {
+            channel->isPlaying(&isPlaying);
+            if (!isPlaying) return;
+            
+            float currentVolume = startVolume + (volumeDelta * i);
+            channel->setVolume(currentVolume);
+            std::this_thread::sleep_for(std::chrono::milliseconds(stepDuration));
+        }
+
+        channel->isPlaying(&isPlaying);
+        if (isPlaying) {
+            channel->setVolume(endVolume);
+        }
+    }).detach();
 }
 
 bool AnnouncementManager::waitForChannelToFinish(FMOD::Channel* channel) {
@@ -108,15 +111,10 @@ void AnnouncementManager::loadAnnouncement(const std::string& filepath) {
     }
 }
 
-void AnnouncementManager::playAnnouncement(FMOD::Sound* annSound, float announcementVol, FMOD::Channel* currentMusicChannel) 
+void AnnouncementManager::playAnnouncement(FMOD::Sound* annSound, float announcementVol, 
+                                         FMOD::Channel* currentMusicChannel, float currentMusicVolume) 
 {
     if (!fmodSystem || !annSound) return;
-
-    FMOD::Channel* musicChannelCopy = currentMusicChannel;
-    float originalVolume = 0.0f;
-    if (currentMusicChannel) {
-        currentMusicChannel->getVolume(&originalVolume);
-    }
 
     {
         TSM_LOCK(PLAYBACK, "lecture_annonce");
@@ -124,8 +122,12 @@ void AnnouncementManager::playAnnouncement(FMOD::Sound* annSound, float announce
         isAnnouncementPlaying = true;
     }
 
-    if (musicChannelCopy) {
-        musicChannelCopy->setVolume(originalVolume * musicDuckFactor);
+    if (currentMusicChannel) {
+        bool musicPlaying = false;
+        if (currentMusicChannel->isPlaying(&musicPlaying) == FMOD_OK && musicPlaying) {
+            currentMusicOriginalVolume = currentMusicVolume;
+            currentMusicChannel->setVolume(currentMusicOriginalVolume * musicDuckFactor);
+        }
     }
 
     FMOD::Channel* annChannel = nullptr;
@@ -136,9 +138,9 @@ void AnnouncementManager::playAnnouncement(FMOD::Sound* annSound, float announce
         annChannel->setPaused(false);
 
         FMOD::Channel* annChannelCopy = annChannel;
-        FMOD::System* systemCopy = fmodSystem;
+        FMOD::Channel* musicChannelCopy = currentMusicChannel;
         
-        std::thread([this, annChannelCopy, musicChannelCopy, originalVolume, systemCopy]() {
+        std::thread([this, annChannelCopy, musicChannelCopy]() {
             try {
                 bool playing = true;
                 while (playing) {
@@ -153,21 +155,10 @@ void AnnouncementManager::playAnnouncement(FMOD::Sound* annSound, float announce
                 if (musicChannelCopy) {
                     bool stillPlaying = false;
                     if (musicChannelCopy->isPlaying(&stillPlaying) == FMOD_OK && stillPlaying) {
-                        const int steps = 50;
-                        float startVol = 0.0f;
-                        musicChannelCopy->getVolume(&startVol);
-                        float delta = (originalVolume - startVol) / steps;
-
-                        for (int i = 0; i < steps && stillPlaying; i++) {
-                            musicChannelCopy->isPlaying(&stillPlaying);
-                            float newVol = startVol + (delta * i);
-                            musicChannelCopy->setVolume(newVol);
-                            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-                        }
-                        
-                        if (stillPlaying) {
-                            musicChannelCopy->setVolume(originalVolume);
-                        }
+                        doVolumeFade(musicChannelCopy, 
+                                   currentMusicOriginalVolume * musicDuckFactor,
+                                   currentMusicOriginalVolume, 
+                                   FADE_DURATION_MS);
                     }
                 }
 
@@ -205,14 +196,20 @@ void AnnouncementManager::checkAndPlayAnnouncements(PlaybackManager& playbackMgr
     FMOD::Channel* musicChannel = playbackMgr.getCurrentChannel();
     if (isAnnouncementPlaying) return;
 
+    float currentMusicVol = 1.0f;
+    if (musicChannel) {
+        musicChannel->getVolume(&currentMusicVol);
+    }
+
     for (auto& ann : announcements) {
         if (!ann.isEnabled) continue;
         if (localTime.tm_hour == ann.hour && localTime.tm_min == ann.minute) {
-            playAnnouncement(ann.sound, ann.volume, musicChannel);
+            playAnnouncement(ann.sound, ann.volume, musicChannel, currentMusicVol); 
             break;
         }
     }
 }
+
 
 void AnnouncementManager::setMusicDuckFactor(float factor) {
     musicDuckFactor = factor;
@@ -260,16 +257,22 @@ void AnnouncementManager::removeAnnouncement(size_t index) {
     announcements.erase(announcements.begin() + index);
 }
 
-void AnnouncementManager::testAnnouncement(size_t index) {
+void AnnouncementManager::testAnnouncement(size_t index, PlaybackManager& playbackMgr) {
     TSM_LOCK(PLAYBACK, "test_annonce");
     if (index >= announcements.size()) return;
 
-    FMOD::Channel* channel = nullptr;
     if (announcements[index].sound) {
+        FMOD::Channel* musicChannel = playbackMgr.getCurrentChannel();
+        float currentMusicVolume = 0.0f;
+        if (musicChannel) {
+            musicChannel->getVolume(&currentMusicVolume);
+        }
+
         playAnnouncement(
             announcements[index].sound,
             announcements[index].volume,
-            nullptr 
+            musicChannel,
+            currentMusicVolume
         );
     }
 }

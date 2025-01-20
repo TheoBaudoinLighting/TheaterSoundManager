@@ -551,7 +551,7 @@ int main(int argc, char** argv)
                         ImGui::TableSetColumnIndex(5);
                         ImGui::PushID(i*100+4);
                         if (ImGui::Button("Test")) {
-                            announcementManager.testAnnouncement(i);
+                            announcementManager.testAnnouncement(i, playbackManager);
                         }
                         ImGui::PopID();
                         

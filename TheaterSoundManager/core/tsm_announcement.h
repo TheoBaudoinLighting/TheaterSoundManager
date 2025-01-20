@@ -35,7 +35,7 @@ public:
     void loadAnnouncement(const std::string& filepath);
     void checkAndPlayAnnouncements(PlaybackManager& playbackMgr);
     
-    void testAnnouncement(size_t index);
+    void testAnnouncement(size_t index, PlaybackManager& playbackMgr);
 
     size_t getAnnouncementCount() const;
     Announcement* getAnnouncement(size_t index);
@@ -45,15 +45,7 @@ public:
     void forEachAnnouncement(std::function<void(Announcement&)> func);
 
 private:
-    struct AnnouncementCallbackData {
-        FMOD::Channel* currentMusicChannel;
-        float originalVolume;
-        bool* isPlaying;
-        FMOD::System* system;
-        FMOD::Channel* announcementChannel;
-    };
-
-    void playAnnouncement(FMOD::Sound* annSound, float announcementVol, FMOD::Channel* currentMusicChannel);
+    void playAnnouncement(FMOD::Sound* annSound, float announcementVol, FMOD::Channel* currentMusicChannel, float currentMusicVolume);
     bool isChannelPlaying(FMOD::Channel* channel) const;
     void doVolumeFade(FMOD::Channel* channel, float startVolume, float endVolume, int durationMs);
     bool waitForChannelToFinish(FMOD::Channel* channel);
