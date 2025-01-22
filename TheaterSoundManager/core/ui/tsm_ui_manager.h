@@ -29,9 +29,7 @@ public:
     UI_Manager(UI_Manager&&) = delete;
     UI_Manager& operator=(UI_Manager&&) = delete;
 
-    bool Initialize(const std::string& title = "Theater Sound Manager", 
-                   int width = 1280, 
-                   int height = 720);
+    bool Initialize(const std::string& title = "Theater Sound Manager", int width = 1280, int height = 720);
     void Shutdown();
     void Run();
 

@@ -1,0 +1,22 @@
+[2025-01-21 23:17:39.444] [info] [7088] Logger initialized successfully
+[2025-01-21 23:17:39.445] [info] [7088] Initializing UI Manager
+[2025-01-21 23:17:39.468] [info] [7088] Creating SDL window
+[2025-01-21 23:17:39.771] [info] [7088] SDL Setup complete
+[2025-01-21 23:17:39.771] [info] [7088] Creating ImGui context
+[2025-01-21 23:17:39.802] [info] [7088] UI Manager initialized successfully
+[2025-01-21 23:17:42.454] [info] [7088] Shutting down UI Manager
+[2025-01-21 23:17:42.555] [info] [7088] Shutting down FMOD system
+[2025-01-21 23:17:42.756] [info] [7088] Deleting playback manager
+[2025-01-21 23:17:42.807] [info] [7088] Updating FMOD system
+[2025-01-21 23:17:42.908] [info] [7088] Closing FMOD system
+[2025-01-21 23:17:42.914] [info] [7088] Releasing FMOD system
+[2025-01-21 23:17:42.915] [info] [7088] Shutting down ImGui
+[2025-01-21 23:17:42.919] [info] [7088] Deleting OpenGL context
+[2025-01-21 23:17:42.919] [info] [7088] Deleting SDL window
+[2025-01-21 23:17:42.934] [info] [7088] Quitting..
+[2025-01-21 23:17:42.940] [info] [7088] Shutting down UI Manager
+[2025-01-21 23:17:42.940] [info] [7088] Shutting down FMOD system
+[2025-01-21 23:17:43.141] [info] [7088] Deleting playback manager
+[2025-01-21 23:17:43.141] [info] [7088] Deleting OpenGL context
+[2025-01-21 23:17:43.142] [info] [7088] Deleting SDL window
+[2025-01-21 23:17:43.142] [info] [7088] Quitting..

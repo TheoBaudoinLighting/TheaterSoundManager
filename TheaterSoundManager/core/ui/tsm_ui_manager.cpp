@@ -45,6 +45,8 @@ UI_Manager::~UI_Manager()
 
 bool UI_Manager::Initialize(const std::string& title, int width, int height)
 {
+    spdlog::info("Initializing UI Manager");
+
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != 0) {
         spdlog::error("SDL_Init Error: {}", SDL_GetError());
         return false;
@@ -54,12 +56,12 @@ bool UI_Manager::Initialize(const std::string& title, int width, int height)
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 6);
-
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-
     SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
+
+    spdlog::info("Creating SDL window");
 
     SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
     m_window = SDL_CreateWindow(
@@ -76,7 +78,6 @@ bool UI_Manager::Initialize(const std::string& title, int width, int height)
         return false;
     }
 
-    // Create OpenGL context
     m_gl_context = SDL_GL_CreateContext(m_window);
     if (!m_gl_context) {
         spdlog::error("Failed to create OpenGL context: {}", SDL_GetError());
@@ -85,6 +86,10 @@ bool UI_Manager::Initialize(const std::string& title, int width, int height)
 
     SDL_GL_MakeCurrent(m_window, m_gl_context);
     SDL_GL_SetSwapInterval(1); 
+
+    spdlog::info("SDL Setup complete");
+
+    spdlog::info("Creating ImGui context");
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -132,13 +137,16 @@ bool UI_Manager::Initialize(const std::string& title, int width, int height)
     m_playbackManager = new PlaybackManager(m_fmodSystem);
     m_announcementManager = new AnnouncementManager(m_fmodSystem);
 
-    m_isRunning = true;
+    spdlog::info("UI Manager initialized successfully");
 
+    m_isRunning = true;
     return true;
 }
 
 void UI_Manager::Shutdown()
 {
+    spdlog::info("Shutting down UI Manager");
+
     if (m_announcementManager) {
         m_announcementManager->prepareForShutdown();
     }
@@ -147,6 +155,8 @@ void UI_Manager::Shutdown()
         m_playbackManager->stopPlayback();
     }
 
+    spdlog::info("Shutting down FMOD system");
+
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
     if (m_announcementManager) {
@@ -154,35 +164,47 @@ void UI_Manager::Shutdown()
         m_announcementManager = nullptr;
     }
 
+    spdlog::info("Deleting playback manager");
+
     if (m_playbackManager) {
         delete m_playbackManager;
         m_playbackManager = nullptr;
     }
 
     if (m_fmodSystem) {
+        spdlog::info("Updating FMOD system");
         m_fmodSystem->update();
         SDL_Delay(100);
-    }
-
-    if (m_fmodSystem) {
+        spdlog::info("Closing FMOD system");
         m_fmodSystem->close();
+        spdlog::info("Releasing FMOD system");
         m_fmodSystem->release();
         m_fmodSystem = nullptr;
     }
 
-    ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplSDL2_Shutdown();
-    ImGui::DestroyContext();
+    if (m_gl_context) {
+        spdlog::info("Shutting down ImGui");
+        SDL_GL_MakeCurrent(m_window, m_gl_context);
+        ImGui_ImplOpenGL3_Shutdown();
+        ImGui_ImplSDL2_Shutdown();
+        ImGui::DestroyContext();
+    }
+
+    spdlog::info("Deleting OpenGL context");
 
     if (m_gl_context) {
         SDL_GL_DeleteContext(m_gl_context);
         m_gl_context = nullptr;
     }
 
+    spdlog::info("Deleting SDL window");
+
     if (m_window) {
         SDL_DestroyWindow(m_window);
         m_window = nullptr;
     }
+
+    spdlog::info("Quitting..");
 
     SDL_Quit();
 }
@@ -563,13 +585,11 @@ void UI_Manager::SetupHoudiniStyle()
 
 void UI_Manager::PreRender()
 {
-    // Skip rendering if window is minimized
     if (SDL_GetWindowFlags(m_window) & SDL_WINDOW_MINIMIZED) {
         SDL_Delay(10);
         return;
     }
 
-    // Update managers
     if (m_playbackManager) {
         m_playbackManager->update();
     }
@@ -585,7 +605,6 @@ void UI_Manager::PreRender()
         m_announcementManager->checkAndPlayAnnouncements(*m_playbackManager);
     }
 
-    // Start new ImGui frame
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplSDL2_NewFrame();
     ImGui::NewFrame();
