@@ -1,52 +1,78 @@
 // tsm_main.cpp
 
 #include <iostream>
-#include <vector>
-#include <string>
-#include <filesystem>
-#include <random>
-#include <chrono>
 #include <thread>
-#include <mutex>
+#include <chrono>
+#include "tsm_fmod_wrapper.h"
+#include "tsm_audio_manager.h"
+#include "tsm_announcement_manager.h"
+#include "tsm_playlist_manager.h"
+#include "tsm_ui_manager.h"
+#include "tsm_logger.h"
 
 #include <SDL.h>
 #include <SDL_opengl.h>
-#include <windows.h>
-#include <commdlg.h>
-#include <shlobj.h>
-#include <shellapi.h>
-#include <fmod.hpp>
-#include <fmod_errors.h>
-#include <spdlog/spdlog.h>
 
-#include "tsm_logger.h"
-#include "imgui/tsm_imgui.h"
-#include "tsm_announcement.h"
-#include "tsm_channels.h"
-#include "tsm_playback.h" 
+#ifdef _WIN32
+    #undef main
+    #define SDL_MAIN_HANDLED
+#endif
 
-#include "ui/tsm_ui_template.h"
-#include "ui/tsm_ui_registry.h"
-#include "ui/tsm_ui_manager.h"
-#include "ui/tsm_ui_main.h"
-#include "ui/tsm_ui_announcement.h"
-
-namespace fs = std::filesystem;
-
-Uint32 pauseStartTime = 0;
-Uint32 totalPausedTime = 0;
-
-int main(int argc, char** argv)
+int main()
 {
-    tsm::Logger::init();
-    
-    TSM::UI_Manager& uiManager = TSM::UI_Manager::GetInstance();
-    if (!uiManager.Initialize()) {
-        spdlog::error("Failed to initialize UI Manager");
+    TSM::Logger::Init();
+    if (!TSM::FModWrapper::GetInstance().Initialize())
+    {
+        spdlog::error("Failed to initialize FMOD.");
         return -1;
     }
 
-    uiManager.Run();
-    uiManager.Shutdown();
+    if (!TSM::UIManager::GetInstance().Init(800, 600))
+    {
+        spdlog::error("Failed to initialize GUI.");
+        TSM::FModWrapper::GetInstance().Shutdown();
+        return -1;
+    }
+
+    TSM::AudioManager::GetInstance().LoadSound("musique1", "assets/musics/Entrance(Fantasia Gardens) - Rise and shine (Monsters university).mp3", true);
+    TSM::AudioManager::GetInstance().LoadSound("musique2", "assets/musics/Entrance(Fantasia Gardens) - Hi diddle dee dee (Pinocchio).mp3", true);
+    TSM::AudioManager::GetInstance().LoadSound("musique3", "assets/musics/Entrance(Fantasia Gardens) - Be our guest (Beauty and the beast).mp3", true);
+    TSM::AudioManager::GetInstance().LoadSound("sfx_shine",  "assets/sfx/DisneyShine_SFX.mp3", false);
+
+    TSM::AnnouncementManager::GetInstance().LoadAnnouncement("announce1", "assets/announce/5min_buffet.wav");
+
+    TSM::PlaylistManager::GetInstance().CreatePlaylist("playlist_test");
+    TSM::PlaylistManager::GetInstance().AddToPlaylist("playlist_test", "musique1");
+    TSM::PlaylistManager::GetInstance().AddToPlaylist("playlist_test", "musique2");
+    TSM::PlaylistManager::GetInstance().AddToPlaylist("playlist_test", "musique3");
+
+    bool isRunning = true;
+    auto lastTime = std::chrono::high_resolution_clock::now();
+
+    while (isRunning)
+    {
+        auto currentTime = std::chrono::high_resolution_clock::now();
+        float dt = std::chrono::duration<float>(currentTime - lastTime).count();
+        lastTime = currentTime;
+
+        TSM::AudioManager::GetInstance().Update(dt);
+        TSM::AnnouncementManager::GetInstance().Update(dt);
+        TSM::PlaylistManager::GetInstance().Update(dt);
+
+        TSM::UIManager::GetInstance().HandleEvents();
+
+        TSM::UIManager::GetInstance().PreRender();
+        TSM::UIManager::GetInstance().Render();
+        TSM::UIManager::GetInstance().PostRender();
+
+        if (!TSM::UIManager::GetInstance().IsRunning()) {
+            isRunning = false;
+        }
+    }
+
+    TSM::AudioManager::GetInstance().StopAllSounds();
+    TSM::UIManager::GetInstance().Shutdown();
+    TSM::FModWrapper::GetInstance().Shutdown();
+
     return 0;
 }
