@@ -36,10 +36,48 @@ bool AudioManager::LoadSound(const std::string& soundName, const std::string& fi
     
     SoundData data; 
     data.sound = newSound;
+    data.filePath = filePath;
     m_sounds[soundName] = data;
 
     spdlog::info("Sound loaded successfully: {}", soundName);
     return true;
+}
+
+bool AudioManager::UnloadSound(const std::string& soundName)
+{
+    auto it = m_sounds.find(soundName);
+    if (it != m_sounds.end())
+    {
+        if (it->second.sound)
+        {
+            FMOD_RESULT result = it->second.sound->release();
+            if (result != FMOD_OK)
+            {
+                spdlog::error("Failed to release sound {}: {}", soundName, FMOD_ErrorString(result));
+                return false;
+            }
+        }
+
+        for (auto channel : it->second.channels)
+        {
+            if (channel)
+            {
+                bool isPlaying = false;
+                channel->isPlaying(&isPlaying);
+                if (isPlaying)
+                {
+                    channel->stop();
+                }
+            }
+        }
+
+        m_sounds.erase(it);
+        spdlog::info("Sound {} unloaded successfully", soundName);
+        return true;
+    }
+    
+    spdlog::warn("Attempted to unload non-existent sound: {}", soundName);
+    return false;
 }
 
 FMOD::Channel* AudioManager::PlaySound(const std::string& soundName, bool loop, float volume, float pitch)
@@ -60,8 +98,10 @@ FMOD::Channel* AudioManager::PlaySound(const std::string& soundName, bool loop, 
     
     FMOD_MODE currentMode;
     data.sound->getMode(&currentMode);
-    if (loop) currentMode |= FMOD_LOOP_NORMAL;
-    else currentMode &= ~FMOD_LOOP_NORMAL;
+    if (loop)
+        currentMode |= FMOD_LOOP_NORMAL;
+    else
+        currentMode &= ~FMOD_LOOP_NORMAL;
     data.sound->setMode(currentMode);
 
     FMOD::Channel* channel = nullptr;
@@ -84,7 +124,7 @@ FMOD::Channel* AudioManager::PlaySound(const std::string& soundName, bool loop, 
 
     float volumeTemp;
     channel->getVolume(&volumeTemp);
-    spdlog::info("Volume of {} after configuration : {}", soundName, volumeTemp);
+    spdlog::info("Volume of {} after configuration: {}", soundName, volumeTemp);
 
     data.channels.push_back(channel);
 
@@ -95,9 +135,7 @@ void AudioManager::StopSound(const std::string& soundName)
 {
     auto it = m_sounds.find(soundName);
     if (it == m_sounds.end())
-    {
         return;
-    }
 
     for (auto* channel : it->second.channels)
     {

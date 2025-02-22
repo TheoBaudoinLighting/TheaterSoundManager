@@ -1,13 +1,10 @@
-// fmod_wrapper.h
-
+// tsm_fmod_wrapper.h
 #pragma once
 
 #include <fmod.hpp>
 #include <fmod_errors.h>
-
 #include <string>
 #include <vector>
-
 #include <spdlog/spdlog.h>
 
 namespace TSM 
@@ -38,4 +35,4 @@ private:
     FMOD::System* m_system;
 };
 
-} // namespace tsm
+} // namespace TSM

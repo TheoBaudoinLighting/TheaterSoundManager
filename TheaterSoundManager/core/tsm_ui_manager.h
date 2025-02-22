@@ -4,6 +4,8 @@
 
 #include <SDL.h>
 #include <string>
+#include <vector>
+#include <optional>
 
 namespace TSM
 {
@@ -49,12 +51,35 @@ private:
     UIManager(const UIManager&) = delete;
     UIManager& operator=(const UIManager&) = delete;
 
+    void SetupBlenderStyle();
+
     void RenderPlaylistControls();
     void RenderAnnouncementControls();
     void RenderAudioControls();
     void RenderDebugInfo();
 
+    void RenderAudioLibrary();
+    void RenderMusicPlaylistTab();
+    void RenderAnnouncementsTab();
+    void RenderSFXTab();
+
     void UpdateAllVolumes();
+
+    struct AudioTrack {
+        std::string id;
+        std::string name;
+        bool isPlaying;
+    };
+
+    struct PlaylistData {
+        std::string name;
+        std::vector<AudioTrack> tracks;
+        bool isPlaying;
+    };
+
+    void EnsureDefaultPlaylist();
+    std::optional<PlaylistData> GetCurrentPlaylistData() const;
+    std::string GetDisplayName(const std::string& path) const;
 
 private:
     SDL_Window*   m_window     = nullptr;
@@ -63,10 +88,10 @@ private:
     bool          m_isRunning  = true;
     bool          m_isInitialized = false;
 
-    float m_masterVolume       = 0.05f;
-    float m_musicVolume        = 0.05f;
-    float m_announcementVolume = 0.05f;
-    float m_sfxVolume          = 0.05f;
+    float m_masterVolume       = 0.5f;
+    float m_musicVolume        = 0.5f;
+    float m_announcementVolume = 0.5f;
+    float m_sfxVolume          = 0.5f;
 
     float m_duckFactor         = 1.0f;
 };

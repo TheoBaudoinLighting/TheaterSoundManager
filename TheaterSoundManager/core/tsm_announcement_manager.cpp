@@ -7,6 +7,7 @@
 #include <fmod_errors.h>
 #include <spdlog/spdlog.h>
 #include <algorithm>
+#include <ctime>
 
 namespace TSM
 {
@@ -15,7 +16,7 @@ bool AnnouncementManager::LoadAnnouncement(const std::string& announceName, cons
 {
     if (!AudioManager::GetInstance().LoadSound(announceName, filePath, true))
     {
-        spdlog::error("Failed to load announcement : {}", announceName);
+        spdlog::error("Failed to load announcement: {}", announceName);
         return false;
     }
 
@@ -27,9 +28,9 @@ bool AnnouncementManager::LoadAnnouncement(const std::string& announceName, cons
 }
 
 FMOD::Channel* AnnouncementManager::PlayAnnouncement(const std::string& announceName,
-                                                    float volumeDuck,
-                                                    bool useSFXBefore,
-                                                    bool useSFXAfter)
+                                                       float volumeDuck,
+                                                       bool useSFXBefore,
+                                                       bool useSFXAfter)
 {
     StopAnnouncement();
 
@@ -39,10 +40,10 @@ FMOD::Channel* AnnouncementManager::PlayAnnouncement(const std::string& announce
         return nullptr;
     }
 
-    m_currentAnnouncementName  = announceName;
-    m_duckVolume               = volumeDuck;
-    m_useSFXBefore             = useSFXBefore;
-    m_useSFXAfter              = useSFXAfter;
+    m_currentAnnouncementName = announceName;
+    m_duckVolume              = volumeDuck;
+    m_useSFXBefore            = useSFXBefore;
+    m_useSFXAfter             = useSFXAfter;
 
     m_state        = AnnouncementState::DUCKING_IN;
     m_duckTimer    = 0.0f;
@@ -59,6 +60,8 @@ FMOD::Channel* AnnouncementManager::PlayAnnouncement(const std::string& announce
 
 void AnnouncementManager::Update(float deltaTime)
 {
+    CheckSchedules(deltaTime);
+    
     switch (m_state)
     {
         case AnnouncementState::IDLE:
@@ -71,11 +74,11 @@ void AnnouncementManager::Update(float deltaTime)
             float t = m_duckTimer / m_duckFadeDuration;
             if (t > 1.0f) t = 1.0f;
 
-            float newFactor = 1.0f + (m_duckVolume - 1.0f) * t; 
+            float newFactor = 1.0f + (m_duckVolume - 1.0f) * t;
             UIManager::GetInstance().SetDuckFactor(newFactor);
             UIManager::GetInstance().ForceUpdateAllVolumes();
 
-            if (t >= 1.0f) 
+            if (t >= 1.0f)
             {
                 if (m_useSFXBefore)
                 {
@@ -104,7 +107,6 @@ void AnnouncementManager::Update(float deltaTime)
 
                 if (!isPlaying) {
                     m_sfxChannel = nullptr;
-
                     m_currentAnnouncementChannel = AudioManager::GetInstance().PlaySound(
                         m_currentAnnouncementName, false, 1.0f);
                     UIManager::GetInstance().ForceUpdateAllVolumes();
@@ -185,7 +187,7 @@ void AnnouncementManager::Update(float deltaTime)
             UIManager::GetInstance().ForceUpdateAllVolumes();
 
             if (t >= 1.0f) {
-                m_state        = AnnouncementState::IDLE;
+                m_state = AnnouncementState::IDLE;
                 m_isAnnouncing = false;
                 spdlog::info("Announcement sequence finished.");
             }
@@ -221,6 +223,45 @@ void AnnouncementManager::StopAnnouncement()
     m_isAnnouncing = false;
 
     spdlog::info("Announcement stopped manually.");
+}
+
+void AnnouncementManager::AddScheduledAnnouncement(int hour, int minute, const std::string& annID)
+{
+    ScheduledAnnouncement sa;
+    sa.hour = hour;
+    sa.minute = minute;
+    sa.announceID = annID;
+    sa.triggered = false;
+    m_scheduled.push_back(sa);
+    spdlog::info("Scheduled announce '{}' at {:02d}:{:02d}", annID, hour, minute);
+}
+
+void AnnouncementManager::CheckSchedules(float /*deltaTime*/)
+{
+    std::time_t t = std::time(nullptr);
+    std::tm localTm;
+#ifdef _WIN32
+    localtime_s(&localTm, &t);
+#else
+    localtime_r(&t, &localTm);
+#endif
+    int currentHour   = localTm.tm_hour;
+    int currentMinute = localTm.tm_min;
+
+    for (auto& s : m_scheduled)
+    {
+        if (!s.triggered)
+        {
+            if (s.hour == currentHour && s.minute == currentMinute)
+            {
+                spdlog::info("Auto-playing announcement '{}' scheduled at {:02d}:{:02d}",
+                             s.announceID, s.hour, s.minute);
+
+                PlayAnnouncement(s.announceID, 0.3f, false, false);
+                s.triggered = true;
+            }
+        }
+    }
 }
 
 } // namespace TSM

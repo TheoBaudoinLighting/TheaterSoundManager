@@ -1,5 +1,4 @@
 // tsm_playlist_manager.h
-
 #pragma once
 
 #include <string>
@@ -28,7 +27,6 @@ public:
     }
 
     void CreatePlaylist(const std::string& playlistName);
-
     void AddToPlaylist(const std::string& playlistName, const std::string& soundName);
     void RemoveFromPlaylist(const std::string& playlistName, const std::string& soundName);
 
@@ -38,6 +36,9 @@ public:
     void Update(float deltaTime);
 
     std::string GetCurrentTrackName() const;
+    std::string GetTrackName(int index) const;
+    std::string GetCurrentTrackDuration() const;
+    std::string GetTrackDuration(int index) const;
 
     float GetTrackProgress() const;   
     float GetSegmentProgress() const; 
@@ -50,7 +51,7 @@ public:
     FMOD::Channel* GetNextChannel() const;
 
 private:
-    PlaylistManager();
+    PlaylistManager() : m_rng(std::random_device{}()) {}
     ~PlaylistManager() = default;
     PlaylistManager(const PlaylistManager&) = delete;
     PlaylistManager& operator=(const PlaylistManager&) = delete;
@@ -96,7 +97,14 @@ private:
 
     std::vector<Playlist> m_playlists;
     std::mt19937 m_rng;
+
+public:
+    const Playlist* GetPlaylistByName(const std::string& name) const;
+
+    void MoveTrackUp(const std::string& playlistName, int index);
+    void MoveTrackDown(const std::string& playlistName, int index);
+
+    void PlayFromIndex(const std::string& playlistName, int index);
 };
 
 } // namespace TSM
-

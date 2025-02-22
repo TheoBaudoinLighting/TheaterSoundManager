@@ -14,13 +14,7 @@
 
 namespace TSM
 {
-
-PlaylistManager::PlaylistManager()
-{
-    std::random_device rd;
-    m_rng.seed(rd());
-}
-
+    
 void PlaylistManager::CreatePlaylist(const std::string& playlistName)
 {
     auto it = std::find_if(m_playlists.begin(), m_playlists.end(),
@@ -527,6 +521,76 @@ void PlaylistManager::PrepareRandomOrder(Playlist& plist)
         plist.randomIndices[i] = i;
 
     std::shuffle(plist.randomIndices.begin(), plist.randomIndices.end(), m_rng);
+}
+
+const PlaylistManager::Playlist* PlaylistManager::GetPlaylistByName(const std::string& name) const
+{
+    auto it = std::find_if(m_playlists.begin(), m_playlists.end(),
+        [&name](const Playlist& p){ return p.name == name; });
+    if (it != m_playlists.end()) {
+        return &(*it);
+    }
+    return nullptr;
+}
+
+void PlaylistManager::MoveTrackUp(const std::string& playlistName, int index)
+{
+    auto it = std::find_if(m_playlists.begin(), m_playlists.end(),
+        [&playlistName](const Playlist& p){ return p.name == playlistName; });
+    if (it == m_playlists.end()) return;
+    auto& plist = *it;
+    if (index <= 0 || index >= (int)plist.tracks.size()) return;
+
+    std::swap(plist.tracks[index], plist.tracks[index-1]);
+}
+
+void PlaylistManager::MoveTrackDown(const std::string& playlistName, int index)
+{
+    auto it = std::find_if(m_playlists.begin(), m_playlists.end(),
+        [&playlistName](const Playlist& p){ return p.name == playlistName; });
+    if (it == m_playlists.end()) return;
+    auto& plist = *it;
+    if (index < 0 || index >= (int)plist.tracks.size() - 1) return;
+
+    std::swap(plist.tracks[index], plist.tracks[index+1]);
+}
+
+void PlaylistManager::PlayFromIndex(const std::string& playlistName, int index)
+{
+    Stop(playlistName);
+
+    auto it = std::find_if(m_playlists.begin(), m_playlists.end(),
+        [&playlistName](const Playlist& p){ return p.name == playlistName; });
+    if (it == m_playlists.end()) return;
+
+    Playlist& plist = *it;
+    if (index < 0 || index >= (int)plist.tracks.size()) return;
+
+    PlaylistOptions opts;
+    plist.options = opts; 
+    plist.isPlaying = true;
+
+    plist.currentIndex = index;
+    plist.currentChannel = nullptr;
+    plist.nextChannel    = nullptr;
+    plist.isCrossfading  = false;
+    plist.crossfadeTimer = 0.0f;
+
+    StartTrackAtIndex(plist, index);
+}
+
+std::string PlaylistManager::GetTrackName(int index) const
+{
+    auto* activePlaylist = GetActivePlaylist();
+    if (!activePlaylist || index < 0 || index >= (int)activePlaylist->tracks.size()) return "";
+    return activePlaylist->tracks[index];
+}
+
+std::string PlaylistManager::GetTrackDuration(int index) const
+{
+    auto* activePlaylist = GetActivePlaylist();
+    if (!activePlaylist || index < 0 || index >= (int)activePlaylist->tracks.size()) return "";
+    return activePlaylist->tracks[index];
 }
 
 } // namespace TSM

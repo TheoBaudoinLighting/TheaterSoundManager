@@ -27,24 +27,27 @@ int main()
         return -1;
     }
 
-    if (!TSM::UIManager::GetInstance().Init(800, 600))
+    if (!TSM::UIManager::GetInstance().Init(1280, 900))
     {
         spdlog::error("Failed to initialize GUI.");
         TSM::FModWrapper::GetInstance().Shutdown();
         return -1;
     }
 
-    TSM::AudioManager::GetInstance().LoadSound("musique1", "assets/musics/Entrance(Fantasia Gardens) - Rise and shine (Monsters university).mp3", true);
+    // Exemple d'utilisation du gestionnaire audio et playlist (les musiques sont commentées)
+    /*TSM::AudioManager::GetInstance().LoadSound("musique1", "assets/musics/Entrance(Fantasia Gardens) - Rise and shine (Monsters university).mp3", true);
     TSM::AudioManager::GetInstance().LoadSound("musique2", "assets/musics/Entrance(Fantasia Gardens) - Hi diddle dee dee (Pinocchio).mp3", true);
     TSM::AudioManager::GetInstance().LoadSound("musique3", "assets/musics/Entrance(Fantasia Gardens) - Be our guest (Beauty and the beast).mp3", true);
-    TSM::AudioManager::GetInstance().LoadSound("sfx_shine",  "assets/sfx/DisneyShine_SFX.mp3", false);
-
-    TSM::AnnouncementManager::GetInstance().LoadAnnouncement("announce1", "assets/announce/5min_buffet.wav");
-
+    
     TSM::PlaylistManager::GetInstance().CreatePlaylist("playlist_test");
     TSM::PlaylistManager::GetInstance().AddToPlaylist("playlist_test", "musique1");
     TSM::PlaylistManager::GetInstance().AddToPlaylist("playlist_test", "musique2");
-    TSM::PlaylistManager::GetInstance().AddToPlaylist("playlist_test", "musique3");
+    TSM::PlaylistManager::GetInstance().AddToPlaylist("playlist_test", "musique3");*/
+
+    TSM::AudioManager::GetInstance().LoadSound("sfx_shine",  "assets/sfx/DisneyShine_SFX.mp3", false);
+    //TSM::AnnouncementManager::GetInstance().LoadAnnouncement("announce1", "assets/announce/5min_buffet.wav");
+
+    TSM::AnnouncementManager::GetInstance().LoadAnnouncement("announce1", "assets/announce/Temp/Both/5min_buffet.mp3");
 
     bool isRunning = true;
     auto lastTime = std::chrono::high_resolution_clock::now();

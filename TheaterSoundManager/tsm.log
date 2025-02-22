@@ -1,44 +1,43 @@
-[TSM] [03:34:20] [info] FMOD initialized successfully.
-[TSM] [03:34:21] [info] FMOD createSound success: musique1 for file: assets/musics/Entrance(Fantasia Gardens) - Rise and shine (Monsters university).mp3
-[TSM] [03:34:21] [info] Sound loaded successfully: musique1
-[TSM] [03:34:21] [info] FMOD createSound success: musique2 for file: assets/musics/Entrance(Fantasia Gardens) - Hi diddle dee dee (Pinocchio).mp3
-[TSM] [03:34:21] [info] Sound loaded successfully: musique2
-[TSM] [03:34:21] [info] FMOD createSound success: musique3 for file: assets/musics/Entrance(Fantasia Gardens) - Be our guest (Beauty and the beast).mp3
-[TSM] [03:34:21] [info] Sound loaded successfully: musique3
-[TSM] [03:34:21] [info] FMOD createSound success: sfx_shine for file: assets/sfx/DisneyShine_SFX.mp3
-[TSM] [03:34:21] [info] Sound loaded successfully: sfx_shine
-[TSM] [03:34:21] [info] FMOD createSound success: announce1 for file: assets/announce/5min_buffet.wav
-[TSM] [03:34:21] [info] Sound loaded successfully: announce1
-[TSM] [03:34:21] [info] Playlist 'playlist_test' created.
-[TSM] [03:34:21] [info] Added 'musique1' to playlist 'playlist_test'.
-[TSM] [03:34:21] [info] Added 'musique2' to playlist 'playlist_test'.
-[TSM] [03:34:21] [info] Added 'musique3' to playlist 'playlist_test'.
-[TSM] [03:34:28] [warning] Playlist name is empty, stopping all playlists.
-[TSM] [03:34:28] [info] FMOD playSound success: musique1
-[TSM] [03:34:28] [info] Volume of musique1 after configuration : 0.0025000002
-[TSM] [03:34:28] [info] Playlist 'playlist_test' started.
-[TSM] [03:34:31] [info] Announcement stopped manually.
-[TSM] [03:34:31] [info] Starting announcement sequence. (duckVolume=0.3, sfxBefore=true, sfxAfter=true)
-[TSM] [03:34:33] [info] FMOD playSound success: sfx_shine
-[TSM] [03:34:33] [info] Volume of sfx_shine after configuration : 1
-[TSM] [03:34:36] [info] FMOD playSound success: announce1
-[TSM] [03:34:36] [info] Volume of announce1 after configuration : 1
-[TSM] [03:34:48] [info] FMOD playSound success: sfx_shine
-[TSM] [03:34:48] [info] Volume of sfx_shine after configuration : 1
-[TSM] [03:34:52] [info] Announcement sequence finished.
-[TSM] [03:34:58] [info] FMOD playSound success: musique2
-[TSM] [03:34:58] [info] Volume of musique2 after configuration : 0
-[TSM] [03:35:33] [info] Announcement stopped manually.
-[TSM] [03:35:33] [info] Starting announcement sequence. (duckVolume=0.3, sfxBefore=true, sfxAfter=true)
-[TSM] [03:35:35] [info] FMOD playSound success: sfx_shine
-[TSM] [03:35:35] [info] Volume of sfx_shine after configuration : 1
-[TSM] [03:35:38] [info] FMOD playSound success: announce1
-[TSM] [03:35:38] [info] Volume of announce1 after configuration : 1
-[TSM] [03:35:38] [info] FMOD playSound success: musique3
-[TSM] [03:35:38] [info] Volume of musique3 after configuration : 0
-[TSM] [03:35:49] [info] FMOD playSound success: sfx_shine
-[TSM] [03:35:49] [info] Volume of sfx_shine after configuration : 1
-[TSM] [03:35:54] [info] Announcement sequence finished.
-[TSM] [03:36:18] [info] FMOD playSound success: musique1
-[TSM] [03:36:18] [info] Volume of musique1 after configuration : 0
-[TSM] [03:36:38] [info] FMOD shutdown successfully.
+[TSM] [03:55:38] [info] FMOD initialized successfully.
+[TSM] [03:55:39] [info] FMOD createSound success: sfx_shine for file: assets/sfx/DisneyShine_SFX.mp3
+[TSM] [03:55:39] [info] Sound loaded successfully: sfx_shine
+[TSM] [03:55:39] [info] FMOD createSound success: announce1 for file: assets/announce/Temp/Both/5min_buffet.mp3
+[TSM] [03:55:39] [info] Sound loaded successfully: announce1
+[TSM] [03:55:40] [info] Playlist 'playlist_test' created.
+[TSM] [03:55:56] [info] FMOD createSound success: music_41 for file: F:\Code\TheaterSoundManager\TheaterSoundManager\assets\musics\Batman - Discover Gotham Ambient Music Mix.mp3
+[TSM] [03:55:56] [info] Sound loaded successfully: music_41
+[TSM] [03:55:56] [info] Imported audio file 'F:\Code\TheaterSoundManager\TheaterSoundManager\assets\musics\Batman - Discover Gotham Ambient Music Mix.mp3' as 'music_41'
+[TSM] [03:55:56] [info] Added 'music_41' to playlist 'playlist_test'.
+[TSM] [03:55:56] [info] FMOD createSound success: music_18467 for file: F:\Code\TheaterSoundManager\TheaterSoundManager\assets\musics\Bon Voyage - Background Music.mp3
+[TSM] [03:55:56] [info] Sound loaded successfully: music_18467
+[TSM] [03:55:56] [info] Imported audio file 'F:\Code\TheaterSoundManager\TheaterSoundManager\assets\musics\Bon Voyage - Background Music.mp3' as 'music_18467'
+[TSM] [03:55:56] [info] Added 'music_18467' to playlist 'playlist_test'.
+[TSM] [03:55:56] [info] FMOD createSound success: music_6334 for file: F:\Code\TheaterSoundManager\TheaterSoundManager\assets\musics\Country Bear Musical Jamboree Lobby Background Music - Magic Kingdom.mp3
+[TSM] [03:55:56] [info] Sound loaded successfully: music_6334
+[TSM] [03:55:56] [info] Imported audio file 'F:\Code\TheaterSoundManager\TheaterSoundManager\assets\musics\Country Bear Musical Jamboree Lobby Background Music - Magic Kingdom.mp3' as 'music_6334'
+[TSM] [03:55:56] [info] Added 'music_6334' to playlist 'playlist_test'.
+[TSM] [03:55:56] [info] FMOD createSound success: music_26500 for file: F:\Code\TheaterSoundManager\TheaterSoundManager\assets\musics\Disneyland Hotel Magic Unveiling the Enchanting Area Music Loop!.mp3
+[TSM] [03:55:56] [info] Sound loaded successfully: music_26500
+[TSM] [03:55:56] [info] Imported audio file 'F:\Code\TheaterSoundManager\TheaterSoundManager\assets\musics\Disneyland Hotel Magic Unveiling the Enchanting Area Music Loop!.mp3' as 'music_26500'
+[TSM] [03:55:56] [info] Added 'music_26500' to playlist 'playlist_test'.
+[TSM] [03:55:56] [info] FMOD createSound success: music_19169 for file: F:\Code\TheaterSoundManager\TheaterSoundManager\assets\musics\Disneyland's Enchanted Tiki Room Enchanted Garden Music Loop.mp3
+[TSM] [03:55:56] [info] Sound loaded successfully: music_19169
+[TSM] [03:55:56] [info] Imported audio file 'F:\Code\TheaterSoundManager\TheaterSoundManager\assets\musics\Disneyland's Enchanted Tiki Room Enchanted Garden Music Loop.mp3' as 'music_19169'
+[TSM] [03:55:56] [info] Added 'music_19169' to playlist 'playlist_test'.
+[TSM] [03:56:16] [warning] Playlist name is empty, stopping all playlists.
+[TSM] [03:56:16] [info] FMOD playSound success: music_6334
+[TSM] [03:56:16] [info] Volume of music_6334 after configuration: 0.1255
+[TSM] [03:56:16] [info] Playlist 'playlist_test' started.
+[TSM] [03:56:21] [info] Announcement stopped manually.
+[TSM] [03:56:21] [info] Starting announcement sequence. (duckVolume=0.3, sfxBefore=true, sfxAfter=true)
+[TSM] [03:56:23] [info] FMOD playSound success: sfx_shine
+[TSM] [03:56:23] [info] Volume of sfx_shine after configuration: 1
+[TSM] [03:56:26] [info] FMOD playSound success: announce1
+[TSM] [03:56:26] [info] Volume of announce1 after configuration: 1
+[TSM] [03:56:43] [info] FMOD playSound success: sfx_shine
+[TSM] [03:56:43] [info] Volume of sfx_shine after configuration: 1
+[TSM] [03:56:48] [info] Announcement sequence finished.
+[TSM] [03:57:16] [info] FMOD playSound success: music_18467
+[TSM] [03:57:16] [info] Volume of music_18467 after configuration: 0
+[TSM] [03:57:29] [info] Announcement stopped manually.
+[TSM] [03:57:29] [info] Starting
