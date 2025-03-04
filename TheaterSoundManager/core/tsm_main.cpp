@@ -10,6 +10,9 @@
 #include "tsm_ui_manager.h"
 #include "tsm_logger.h"
 
+// Bluetooth
+#include "tsm_bluetooth_server.h"
+
 #include <SDL.h>
 #include <SDL_opengl.h>
 
@@ -33,6 +36,8 @@ int main()
         TSM::FModWrapper::GetInstance().Shutdown();
         return -1;
     }
+
+    StartBluetoothServer();
 
     // Exemple d'utilisation du gestionnaire audio et playlist (les musiques sont commentées)
     /*TSM::AudioManager::GetInstance().LoadSound("musique1", "assets/musics/Entrance(Fantasia Gardens) - Rise and shine (Monsters university).mp3", true);

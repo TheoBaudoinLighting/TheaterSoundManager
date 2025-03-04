@@ -1,43 +1,9 @@
-[TSM] [03:55:38] [info] FMOD initialized successfully.
-[TSM] [03:55:39] [info] FMOD createSound success: sfx_shine for file: assets/sfx/DisneyShine_SFX.mp3
-[TSM] [03:55:39] [info] Sound loaded successfully: sfx_shine
-[TSM] [03:55:39] [info] FMOD createSound success: announce1 for file: assets/announce/Temp/Both/5min_buffet.mp3
-[TSM] [03:55:39] [info] Sound loaded successfully: announce1
-[TSM] [03:55:40] [info] Playlist 'playlist_test' created.
-[TSM] [03:55:56] [info] FMOD createSound success: music_41 for file: F:\Code\TheaterSoundManager\TheaterSoundManager\assets\musics\Batman - Discover Gotham Ambient Music Mix.mp3
-[TSM] [03:55:56] [info] Sound loaded successfully: music_41
-[TSM] [03:55:56] [info] Imported audio file 'F:\Code\TheaterSoundManager\TheaterSoundManager\assets\musics\Batman - Discover Gotham Ambient Music Mix.mp3' as 'music_41'
-[TSM] [03:55:56] [info] Added 'music_41' to playlist 'playlist_test'.
-[TSM] [03:55:56] [info] FMOD createSound success: music_18467 for file: F:\Code\TheaterSoundManager\TheaterSoundManager\assets\musics\Bon Voyage - Background Music.mp3
-[TSM] [03:55:56] [info] Sound loaded successfully: music_18467
-[TSM] [03:55:56] [info] Imported audio file 'F:\Code\TheaterSoundManager\TheaterSoundManager\assets\musics\Bon Voyage - Background Music.mp3' as 'music_18467'
-[TSM] [03:55:56] [info] Added 'music_18467' to playlist 'playlist_test'.
-[TSM] [03:55:56] [info] FMOD createSound success: music_6334 for file: F:\Code\TheaterSoundManager\TheaterSoundManager\assets\musics\Country Bear Musical Jamboree Lobby Background Music - Magic Kingdom.mp3
-[TSM] [03:55:56] [info] Sound loaded successfully: music_6334
-[TSM] [03:55:56] [info] Imported audio file 'F:\Code\TheaterSoundManager\TheaterSoundManager\assets\musics\Country Bear Musical Jamboree Lobby Background Music - Magic Kingdom.mp3' as 'music_6334'
-[TSM] [03:55:56] [info] Added 'music_6334' to playlist 'playlist_test'.
-[TSM] [03:55:56] [info] FMOD createSound success: music_26500 for file: F:\Code\TheaterSoundManager\TheaterSoundManager\assets\musics\Disneyland Hotel Magic Unveiling the Enchanting Area Music Loop!.mp3
-[TSM] [03:55:56] [info] Sound loaded successfully: music_26500
-[TSM] [03:55:56] [info] Imported audio file 'F:\Code\TheaterSoundManager\TheaterSoundManager\assets\musics\Disneyland Hotel Magic Unveiling the Enchanting Area Music Loop!.mp3' as 'music_26500'
-[TSM] [03:55:56] [info] Added 'music_26500' to playlist 'playlist_test'.
-[TSM] [03:55:56] [info] FMOD createSound success: music_19169 for file: F:\Code\TheaterSoundManager\TheaterSoundManager\assets\musics\Disneyland's Enchanted Tiki Room Enchanted Garden Music Loop.mp3
-[TSM] [03:55:56] [info] Sound loaded successfully: music_19169
-[TSM] [03:55:56] [info] Imported audio file 'F:\Code\TheaterSoundManager\TheaterSoundManager\assets\musics\Disneyland's Enchanted Tiki Room Enchanted Garden Music Loop.mp3' as 'music_19169'
-[TSM] [03:55:56] [info] Added 'music_19169' to playlist 'playlist_test'.
-[TSM] [03:56:16] [warning] Playlist name is empty, stopping all playlists.
-[TSM] [03:56:16] [info] FMOD playSound success: music_6334
-[TSM] [03:56:16] [info] Volume of music_6334 after configuration: 0.1255
-[TSM] [03:56:16] [info] Playlist 'playlist_test' started.
-[TSM] [03:56:21] [info] Announcement stopped manually.
-[TSM] [03:56:21] [info] Starting announcement sequence. (duckVolume=0.3, sfxBefore=true, sfxAfter=true)
-[TSM] [03:56:23] [info] FMOD playSound success: sfx_shine
-[TSM] [03:56:23] [info] Volume of sfx_shine after configuration: 1
-[TSM] [03:56:26] [info] FMOD playSound success: announce1
-[TSM] [03:56:26] [info] Volume of announce1 after configuration: 1
-[TSM] [03:56:43] [info] FMOD playSound success: sfx_shine
-[TSM] [03:56:43] [info] Volume of sfx_shine after configuration: 1
-[TSM] [03:56:48] [info] Announcement sequence finished.
-[TSM] [03:57:16] [info] FMOD playSound success: music_18467
-[TSM] [03:57:16] [info] Volume of music_18467 after configuration: 0
-[TSM] [03:57:29] [info] Announcement stopped manually.
-[TSM] [03:57:29] [info] Starting
+[TSM] [23:33:37] [info] FMOD initialized successfully.
+[TSM] [23:33:38] [info] Local Bluetooth address: 0x136685073311034.
+[TSM] [23:33:38] [info] Server listening on RFCOMM port: 4.
+[TSM] [23:33:38] [info] Service registered with name 'TheaterSound'.
+[TSM] [23:33:38] [info] Waiting for Bluetooth connection...
+[TSM] [23:33:38] [info] FMOD createSound success: sfx_shine for file: assets/sfx/DisneyShine_SFX.mp3
+[TSM] [23:33:38] [info] Sound loaded successfully: sfx_shine
+[TSM] [23:33:38] [info] FMOD createSound success: announce1 for file: assets/announce/Temp/Both/5min_buffet.mp3
+[TSM] [23:33:38] [info] Sound loaded successfully: announce1
