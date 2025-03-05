@@ -12,50 +12,42 @@
 namespace TSM
 {
 
-bool AnnouncementManager::LoadAnnouncement(const std::string& announceName, const std::string& filePath)
+void AnnouncementManager::ScheduleAnnouncement(int hour, int minute, const std::string& announcementId)
 {
-    if (!AudioManager::GetInstance().LoadSound(announceName, filePath, true))
-    {
-        spdlog::error("Failed to load announcement: {}", announceName);
-        return false;
+    FMOD::Sound* sound = AudioManager::GetInstance().GetSound(announcementId);
+    if (!sound) {
+        spdlog::error("Impossible de planifier l'annonce '{}' car elle n'est pas chargée ou est introuvable.", announcementId);
+        return;
     }
-
-    AnnounceData data;
-    data.sound = AudioManager::GetInstance().GetAllSounds().at(announceName).sound;
-    m_announcements[announceName] = data;
-
-    return true;
+    
+    ScheduledAnnouncement announcement;
+    announcement.hour = hour;
+    announcement.minute = minute;
+    announcement.announcementId = announcementId;
+    announcement.announceID = announcementId; 
+    announcement.triggered = false;
+    
+    m_scheduled.push_back(announcement);
+    
+    spdlog::info("Annonce '{}' planifiée à {:02d}:{:02d}", announcementId, hour, minute);
 }
 
-FMOD::Channel* AnnouncementManager::PlayAnnouncement(const std::string& announceName,
-                                                       float volumeDuck,
-                                                       bool useSFXBefore,
-                                                       bool useSFXAfter)
+void AnnouncementManager::UpdateScheduledAnnouncement(size_t index, int hour, int minute, const std::string& announcementId)
 {
-    StopAnnouncement();
-
-    auto it = m_announcements.find(announceName);
-    if (it == m_announcements.end()) {
-        spdlog::error("Announcement '{}' not loaded or not found.", announceName);
-        return nullptr;
+    if (index >= m_scheduled.size())
+    {
+        spdlog::error("Invalid scheduled announcement index: {}", index);
+        return;
     }
 
-    m_currentAnnouncementName = announceName;
-    m_duckVolume              = volumeDuck;
-    m_useSFXBefore            = useSFXBefore;
-    m_useSFXAfter             = useSFXAfter;
+    m_scheduled[index].hour = hour;
+    m_scheduled[index].minute = minute;
+    m_scheduled[index].announcementId = announcementId;
+    m_scheduled[index].announceID = announcementId; 
+    m_scheduled[index].triggered = false;
 
-    m_state        = AnnouncementState::DUCKING_IN;
-    m_duckTimer    = 0.0f;
-    m_isAnnouncing = true;
-
-    UIManager::GetInstance().SetDuckFactor(1.0f);
-    UIManager::GetInstance().ForceUpdateAllVolumes();
-
-    spdlog::info("Starting announcement sequence. (duckVolume={}, sfxBefore={}, sfxAfter={})",
-                  volumeDuck, useSFXBefore, useSFXAfter);
-
-    return nullptr;
+    spdlog::info("Updated scheduled announcement at index {} to {}:{} with ID '{}'", 
+                 index, hour, minute, announcementId);
 }
 
 void AnnouncementManager::Update(float deltaTime)
@@ -82,15 +74,27 @@ void AnnouncementManager::Update(float deltaTime)
             {
                 if (m_useSFXBefore)
                 {
-                    m_sfxChannel = AudioManager::GetInstance().PlaySound(m_sfxName, false, 1.0f);
+                    float sfxVolume = UIManager::GetInstance().GetSFXVolume() * UIManager::GetInstance().GetMasterVolume();
+                    m_sfxChannel = AudioManager::GetInstance().PlaySound(m_sfxName, false, sfxVolume);
+                    
+                    if (m_sfxChannel) {
+                        m_sfxChannel->setVolume(sfxVolume);
+                    }
+                    
                     UIManager::GetInstance().ForceUpdateAllVolumes();
 
                     m_state = AnnouncementState::PLAYING_SFX_BEFORE;
                 }
                 else
                 {
+                    float announcementVolume = UIManager::GetInstance().GetAnnouncementVolume() * UIManager::GetInstance().GetMasterVolume();
                     m_currentAnnouncementChannel = AudioManager::GetInstance().PlaySound(
-                        m_currentAnnouncementName, false, 1.0f);
+                        m_currentAnnouncementName, false, announcementVolume);
+                    
+                    if (m_currentAnnouncementChannel) {
+                        m_currentAnnouncementChannel->setVolume(announcementVolume);
+                    }
+                    
                     UIManager::GetInstance().ForceUpdateAllVolumes();
 
                     m_state = AnnouncementState::PLAYING_ANNOUNCEMENT;
@@ -107,16 +111,28 @@ void AnnouncementManager::Update(float deltaTime)
 
                 if (!isPlaying) {
                     m_sfxChannel = nullptr;
+                    float announcementVolume = UIManager::GetInstance().GetAnnouncementVolume() * UIManager::GetInstance().GetMasterVolume();
                     m_currentAnnouncementChannel = AudioManager::GetInstance().PlaySound(
-                        m_currentAnnouncementName, false, 1.0f);
+                        m_currentAnnouncementName, false, announcementVolume);
+                    
+                    if (m_currentAnnouncementChannel) {
+                        m_currentAnnouncementChannel->setVolume(announcementVolume);
+                    }
+                    
                     UIManager::GetInstance().ForceUpdateAllVolumes();
 
                     m_state = AnnouncementState::PLAYING_ANNOUNCEMENT;
                 }
             }
             else {
+                float announcementVolume = UIManager::GetInstance().GetAnnouncementVolume() * UIManager::GetInstance().GetMasterVolume();
                 m_currentAnnouncementChannel = AudioManager::GetInstance().PlaySound(
-                    m_currentAnnouncementName, false, 1.0f);
+                    m_currentAnnouncementName, false, announcementVolume);
+                
+                if (m_currentAnnouncementChannel) {
+                    m_currentAnnouncementChannel->setVolume(announcementVolume);
+                }
+                
                 UIManager::GetInstance().ForceUpdateAllVolumes();
 
                 m_state = AnnouncementState::PLAYING_ANNOUNCEMENT;
@@ -132,7 +148,13 @@ void AnnouncementManager::Update(float deltaTime)
                 if (!isPlaying) {
                     m_currentAnnouncementChannel = nullptr;
                     if (m_useSFXAfter) {
-                        m_sfxChannel = AudioManager::GetInstance().PlaySound(m_sfxName, false, 1.0f);
+                        float sfxVolume = UIManager::GetInstance().GetSFXVolume() * UIManager::GetInstance().GetMasterVolume();
+                        m_sfxChannel = AudioManager::GetInstance().PlaySound(m_sfxName, false, sfxVolume);
+                        
+                        if (m_sfxChannel) {
+                            m_sfxChannel->setVolume(sfxVolume);
+                        }
+                        
                         UIManager::GetInstance().ForceUpdateAllVolumes();
 
                         m_state = AnnouncementState::PLAYING_SFX_AFTER;
@@ -145,7 +167,13 @@ void AnnouncementManager::Update(float deltaTime)
             }
             else {
                 if (m_useSFXAfter) {
-                    m_sfxChannel = AudioManager::GetInstance().PlaySound(m_sfxName, false, 1.0f);
+                    float sfxVolume = UIManager::GetInstance().GetSFXVolume() * UIManager::GetInstance().GetMasterVolume();
+                    m_sfxChannel = AudioManager::GetInstance().PlaySound(m_sfxName, false, sfxVolume);
+                    
+                    if (m_sfxChannel) {
+                        m_sfxChannel->setVolume(sfxVolume);
+                    }
+                    
                     UIManager::GetInstance().ForceUpdateAllVolumes();
 
                     m_state = AnnouncementState::PLAYING_SFX_AFTER;
@@ -225,15 +253,121 @@ void AnnouncementManager::StopAnnouncement()
     spdlog::info("Announcement stopped manually.");
 }
 
+FMOD::Channel* AnnouncementManager::PlayAnnouncement(const std::string& announcementId, float volumeDuck, bool useSFXBefore, bool useSFXAfter)
+{
+    StopAnnouncement();
+
+    FMOD::Sound* sound = AudioManager::GetInstance().GetSound(announcementId);
+    if (!sound) {
+        spdlog::error("Annonce '{}' non chargée ou introuvable.", announcementId);
+        return nullptr;
+    }
+
+    m_currentAnnouncementName = announcementId;
+    m_duckVolume              = volumeDuck;
+    m_useSFXBefore            = useSFXBefore;
+    m_useSFXAfter             = useSFXAfter;
+
+    m_state        = AnnouncementState::DUCKING_IN;
+    m_duckTimer    = 0.0f;
+    m_isAnnouncing = true;
+
+    UIManager::GetInstance().SetDuckFactor(1.0f);
+    UIManager::GetInstance().ForceUpdateAllVolumes();
+
+    spdlog::info("Démarrage de la séquence d'annonce '{}'. (duckVolume={}, sfxBefore={}, sfxAfter={})",
+                 announcementId, volumeDuck, useSFXBefore, useSFXAfter);
+
+    return nullptr;
+}
+
 void AnnouncementManager::AddScheduledAnnouncement(int hour, int minute, const std::string& annID)
 {
-    ScheduledAnnouncement sa;
-    sa.hour = hour;
-    sa.minute = minute;
-    sa.announceID = annID;
-    sa.triggered = false;
-    m_scheduled.push_back(sa);
-    spdlog::info("Scheduled announce '{}' at {:02d}:{:02d}", annID, hour, minute);
+    FMOD::Sound* sound = AudioManager::GetInstance().GetSound(annID);
+    if (!sound) {
+        spdlog::error("Impossible de planifier l'annonce '{}' car elle n'est pas chargée ou est introuvable.", annID);
+        return;
+    }
+    
+    ScheduledAnnouncement announcement;
+    announcement.hour = hour;
+    announcement.minute = minute;
+    announcement.announcementId = annID;
+    announcement.announceID = annID; 
+    announcement.triggered = false;
+    
+    m_scheduled.push_back(announcement);
+    
+    spdlog::info("Annonce '{}' planifiée à {:02d}:{:02d}", annID, hour, minute);
+}
+
+void AnnouncementManager::RemoveScheduledAnnouncement(size_t index)
+{
+    if (index < m_scheduled.size()) {
+        auto& ann = m_scheduled[index];
+        spdlog::info("Removed scheduled announcement '{}' at {:02d}:{:02d}", 
+                     ann.announcementId, ann.hour, ann.minute);
+        m_scheduled.erase(m_scheduled.begin() + index);
+    }
+}
+
+void AnnouncementManager::ResetTriggeredAnnouncements()
+{
+    for (auto& ann : m_scheduled) {
+        ann.triggered = false;
+    }
+    spdlog::info("Reset all triggered flags for scheduled announcements");
+}
+
+float AnnouncementManager::GetAnnouncementProgress() const
+{
+    if (!m_isAnnouncing || !m_currentAnnouncementChannel) {
+        return 0.0f;
+    }
+    
+    bool isPlaying = false;
+    m_currentAnnouncementChannel->isPlaying(&isPlaying);
+    
+    if (!isPlaying) {
+        return 0.0f;
+    }
+    
+    FMOD::Sound* sound = nullptr;
+    if (m_currentAnnouncementChannel->getCurrentSound(&sound) != FMOD_OK || !sound) {
+        return 0.0f;
+    }
+    
+    unsigned int positionMs = 0;
+    unsigned int lengthMs = 0;
+    
+    m_currentAnnouncementChannel->getPosition(&positionMs, FMOD_TIMEUNIT_MS);
+    sound->getLength(&lengthMs, FMOD_TIMEUNIT_MS);
+    
+    if (lengthMs == 0) {
+        return 0.0f;
+    }
+    
+    return static_cast<float>(positionMs) / static_cast<float>(lengthMs);
+}
+
+std::string AnnouncementManager::GetAnnouncementStateString() const
+{
+    switch (m_state) {
+        case AnnouncementState::IDLE:
+            return "Idle";
+        case AnnouncementState::DUCKING_IN:
+            return "Ducking In";
+        case AnnouncementState::PLAYING_SFX_BEFORE:
+            return "Playing SFX Before";
+        case AnnouncementState::PLAYING_ANNOUNCEMENT:
+            return "Playing Announcement";
+        case AnnouncementState::PLAYING_SFX_AFTER:
+            return "Playing SFX After";
+        case AnnouncementState::DUCKING_OUT:
+            return "Ducking Out";
+        default:
+            return "Unknown";
+    }
 }
 
 void AnnouncementManager::CheckSchedules(float /*deltaTime*/)
@@ -254,14 +388,26 @@ void AnnouncementManager::CheckSchedules(float /*deltaTime*/)
         {
             if (s.hour == currentHour && s.minute == currentMinute)
             {
+                FMOD::Sound* sound = AudioManager::GetInstance().GetSound(s.announcementId);
+                if (!sound) {
+                    spdlog::error("Impossible de jouer l'annonce planifiée '{}' car elle n'est pas chargée ou est introuvable.", s.announcementId);
+                    s.triggered = true;
+                    continue;
+                }
+                
                 spdlog::info("Auto-playing announcement '{}' scheduled at {:02d}:{:02d}",
-                             s.announceID, s.hour, s.minute);
+                             s.announcementId, s.hour, s.minute);
 
-                PlayAnnouncement(s.announceID, 0.3f, false, false);
+                PlayAnnouncement(s.announcementId, 0.3f, true, true);
                 s.triggered = true;
             }
         }
     }
+}
+
+bool AnnouncementManager::LoadAnnouncement(const std::string& announcementId, const std::string& filePath)
+{
+    return AudioManager::GetInstance().LoadAnnouncement(announcementId, filePath);
 }
 
 } // namespace TSM

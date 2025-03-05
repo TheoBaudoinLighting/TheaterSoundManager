@@ -100,6 +100,7 @@ private:
 
 public:
     const Playlist* GetPlaylistByName(const std::string& name) const;
+    const std::vector<Playlist>& GetAllPlaylists() const { return m_playlists; }
 
     void MoveTrackUp(const std::string& playlistName, int index);
     void MoveTrackDown(const std::string& playlistName, int index);

@@ -1,9 +1,804 @@
-[TSM] [23:33:37] [info] FMOD initialized successfully.
-[TSM] [23:33:38] [info] Local Bluetooth address: 0x136685073311034.
-[TSM] [23:33:38] [info] Server listening on RFCOMM port: 4.
-[TSM] [23:33:38] [info] Service registered with name 'TheaterSound'.
-[TSM] [23:33:38] [info] Waiting for Bluetooth connection...
-[TSM] [23:33:38] [info] FMOD createSound success: sfx_shine for file: assets/sfx/DisneyShine_SFX.mp3
-[TSM] [23:33:38] [info] Sound loaded successfully: sfx_shine
-[TSM] [23:33:38] [info] FMOD createSound success: announce1 for file: assets/announce/Temp/Both/5min_buffet.mp3
-[TSM] [23:33:38] [info] Sound loaded successfully: announce1
+[TSM] [11:46:49] [info] FMOD initialized successfully.
+[TSM] [11:46:49] [info] Playlist 'playlist_test' created.
+[TSM] [11:46:49] [info] Local Bluetooth address: 0x136685073311034.
+[TSM] [11:46:49] [info] FMOD createSound success: hi_diddle_dee for file: assets/musics/Entrance(Fantasia Gardens) - Hi diddle dee dee (Pinocchio).mp3
+[TSM] [11:46:49] [info] Sound loaded successfully: hi_diddle_dee
+[TSM] [11:46:49] [info] Server listening on RFCOMM port: 4.
+[TSM] [11:46:49] [info] FMOD createSound success: be_our_guest for file: assets/musics/Entrance(Fantasia Gardens) - Be our guest (Beauty and the beast).mp3
+[TSM] [11:46:49] [info] Sound loaded successfully: be_our_guest
+[TSM] [11:46:49] [info] Service registered with name 'TheaterSound'.
+[TSM] [11:46:49] [info] FMOD createSound success: rise_and_shine for file: assets/musics/Entrance(Fantasia Gardens) - Rise and shine (Monsters university).mp3
+[TSM] [11:46:49] [info] Waiting for Bluetooth connection...
+[TSM] [11:46:49] [info] Sound loaded successfully: rise_and_shine
+[TSM] [11:46:49] [info] FMOD createSound success: supercalifragilisticexpialidocious for file: assets/musics/Entrance(Fantasia Gardens) - Supercalifragilisticexpialidocious (Mary Poppins).mp3
+[TSM] [11:46:49] [info] Sound loaded successfully: supercalifragilisticexpialidocious
+[TSM] [11:46:49] [info] FMOD createSound success: walk_to_work for file: assets/musics/Entrance(Fantasia Gardens) - Walk to work (Monsters inc. ).mp3
+[TSM] [11:46:49] [info] Sound loaded successfully: walk_to_work
+[TSM] [11:46:49] [info] FMOD createSound success: pinocchio_village_haus for file: assets/musics/Pinocchio Village Haus Magic Kingdom Walt Disney World full Area music (1991-present).mp3
+[TSM] [11:46:49] [info] Sound loaded successfully: pinocchio_village_haus
+[TSM] [11:46:49] [info] FMOD createSound success: indiana_jones for file: assets/musics/The Music Of Indiana Jones And The Temple Of Peril・Disneyland Paris (BGMComplete Loop).mp3
+[TSM] [11:46:49] [info] Sound loaded successfully: indiana_jones
+[TSM] [11:46:49] [info] FMOD createSound success: mickey_minnie_runaway_railway for file: assets/musics/Mickey & Minnie's Runaway Railway - Full Exit Music.mp3
+[TSM] [11:46:49] [info] Sound loaded successfully: mickey_minnie_runaway_railway
+[TSM] [11:46:49] [info] FMOD createSound success: royal_street for file: assets/musics/RoyalStreet - Area Background Music  at Tokyo Disneyland.mp3
+[TSM] [11:46:49] [info] Sound loaded successfully: royal_street
+[TSM] [11:46:49] [info] FMOD createSound success: whistle_while_you_work for file: assets/musics/Entrance(Fantasia Gardens) - Whistle while you work (Snow white).mp3
+[TSM] [11:46:49] [info] Sound loaded successfully: whistle_while_you_work
+[TSM] [11:46:49] [info] Added 'hi_diddle_dee' to playlist 'playlist_test'.
+[TSM] [11:46:49] [info] Added 'be_our_guest' to playlist 'playlist_test'.
+[TSM] [11:46:49] [info] Added 'rise_and_shine' to playlist 'playlist_test'.
+[TSM] [11:46:49] [info] Added 'supercalifragilisticexpialidocious' to playlist 'playlist_test'.
+[TSM] [11:46:49] [info] Added 'walk_to_work' to playlist 'playlist_test'.
+[TSM] [11:46:49] [info] Added 'pinocchio_village_haus' to playlist 'playlist_test'.
+[TSM] [11:46:49] [info] Added 'indiana_jones' to playlist 'playlist_test'.
+[TSM] [11:46:49] [info] Added 'mickey_minnie_runaway_railway' to playlist 'playlist_test'.
+[TSM] [11:46:49] [info] Added 'royal_street' to playlist 'playlist_test'.
+[TSM] [11:46:49] [info] Added 'whistle_while_you_work' to playlist 'playlist_test'.
+[TSM] [11:46:49] [info] FMOD createSound success: wedding_entrance_sound for file: assets/wedding/Entree_RunrigHeartsOfOldenGlory.mp3
+[TSM] [11:46:49] [info] Sound loaded successfully: wedding_entrance_sound
+[TSM] [11:46:49] [info] Son de mariage phase 1 chargé avec succès: assets/wedding/Entree_RunrigHeartsOfOldenGlory.mp3
+[TSM] [11:46:49] [info] FMOD createSound success: wedding_ceremony_sound for file: assets/wedding/Loop_PortOrleanAmbience.mp3
+[TSM] [11:46:49] [info] Sound loaded successfully: wedding_ceremony_sound
+[TSM] [11:46:49] [info] Son de mariage phase 2 chargé avec succès: assets/wedding/Loop_PortOrleanAmbience.mp3
+[TSM] [11:46:49] [info] FMOD createSound success: wedding_exit_sound for file: assets/wedding/Camille Saint-Saens - The Swan.mp3
+[TSM] [11:46:49] [info] Sound loaded successfully: wedding_exit_sound
+[TSM] [11:46:49] [info] Son de mariage phase 3 chargé avec succès: assets/wedding/Camille Saint-Saens - The Swan.mp3
+[TSM] [11:46:49] [info] FMOD createSound success: sfx_shine for file: assets/sfx/DisneyShine_SFX.mp3
+[TSM] [11:46:49] [info] Sound loaded successfully: sfx_shine
+[TSM] [11:46:49] [info] FMOD createSound success: announce_5min_buffet for file: assets/annonces/French/5min_buffet.mp3
+[TSM] [11:46:49] [info] Sound loaded successfully: announce_5min_buffet
+[TSM] [11:46:49] [info] Annonce 'announce_5min_buffet' chargée avec succès: assets/annonces/French/5min_buffet.mp3
+[TSM] [11:46:49] [info] Annonce 'announce_5min_buffet' planifiée à 19:45
+[TSM] [11:46:49] [info] Chemin de la musique d'entrée mis à jour: assets/wedding/Entree_RunrigHeartsOfOldenGlory.mp3
+[TSM] [11:46:49] [info] Chemin de la musique de cérémonie mis à jour: assets/wedding/Loop_PortOrleanAmbience.mp3
+[TSM] [11:46:49] [info] Chemin de la musique de sortie mis à jour: assets/wedding/Camille Saint-Saens - The Swan.mp3
+[TSM] [11:47:08] [info] Client connected.
+[TSM] [11:47:14] [info] Received: PLAY_RANDOM
+
+[TSM] [11:47:14] [info] Toutes les playlists ont été arrêtées avec fade-out
+[TSM] [11:47:14] [info] Toutes les playlists ont été arrêtées avec fade-out
+[TSM] [11:47:14] [info] FMOD playSound success: hi_diddle_dee
+[TSM] [11:47:14] [info] Volume of hi_diddle_dee after configuration: 0.25
+[TSM] [11:47:14] [info] Playlist 'playlist_test' started.
+[TSM] [11:47:14] [info] Playlist lancée en mode aléatoire via Bluetooth
+[TSM] [11:47:21] [info] Received: WEDDING_PHASE1
+
+[TSM] [11:47:21] [info] Starting fade-out for sound: hi_diddle_dee (from volume: 0.25)
+[TSM] [11:47:21] [info] Toutes les playlists ont été arrêtées avec fade-out
+[TSM] [11:47:21] [info] FMOD playSound success: wedding_entrance_sound
+[TSM] [11:47:21] [info] Volume of wedding_entrance_sound after configuration: 0.25
+[TSM] [11:47:21] [info] Phase 1 de mariage démarrée via Bluetooth
+[TSM] [11:47:21] [debug] Ducking progressif: 1 -> 0.99800205
+[TSM] [11:47:21] [debug] Ducking progressif: 0.99800205 -> 0.99596834
+[TSM] [11:47:21] [debug] Ducking progressif: 0.99596834 -> 0.99394625
+[TSM] [11:47:21] [debug] Ducking progressif: 0.99394625 -> 0.9918952
+[TSM] [11:47:21] [debug] Ducking progressif: 0.9918952 -> 0.98991406
+[TSM] [11:47:21] [debug] Ducking progressif: 0.98991406 -> 0.9878488
+[TSM] [11:47:21] [debug] Ducking progressif: 0.9878488 -> 0.98585093
+[TSM] [11:47:21] [debug] Ducking progressif: 0.98585093 -> 0.98383653
+[TSM] [11:47:21] [debug] Ducking progressif: 0.98383653 -> 0.98183185
+[TSM] [11:47:21] [debug] Ducking progressif: 0.98183185 -> 0.9797861
+[TSM] [11:47:21] [debug] Ducking progressif: 0.9797861 -> 0.97779423
+[TSM] [11:47:21] [debug] Ducking progressif: 0.97779423 -> 0.9757475
+[TSM] [11:47:21] [debug] Ducking progressif: 0.9757475 -> 0.97376263
+[TSM] [11:47:21] [debug] Ducking progressif: 0.97376263 -> 0.97173846
+[TSM] [11:47:21] [debug] Ducking progressif: 0.97173846 -> 0.969698
+[TSM] [11:47:21] [debug] Ducking progressif: 0.969698 -> 0.96769124
+[TSM] [11:47:21] [debug] Ducking progressif: 0.96769124 -> 0.96564496
+[TSM] [11:47:21] [debug] Ducking progressif: 0.96564496 -> 0.9636681
+[TSM] [11:47:21] [debug] Ducking progressif: 0.9636681 -> 0.9616456
+[TSM] [11:47:21] [debug] Ducking progressif: 0.9616456 -> 0.95961744
+[TSM] [11:47:21] [debug] Ducking progressif: 0.95961744 -> 0.9575767
+[TSM] [11:47:21] [debug] Ducking progressif: 0.9575767 -> 0.95556855
+[TSM] [11:47:21] [debug] Ducking progressif: 0.95556855 -> 0.95354646
+[TSM] [11:47:21] [debug] Ducking progressif: 0.95354646 -> 0.9515452
+[TSM] [11:47:21] [debug] Ducking progressif: 0.9515452 -> 0.9495131
+[TSM] [11:47:21] [debug] Ducking progressif: 0.9495131 -> 0.9474793
+[TSM] [11:47:21] [debug] Ducking progressif: 0.9474793 -> 0.94548416
+[TSM] [11:47:21] [debug] Ducking progressif: 0.94548416 -> 0.9434278
+[TSM] [11:47:21] [debug] Ducking progressif: 0.9434278 -> 0.9414439
+[TSM] [11:47:21] [debug] Ducking progressif: 0.9414439 -> 0.9394109
+[TSM] [11:47:21] [debug] Ducking progressif: 0.9394109 -> 0.9373533
+[TSM] [11:47:21] [debug] Ducking progressif: 0.9373533 -> 0.93532807
+[TSM] [11:47:21] [debug] Ducking progressif: 0.93532807 -> 0.93334544
+[TSM] [11:47:21] [debug] Ducking progressif: 0.93334544 -> 0.93131876
+[TSM] [11:47:21] [debug] Ducking progressif: 0.93131876 -> 0.92930675
+[TSM] [11:47:21] [debug] Ducking progressif: 0.92930675 -> 0.9273012
+[TSM] [11:47:21] [debug] Ducking progressif: 0.9273012 -> 0.92523736
+[TSM] [11:47:21] [debug] Ducking progressif: 0.92523736 -> 0.9232555
+[TSM] [11:47:21] [debug] Ducking progressif: 0.9232555 -> 0.9211779
+[TSM] [11:47:21] [debug] Ducking progressif: 0.9211779 -> 0.91922563
+[TSM] [11:47:21] [debug] Ducking progressif: 0.91922563 -> 0.91719794
+[TSM] [11:47:21] [debug] Ducking progressif: 0.91719794 -> 0.9151727
+[TSM] [11:47:21] [debug] Ducking progressif: 0.9151727 -> 0.9131484
+[TSM] [11:47:21] [debug] Ducking progressif: 0.9131484 -> 0.91113293
+[TSM] [11:47:21] [debug] Ducking progressif: 0.91113293 -> 0.90910804
+[TSM] [11:47:21] [debug] Ducking progressif: 0.90910804 -> 0.9071079
+[TSM] [11:47:21] [debug] Ducking progressif: 0.9071079 -> 0.9049654
+[TSM] [11:47:21] [debug] Ducking progressif: 0.9049654 -> 0.9030275
+[TSM] [11:47:21] [debug] Ducking progressif: 0.9030275 -> 0.9010403
+[TSM] [11:47:21] [debug] Ducking progressif: 0.9010403 -> 0.8990155
+[TSM] [11:47:21] [debug] Ducking progressif: 0.8990155 -> 0.8970036
+[TSM] [11:47:21] [debug] Ducking progressif: 0.8970036 -> 0.8949657
+[TSM] [11:47:21] [debug] Ducking progressif: 0.8949657 -> 0.8929449
+[TSM] [11:47:21] [debug] Ducking progressif: 0.8929449 -> 0.89091754
+[TSM] [11:47:21] [debug] Ducking progressif: 0.89091754 -> 0.88890225
+[TSM] [11:47:21] [debug] Ducking progressif: 0.88890225 -> 0.8868899
+[TSM] [11:47:21] [debug] Ducking progressif: 0.8868899 -> 0.88487405
+[TSM] [11:47:21] [debug] Ducking progressif: 0.88487405 -> 0.882855
+[TSM] [11:47:21] [debug] Ducking progressif: 0.882855 -> 0.880825
+[TSM] [11:47:21] [debug] Ducking progressif: 0.880825 -> 0.87880254
+[TSM] [11:47:21] [debug] Ducking progressif: 0.87880254 -> 0.8767308
+[TSM] [11:47:21] [debug] Ducking progressif: 0.8767308 -> 0.8747849
+[TSM] [11:47:21] [debug] Ducking progressif: 0.8747849 -> 0.8727636
+[TSM] [11:47:21] [debug] Ducking progressif: 0.8727636 -> 0.87072635
+[TSM] [11:47:21] [debug] Ducking progressif: 0.87072635 -> 0.8686633
+[TSM] [11:47:21] [debug] Ducking progressif: 0.8686633 -> 0.86669517
+[TSM] [11:47:21] [debug] Ducking progressif: 0.86669517 -> 0.86466795
+[TSM] [11:47:21] [debug] Ducking progressif: 0.86466795 -> 0.86266094
+[TSM] [11:47:21] [debug] Ducking progressif: 0.86266094 -> 0.8606418
+[TSM] [11:47:21] [debug] Ducking progressif: 0.8606418 -> 0.85859585
+[TSM] [11:47:21] [debug] Ducking progressif: 0.85859585 -> 0.85658395
+[TSM] [11:47:21] [debug] Ducking progressif: 0.85658395 -> 0.85452294
+[TSM] [11:47:21] [debug] Ducking progressif: 0.85452294 -> 0.85255986
+[TSM] [11:47:21] [debug] Ducking progressif: 0.85255986 -> 0.8505373
+[TSM] [11:47:21] [debug] Ducking progressif: 0.8505373 -> 0.84849674
+[TSM] [11:47:21] [debug] Ducking progressif: 0.84849674 -> 0.8464782
+[TSM] [11:47:21] [debug] Ducking progressif: 0.8464782 -> 0.84446543
+[TSM] [11:47:21] [debug] Ducking progressif: 0.84446543 -> 0.84243906
+[TSM] [11:47:21] [debug] Ducking progressif: 0.84243906 -> 0.84044045
+[TSM] [11:47:21] [debug] Ducking progressif: 0.84044045 -> 0.83841616
+[TSM] [11:47:21] [debug] Ducking progressif: 0.83841616 -> 0.83638906
+[TSM] [11:47:21] [debug] Ducking progressif: 0.83638906 -> 0.8343815
+[TSM] [11:47:21] [debug] Ducking progressif: 0.8343815 -> 0.8323588
+[TSM] [11:47:21] [debug] Ducking progressif: 0.8323588 -> 0.8303447
+[TSM] [11:47:21] [debug] Ducking progressif: 0.8303447 -> 0.82830596
+[TSM] [11:47:21] [debug] Ducking progressif: 0.82830596 -> 0.8262841
+[TSM] [11:47:21] [debug] Ducking progressif: 0.8262841 -> 0.8242705
+[TSM] [11:47:21] [debug] Ducking progressif: 0.8242705 -> 0.822238
+[TSM] [11:47:21] [debug] Ducking progressif: 0.822238 -> 0.8202008
+[TSM] [11:47:21] [debug] Ducking progressif: 0.8202008 -> 0.818202
+[TSM] [11:47:21] [debug] Ducking progressif: 0.818202 -> 0.8161849
+[TSM] [11:47:21] [debug] Ducking progressif: 0.8161849 -> 0.8141594
+[TSM] [11:47:21] [debug] Ducking progressif: 0.8141594 -> 0.8121491
+[TSM] [11:47:21] [debug] Ducking progressif: 0.8121491 -> 0.8101209
+[TSM] [11:47:21] [debug] Ducking progressif: 0.8101209 -> 0.8081147
+[TSM] [11:47:21] [debug] Ducking progressif: 0.8081147 -> 0.80608916
+[TSM] [11:47:21] [debug] Ducking progressif: 0.80608916 -> 0.8040842
+[TSM] [11:47:21] [debug] Ducking progressif: 0.8040842 -> 0.8020565
+[TSM] [11:47:21] [debug] Ducking progressif: 0.8020565 -> 0.8000245
+[TSM] [11:47:21] [debug] Ducking progressif: 0.8000245 -> 0.79800934
+[TSM] [11:47:21] [debug] Ducking progressif: 0.79800934 -> 0.79598105
+[TSM] [11:47:21] [debug] Ducking progressif: 0.79598105 -> 0.79398406
+[TSM] [11:47:21] [debug] Ducking progressif: 0.79398406 -> 0.7919507
+[TSM] [11:47:21] [debug] Ducking progressif: 0.7919507 -> 0.7898869
+[TSM] [11:47:21] [debug] Ducking progressif: 0.7898869 -> 0.78789157
+[TSM] [11:47:21] [debug] Ducking progressif: 0.78789157 -> 0.78589475
+[TSM] [11:47:21] [debug] Ducking progressif: 0.78589475 -> 0.7838646
+[TSM] [11:47:21] [debug] Ducking progressif: 0.7838646 -> 0.78185284
+[TSM] [11:47:21] [debug] Ducking progressif: 0.78185284 -> 0.779706
+[TSM] [11:47:21] [debug] Ducking progressif: 0.779706 -> 0.77780795
+[TSM] [11:47:21] [debug] Ducking progressif: 0.77780795 -> 0.77578926
+[TSM] [11:47:21] [debug] Ducking progressif: 0.77578926 -> 0.773768
+[TSM] [11:47:21] [debug] Ducking progressif: 0.773768 -> 0.7717561
+[TSM] [11:47:22] [debug] Ducking progressif: 0.7717561 -> 0.7696742
+[TSM] [11:47:22] [debug] Ducking progressif: 0.7696742 -> 0.7677
+[TSM] [11:47:22] [debug] Ducking progressif: 0.7677 -> 0.76569706
+[TSM] [11:47:22] [debug] Ducking progressif: 0.76569706 -> 0.76368237
+[TSM] [11:47:22] [debug] Ducking progressif: 0.76368237 -> 0.7616676
+[TSM] [11:47:22] [debug] Ducking progressif: 0.7616676 -> 0.75962526
+[TSM] [11:47:22] [debug] Ducking progressif: 0.75962526 -> 0.7576124
+[TSM] [11:47:22] [debug] Ducking progressif: 0.7576124 -> 0.7555867
+[TSM] [11:47:22] [debug] Ducking progressif: 0.7555867 -> 0.753556
+[TSM] [11:47:22] [debug] Ducking progressif: 0.753556 -> 0.75155705
+[TSM] [11:47:22] [debug] Ducking progressif: 0.75155705 -> 0.74952376
+[TSM] [11:47:22] [debug] Ducking progressif: 0.74952376 -> 0.74748313
+[TSM] [11:47:22] [debug] Ducking progressif: 0.74748313 -> 0.74549776
+[TSM] [11:47:22] [debug] Ducking progressif: 0.74549776 -> 0.74347246
+[TSM] [11:47:22] [debug] Ducking progressif: 0.74347246 -> 0.74146694
+[TSM] [11:47:22] [debug] Ducking progressif: 0.74146694 -> 0.7394485
+[TSM] [11:47:22] [debug] Ducking progressif: 0.7394485 -> 0.73737097
+[TSM] [11:47:22] [debug] Ducking progressif: 0.73737097 -> 0.735397
+[TSM] [11:47:22] [debug] Ducking progressif: 0.735397 -> 0.7333312
+[TSM] [11:47:22] [debug] Ducking progressif: 0.7333312 -> 0.7313477
+[TSM] [11:47:22] [debug] Ducking progressif: 0.7313477 -> 0.7293057
+[TSM] [11:47:22] [debug] Ducking progressif: 0.7293057 -> 0.7273123
+[TSM] [11:47:22] [debug] Ducking progressif: 0.7273123 -> 0.7253032
+[TSM] [11:47:22] [debug] Ducking progressif: 0.7253032 -> 0.72327226
+[TSM] [11:47:22] [debug] Ducking progressif: 0.72327226 -> 0.7212605
+[TSM] [11:47:22] [debug] Ducking progressif: 0.7212605 -> 0.71924394
+[TSM] [11:47:22] [debug] Ducking progressif: 0.71924394 -> 0.71720487
+[TSM] [11:47:22] [debug] Ducking progressif: 0.71720487 -> 0.71518743
+[TSM] [11:47:22] [debug] Ducking progressif: 0.71518743 -> 0.7131827
+[TSM] [11:47:22] [debug] Ducking progressif: 0.7131827 -> 0.71114725
+[TSM] [11:47:22] [debug] Ducking progressif: 0.71114725 -> 0.709126
+[TSM] [11:47:22] [debug] Ducking progressif: 0.709126 -> 0.7070989
+[TSM] [11:47:22] [debug] Ducking progressif: 0.7070989 -> 0.7050919
+[TSM] [11:47:22] [debug] Ducking progressif: 0.7050919 -> 0.7030705
+[TSM] [11:47:22] [debug] Ducking progressif: 0.7030705 -> 0.70104885
+[TSM] [11:47:22] [debug] Ducking progressif: 0.70104885 -> 0.6990399
+[TSM] [11:47:22] [debug] Ducking progressif: 0.6990399 -> 0.6970262
+[TSM] [11:47:22] [debug] Ducking progressif: 0.6970262 -> 0.695003
+[TSM] [11:47:22] [debug] Ducking progressif: 0.695003 -> 0.692969
+[TSM] [11:47:22] [debug] Ducking progressif: 0.692969 -> 0.69094884
+[TSM] [11:47:22] [debug] Ducking progressif: 0.69094884 -> 0.688945
+[TSM] [11:47:22] [debug] Ducking progressif: 0.688945 -> 0.68687683
+[TSM] [11:47:22] [debug] Ducking progressif: 0.68687683 -> 0.68488336
+[TSM] [11:47:22] [debug] Ducking progressif: 0.68488336 -> 0.6828745
+[TSM] [11:47:22] [debug] Ducking progressif: 0.6828745 -> 0.68080986
+[TSM] [11:47:22] [debug] Ducking progressif: 0.68080986 -> 0.6788171
+[TSM] [11:47:22] [debug] Ducking progressif: 0.6788171 -> 0.67681605
+[TSM] [11:47:22] [debug] Ducking progressif: 0.67681605 -> 0.6748012
+[TSM] [11:47:22] [debug] Ducking progressif: 0.6748012 -> 0.67277575
+[TSM] [11:47:22] [debug] Ducking progressif: 0.67277575 -> 0.670754
+[TSM] [11:47:22] [debug] Ducking progressif: 0.670754 -> 0.6687144
+[TSM] [11:47:22] [debug] Ducking progressif: 0.6687144 -> 0.66670907
+[TSM] [11:47:22] [debug] Ducking progressif: 0.66670907 -> 0.66468716
+[TSM] [11:47:22] [debug] Ducking progressif: 0.66468716 -> 0.66268396
+[TSM] [11:47:22] [debug] Ducking progressif: 0.66268396 -> 0.66064465
+[TSM] [11:47:22] [debug] Ducking progressif: 0.66064465 -> 0.6586424
+[TSM] [11:47:22] [debug] Ducking progressif: 0.6586424 -> 0.6566052
+[TSM] [11:47:22] [debug] Ducking progressif: 0.6566052 -> 0.6545563
+[TSM] [11:47:22] [debug] Ducking progressif: 0.6545563 -> 0.6525743
+[TSM] [11:47:22] [debug] Ducking progressif: 0.6525743 -> 0.6505514
+[TSM] [11:47:22] [debug] Ducking progressif: 0.6505514 -> 0.6485296
+[TSM] [11:47:22] [debug] Ducking progressif: 0.6485296 -> 0.6465009
+[TSM] [11:47:22] [debug] Ducking progressif: 0.6465009 -> 0.6444847
+[TSM] [11:47:22] [debug] Ducking progressif: 0.6444847 -> 0.642471
+[TSM] [11:47:22] [debug] Ducking progressif: 0.642471 -> 0.640466
+[TSM] [11:47:22] [debug] Ducking progressif: 0.640466 -> 0.63843495
+[TSM] [11:47:22] [debug] Ducking progressif: 0.63843495 -> 0.6364009
+[TSM] [11:47:22] [debug] Ducking progressif: 0.6364009 -> 0.6343925
+[TSM] [11:47:22] [debug] Ducking progressif: 0.6343925 -> 0.63237935
+[TSM] [11:47:22] [debug] Ducking progressif: 0.63237935 -> 0.6303528
+[TSM] [11:47:22] [debug] Ducking progressif: 0.6303528 -> 0.628326
+[TSM] [11:47:22] [debug] Ducking progressif: 0.628326 -> 0.6263028
+[TSM] [11:47:22] [debug] Ducking progressif: 0.6263028 -> 0.62428594
+[TSM] [11:47:22] [debug] Ducking progressif: 0.62428594 -> 0.6222577
+[TSM] [11:47:22] [debug] Ducking progressif: 0.6222577 -> 0.6202491
+[TSM] [11:47:22] [debug] Ducking progressif: 0.6202491 -> 0.61823034
+[TSM] [11:47:22] [debug] Ducking progressif: 0.61823034 -> 0.6162142
+[TSM] [11:47:22] [debug] Ducking progressif: 0.6162142 -> 0.6142037
+[TSM] [11:47:22] [debug] Ducking progressif: 0.6142037 -> 0.61217093
+[TSM] [11:47:22] [debug] Ducking progressif: 0.61217093 -> 0.61014885
+[TSM] [11:47:22] [debug] Ducking progressif: 0.61014885 -> 0.60813534
+[TSM] [11:47:22] [debug] Ducking progressif: 0.60813534 -> 0.6061106
+[TSM] [11:47:22] [debug] Ducking progressif: 0.6061106 -> 0.6040753
+[TSM] [11:47:22] [debug] Ducking progressif: 0.6040753 -> 0.60208297
+[TSM] [11:47:22] [debug] Ducking progressif: 0.60208297 -> 0.6000437
+[TSM] [11:47:22] [debug] Ducking progressif: 0.6000437 -> 0.598044
+[TSM] [11:47:22] [debug] Ducking progressif: 0.598044 -> 0.59596634
+[TSM] [11:47:22] [debug] Ducking progressif: 0.59596634 -> 0.59400207
+[TSM] [11:47:22] [debug] Ducking progressif: 0.59400207 -> 0.59196913
+[TSM] [11:47:22] [debug] Ducking progressif: 0.59196913 -> 0.5899538
+[TSM] [11:47:22] [debug] Ducking progressif: 0.5899538 -> 0.5879306
+[TSM] [11:47:22] [debug] Ducking progressif: 0.5879306 -> 0.58591413
+[TSM] [11:47:22] [debug] Ducking progressif: 0.58591413 -> 0.58389604
+[TSM] [11:47:22] [debug] Ducking progressif: 0.58389604 -> 0.5818854
+[TSM] [11:47:22] [debug] Ducking progressif: 0.5818854 -> 0.57984465
+[TSM] [11:47:22] [debug] Ducking progressif: 0.57984465 -> 0.57783324
+[TSM] [11:47:22] [debug] Ducking progressif: 0.57783324 -> 0.57581425
+[TSM] [11:47:22] [debug] Ducking progressif: 0.57581425 -> 0.57378036
+[TSM] [11:47:22] [debug] Ducking progressif: 0.57378036 -> 0.5717836
+[TSM] [11:47:22] [debug] Ducking progressif: 0.5717836 -> 0.5697557
+[TSM] [11:47:22] [debug] Ducking progressif: 0.5697557 -> 0.56774676
+[TSM] [11:47:22] [debug] Ducking progressif: 0.56774676 -> 0.5657167
+[TSM] [11:47:22] [debug] Ducking progressif: 0.5657167 -> 0.56368905
+[TSM] [11:47:22] [debug] Ducking progressif: 0.56368905 -> 0.5616627
+[TSM] [11:47:22] [debug] Ducking progressif: 0.5616627 -> 0.5596606
+[TSM] [11:47:22] [debug] Ducking progressif: 0.5596606 -> 0.55764484
+[TSM] [11:47:22] [debug] Ducking progressif: 0.55764484 -> 0.55560464
+[TSM] [11:47:22] [debug] Ducking progressif: 0.55560464 -> 0.5535879
+[TSM] [11:47:22] [debug] Ducking progressif: 0.5535879 -> 0.5515697
+[TSM] [11:47:22] [debug] Ducking progressif: 0.5515697 -> 0.5495574
+[TSM] [11:47:22] [debug] Ducking progressif: 0.5495574 -> 0.5475182
+[TSM] [11:47:22] [debug] Ducking progressif: 0.5475182 -> 0.54550844
+[TSM] [11:47:22] [debug] Ducking progressif: 0.54550844 -> 0.5434937
+[TSM] [11:47:22] [debug] Ducking progressif: 0.5434937 -> 0.54148203
+[TSM] [11:47:22] [debug] Ducking progressif: 0.54148203 -> 0.5394683
+[TSM] [11:47:22] [debug] Ducking progressif: 0.5394683 -> 0.53742695
+[TSM] [11:47:22] [debug] Ducking progressif: 0.53742695 -> 0.53541744
+[TSM] [11:47:22] [debug] Ducking progressif: 0.53541744 -> 0.5333982
+[TSM] [11:47:22] [debug] Ducking progressif: 0.5333982 -> 0.5313507
+[TSM] [11:47:22] [debug] Ducking progressif: 0.5313507 -> 0.52934
+[TSM] [11:47:22] [debug] Ducking progressif: 0.52934 -> 0.5273451
+[TSM] [11:47:22] [debug] Ducking progressif: 0.5273451 -> 0.5253098
+[TSM] [11:47:22] [debug] Ducking progressif: 0.5253098 -> 0.5233064
+[TSM] [11:47:22] [debug] Ducking progressif: 0.5233064 -> 0.52125794
+[TSM] [11:47:22] [debug] Ducking progressif: 0.52125794 -> 0.51924336
+[TSM] [11:47:22] [debug] Ducking progressif: 0.51924336 -> 0.51723295
+[TSM] [11:47:22] [debug] Ducking progressif: 0.51723295 -> 0.5152212
+[TSM] [11:47:22] [debug] Ducking progressif: 0.5152212 -> 0.51315594
+[TSM] [11:47:22] [debug] Ducking progressif: 0.51315594 -> 0.51116395
+[TSM] [11:47:22] [debug] Ducking progressif: 0.51116395 -> 0.5091496
+[TSM] [11:47:22] [debug] Ducking progressif: 0.5091496 -> 0.50714415
+[TSM] [11:47:22] [debug] Ducking progressif: 0.50714415 -> 0.5051268
+[TSM] [11:47:22] [debug] Ducking progressif: 0.5051268 -> 0.50308293
+[TSM] [11:47:22] [info] Fade-out completed for sound: hi_diddle_dee
+[TSM] [11:47:22] [debug] Ducking progressif: 0.50308293 -> 0.50097287
+[TSM] [11:47:22] [debug] Ducking progressif: 0.50097287 -> 0.49901536
+[TSM] [11:47:22] [debug] Ducking progressif: 0.49901536 -> 0.49702844
+[TSM] [11:47:22] [debug] Ducking progressif: 0.49702844 -> 0.49493456
+[TSM] [11:47:22] [debug] Ducking progressif: 0.49493456 -> 0.49299413
+[TSM] [11:47:22] [debug] Ducking progressif: 0.49299413 -> 0.4909559
+[TSM] [11:47:22] [debug] Ducking progressif: 0.4909559 -> 0.48893127
+[TSM] [11:47:22] [debug] Ducking progressif: 0.48893127 -> 0.48692605
+[TSM] [11:47:22] [debug] Ducking progressif: 0.48692605 -> 0.48492396
+[TSM] [11:47:22] [debug] Ducking progressif: 0.48492396 -> 0.48286736
+[TSM] [11:47:22] [debug] Ducking progressif: 0.48286736 -> 0.48082197
+[TSM] [11:47:22] [debug] Ducking progressif: 0.48082197 -> 0.4788655
+[TSM] [11:47:22] [debug] Ducking progressif: 0.4788655 -> 0.4768412
+[TSM] [11:47:22] [debug] Ducking progressif: 0.4768412 -> 0.47481355
+[TSM] [11:47:22] [debug] Ducking progressif: 0.47481355 -> 0.4727879
+[TSM] [11:47:22] [debug] Ducking progressif: 0.4727879 -> 0.47076684
+[TSM] [11:47:22] [debug] Ducking progressif: 0.47076684 -> 0.46875495
+[TSM] [11:47:22] [debug] Ducking progressif: 0.46875495 -> 0.46674472
+[TSM] [11:47:22] [debug] Ducking progressif: 0.46674472 -> 0.46471983
+[TSM] [11:47:22] [debug] Ducking progressif: 0.46471983 -> 0.46270606
+[TSM] [11:47:22] [debug] Ducking progressif: 0.46270606 -> 0.4606618
+[TSM] [11:47:22] [debug] Ducking progressif: 0.4606618 -> 0.4586028
+[TSM] [11:47:22] [debug] Ducking progressif: 0.4586028 -> 0.4566342
+[TSM] [11:47:22] [debug] Ducking progressif: 0.4566342 -> 0.4545908
+[TSM] [11:47:22] [debug] Ducking progressif: 0.4545908 -> 0.4525885
+[TSM] [11:47:22] [debug] Ducking progressif: 0.4525885 -> 0.45056868
+[TSM] [11:47:22] [debug] Ducking progressif: 0.45056868 -> 0.44855794
+[TSM] [11:47:22] [debug] Ducking progressif: 0.44855794 -> 0.44654223
+[TSM] [11:47:22] [debug] Ducking progressif: 0.44654223 -> 0.44450697
+[TSM] [11:47:22] [debug] Ducking progressif: 0.44450697 -> 0.44248807
+[TSM] [11:47:22] [debug] Ducking progressif: 0.44248807 -> 0.44045573
+[TSM] [11:47:22] [debug] Ducking progressif: 0.44045573 -> 0.43846095
+[TSM] [11:47:23] [debug] Ducking progressif: 0.43846095 -> 0.43640408
+[TSM] [11:47:23] [debug] Ducking progressif: 0.43640408 -> 0.43441564
+[TSM] [11:47:23] [debug] Ducking progressif: 0.43441564 -> 0.43240044
+[TSM] [11:47:23] [debug] Ducking progressif: 0.43240044 -> 0.43038672
+[TSM] [11:47:23] [debug] Ducking progressif: 0.43038672 -> 0.42834648
+[TSM] [11:47:23] [debug] Ducking progressif: 0.42834648 -> 0.42632052
+[TSM] [11:47:23] [debug] Ducking progressif: 0.42632052 -> 0.42430976
+[TSM] [11:47:23] [debug] Ducking progressif: 0.42430976 -> 0.42226455
+[TSM] [11:47:23] [debug] Ducking progressif: 0.42226455 -> 0.4202831
+[TSM] [11:47:23] [debug] Ducking progressif: 0.4202831 -> 0.41825026
+[TSM] [11:47:23] [debug] Ducking progressif: 0.41825026 -> 0.41624907
+[TSM] [11:47:23] [debug] Ducking progressif: 0.41624907 -> 0.41420466
+[TSM] [11:47:23] [debug] Ducking progressif: 0.41420466 -> 0.41219416
+[TSM] [11:47:23] [debug] Ducking progressif: 0.41219416 -> 0.41015756
+[TSM] [11:47:23] [debug] Ducking progressif: 0.41015756 -> 0.40815377
+[TSM] [11:47:23] [debug] Ducking progressif: 0.40815377 -> 0.40612763
+[TSM] [11:47:23] [debug] Ducking progressif: 0.40612763 -> 0.4041261
+[TSM] [11:47:23] [debug] Ducking progressif: 0.4041261 -> 0.40209538
+[TSM] [11:47:23] [debug] Ducking progressif: 0.40209538 -> 0.40006945
+[TSM] [11:47:23] [debug] Ducking progressif: 0.40006945 -> 0.3980391
+[TSM] [11:47:23] [debug] Ducking progressif: 0.3980391 -> 0.39603135
+[TSM] [11:47:23] [debug] Ducking progressif: 0.39603135 -> 0.39401022
+[TSM] [11:47:23] [debug] Ducking progressif: 0.39401022 -> 0.39199412
+[TSM] [11:47:23] [debug] Ducking progressif: 0.39199412 -> 0.3899591
+[TSM] [11:47:23] [debug] Ducking progressif: 0.3899591 -> 0.38787517
+[TSM] [11:47:23] [debug] Ducking progressif: 0.38787517 -> 0.38593808
+[TSM] [11:47:23] [debug] Ducking progressif: 0.38593808 -> 0.38391182
+[TSM] [11:47:23] [debug] Ducking progressif: 0.38391182 -> 0.38189396
+[TSM] [11:47:23] [debug] Ducking progressif: 0.38189396 -> 0.37986353
+[TSM] [11:47:23] [debug] Ducking progressif: 0.37986353 -> 0.37784684
+[TSM] [11:47:23] [debug] Ducking progressif: 0.37784684 -> 0.3758301
+[TSM] [11:47:23] [debug] Ducking progressif: 0.3758301 -> 0.37380794
+[TSM] [11:47:23] [debug] Ducking progressif: 0.37380794 -> 0.37179664
+[TSM] [11:47:23] [debug] Ducking progressif: 0.37179664 -> 0.36973786
+[TSM] [11:47:23] [debug] Ducking progressif: 0.36973786 -> 0.36771032
+[TSM] [11:47:23] [debug] Ducking progressif: 0.36771032 -> 0.3657388
+[TSM] [11:47:23] [debug] Ducking progressif: 0.3657388 -> 0.36371052
+[TSM] [11:47:23] [debug] Ducking progressif: 0.36371052 -> 0.36168507
+[TSM] [11:47:23] [debug] Ducking progressif: 0.36168507 -> 0.35967904
+[TSM] [11:47:23] [debug] Ducking progressif: 0.35967904 -> 0.357668
+[TSM] [11:47:23] [debug] Ducking progressif: 0.357668 -> 0.3556375
+[TSM] [11:47:23] [debug] Ducking progressif: 0.3556375 -> 0.3535972
+[TSM] [11:47:23] [debug] Ducking progressif: 0.3535972 -> 0.35152572
+[TSM] [11:47:23] [debug] Ducking progressif: 0.35152572 -> 0.34958515
+[TSM] [11:47:23] [debug] Ducking progressif: 0.34958515 -> 0.34755275
+[TSM] [11:47:23] [debug] Ducking progressif: 0.34755275 -> 0.34553406
+[TSM] [11:47:23] [debug] Ducking progressif: 0.34553406 -> 0.3434927
+[TSM] [11:47:23] [debug] Ducking progressif: 0.3434927 -> 0.3414902
+[TSM] [11:47:23] [debug] Ducking progressif: 0.3414902 -> 0.33946878
+[TSM] [11:47:23] [debug] Ducking progressif: 0.33946878 -> 0.33744934
+[TSM] [11:47:23] [debug] Ducking progressif: 0.33744934 -> 0.3354446
+[TSM] [11:47:23] [debug] Ducking progressif: 0.3354446 -> 0.33341113
+[TSM] [11:47:23] [debug] Ducking progressif: 0.33341113 -> 0.33137712
+[TSM] [11:47:23] [debug] Ducking progressif: 0.33137712 -> 0.32937813
+[TSM] [11:47:23] [debug] Ducking progressif: 0.32937813 -> 0.3273419
+[TSM] [11:47:23] [debug] Ducking progressif: 0.3273419 -> 0.3253237
+[TSM] [11:47:23] [debug] Ducking progressif: 0.3253237 -> 0.32332444
+[TSM] [11:47:23] [debug] Ducking progressif: 0.32332444 -> 0.32128936
+[TSM] [11:47:23] [debug] Ducking progressif: 0.32128936 -> 0.31927463
+[TSM] [11:47:23] [debug] Ducking progressif: 0.31927463 -> 0.3172377
+[TSM] [11:47:23] [debug] Ducking progressif: 0.3172377 -> 0.31521088
+[TSM] [11:47:23] [debug] Ducking progressif: 0.31521088 -> 0.3132126
+[TSM] [11:47:23] [debug] Ducking progressif: 0.3132126 -> 0.31118634
+[TSM] [11:47:23] [debug] Ducking progressif: 0.31118634 -> 0.30917257
+[TSM] [11:47:23] [info] Ducking progressif terminé pour la phase 1
+[TSM] [11:47:26] [info] Received: WEDDING_PHASE2
+
+[TSM] [11:47:26] [info] Toutes les playlists ont été arrêtées avec fade-out
+[TSM] [11:47:26] [info] FMOD playSound success: wedding_ceremony_sound
+[TSM] [11:47:26] [info] Volume of wedding_ceremony_sound after configuration: 0.25
+[TSM] [11:47:26] [info] Phase 2 de mariage démarrée via Bluetooth
+[TSM] [11:47:26] [debug] Ducking progressif: 1 -> 0.9979871
+[TSM] [11:47:26] [debug] Ducking progressif: 0.9979871 -> 0.9959387
+[TSM] [11:47:26] [debug] Ducking progressif: 0.9959387 -> 0.993926
+[TSM] [11:47:26] [debug] Ducking progressif: 0.993926 -> 0.99191904
+[TSM] [11:47:26] [debug] Ducking progressif: 0.99191904 -> 0.9898758
+[TSM] [11:47:26] [debug] Ducking progressif: 0.9898758 -> 0.9878734
+[TSM] [11:47:26] [debug] Ducking progressif: 0.9878734 -> 0.9858411
+[TSM] [11:47:26] [debug] Ducking progressif: 0.9858411 -> 0.98381215
+[TSM] [11:47:26] [debug] Ducking progressif: 0.98381215 -> 0.9817538
+[TSM] [11:47:26] [debug] Ducking progressif: 0.9817538 -> 0.9797967
+[TSM] [11:47:26] [debug] Ducking progressif: 0.9797967 -> 0.9777906
+[TSM] [11:47:26] [debug] Ducking progressif: 0.9777906 -> 0.97576904
+[TSM] [11:47:26] [debug] Ducking progressif: 0.97576904 -> 0.9737339
+[TSM] [11:47:26] [debug] Ducking progressif: 0.9737339 -> 0.9716852
+[TSM] [11:47:26] [debug] Ducking progressif: 0.9716852 -> 0.9696994
+[TSM] [11:47:26] [debug] Ducking progressif: 0.9696994 -> 0.96765816
+[TSM] [11:47:26] [debug] Ducking progressif: 0.96765816 -> 0.9656563
+[TSM] [11:47:26] [debug] Ducking progressif: 0.9656563 -> 0.96364266
+[TSM] [11:47:26] [debug] Ducking progressif: 0.96364266 -> 0.9616292
+[TSM] [11:47:26] [debug] Ducking progressif: 0.9616292 -> 0.95948744
+[TSM] [11:47:26] [debug] Ducking progressif: 0.95948744 -> 0.957586
+[TSM] [11:47:26] [debug] Ducking progressif: 0.957586 -> 0.95556396
+[TSM] [11:47:26] [debug] Ducking progressif: 0.95556396 -> 0.9535249
+[TSM] [11:47:26] [debug] Ducking progressif: 0.9535249 -> 0.9515126
+[TSM] [11:47:26] [debug] Ducking progressif: 0.9515126 -> 0.949493
+[TSM] [11:47:26] [debug] Ducking progressif: 0.949493 -> 0.947474
+[TSM] [11:47:26] [debug] Ducking progressif: 0.947474 -> 0.94546765
+[TSM] [11:47:26] [debug] Ducking progressif: 0.94546765 -> 0.9434386
+[TSM] [11:47:26] [debug] Ducking progressif: 0.9434386 -> 0.94142044
+[TSM] [11:47:26] [debug] Ducking progressif: 0.94142044 -> 0.9393854
+[TSM] [11:47:26] [debug] Ducking progressif: 0.9393854 -> 0.93735707
+[TSM] [11:47:26] [debug] Ducking progressif: 0.93735707 -> 0.9353717
+[TSM] [11:47:26] [debug] Ducking progressif: 0.9353717 -> 0.9333503
+[TSM] [11:47:26] [debug] Ducking progressif: 0.9333503 -> 0.93131167
+[TSM] [11:47:26] [debug] Ducking progressif: 0.93131167 -> 0.92928284
+[TSM] [11:47:26] [debug] Ducking progressif: 0.92928284 -> 0.9272774
+[TSM] [11:47:26] [debug] Ducking progressif: 0.9272774 -> 0.92526007
+[TSM] [11:47:26] [debug] Ducking progressif: 0.92526007 -> 0.9232485
+[TSM] [11:47:26] [debug] Ducking progressif: 0.9232485 -> 0.92119426
+[TSM] [11:47:26] [debug] Ducking progressif: 0.92119426 -> 0.91920865
+[TSM] [11:47:26] [debug] Ducking progressif: 0.91920865 -> 0.91717565
+[TSM] [11:47:26] [debug] Ducking progressif: 0.91717565 -> 0.9151605
+[TSM] [11:47:26] [debug] Ducking progressif: 0.9151605 -> 0.91314405
+[TSM] [11:47:26] [debug] Ducking progressif: 0.91314405 -> 0.9111075
+[TSM] [11:47:26] [debug] Ducking progressif: 0.9111075 -> 0.9090829
+[TSM] [11:47:26] [debug] Ducking progressif: 0.9090829 -> 0.90706235
+[TSM] [11:47:26] [debug] Ducking progressif: 0.90706235 -> 0.90505576
+[TSM] [11:47:26] [debug] Ducking progressif: 0.90505576 -> 0.9030173
+[TSM] [11:47:26] [debug] Ducking progressif: 0.9030173 -> 0.9010002
+[TSM] [11:47:26] [debug] Ducking progressif: 0.9010002 -> 0.89900064
+[TSM] [11:47:26] [debug] Ducking progressif: 0.89900064 -> 0.8969335
+[TSM] [11:47:26] [debug] Ducking progressif: 0.8969335 -> 0.89496946
+[TSM] [11:47:26] [debug] Ducking progressif: 0.89496946 -> 0.89290214
+[TSM] [11:47:26] [debug] Ducking progressif: 0.89290214 -> 0.8909155
+[TSM] [11:47:26] [debug] Ducking progressif: 0.8909155 -> 0.88889384
+[TSM] [11:47:26] [debug] Ducking progressif: 0.88889384 -> 0.8868706
+[TSM] [11:47:26] [debug] Ducking progressif: 0.8868706 -> 0.8848555
+[TSM] [11:47:26] [debug] Ducking progressif: 0.8848555 -> 0.88283664
+[TSM] [11:47:26] [debug] Ducking progressif: 0.88283664 -> 0.8808182
+[TSM] [11:47:26] [debug] Ducking progressif: 0.8808182 -> 0.8787851
+[TSM] [11:47:26] [debug] Ducking progressif: 0.8787851 -> 0.8767932
+[TSM] [11:47:26] [debug] Ducking progressif: 0.8767932 -> 0.8747508
+[TSM] [11:47:26] [debug] Ducking progressif: 0.8747508 -> 0.8727206
+[TSM] [11:47:26] [debug] Ducking progressif: 0.8727206 -> 0.8707069
+[TSM] [11:47:26] [debug] Ducking progressif: 0.8707069 -> 0.8687099
+[TSM] [11:47:26] [debug] Ducking progressif: 0.8687099 -> 0.86667764
+[TSM] [11:47:26] [debug] Ducking progressif: 0.86667764 -> 0.86464745
+[TSM] [11:47:26] [debug] Ducking progressif: 0.86464745 -> 0.86263394
+[TSM] [11:47:26] [debug] Ducking progressif: 0.86263394 -> 0.86059797
+[TSM] [11:47:26] [debug] Ducking progressif: 0.86059797 -> 0.8586011
+[TSM] [11:47:26] [debug] Ducking progressif: 0.8586011 -> 0.8565708
+[TSM] [11:47:26] [debug] Ducking progressif: 0.8565708 -> 0.85457003
+[TSM] [11:47:26] [debug] Ducking progressif: 0.85457003 -> 0.8525481
+[TSM] [11:47:26] [debug] Ducking progressif: 0.8525481 -> 0.85052097
+[TSM] [11:47:26] [debug] Ducking progressif: 0.85052097 -> 0.8484855
+[TSM] [11:47:26] [debug] Ducking progressif: 0.8484855 -> 0.84648025
+[TSM] [11:47:26] [debug] Ducking progressif: 0.84648025 -> 0.84444314
+[TSM] [11:47:26] [debug] Ducking progressif: 0.84444314 -> 0.8424314
+[TSM] [11:47:26] [debug] Ducking progressif: 0.8424314 -> 0.8404077
+[TSM] [11:47:26] [debug] Ducking progressif: 0.8404077 -> 0.8383783
+[TSM] [11:47:26] [debug] Ducking progressif: 0.8383783 -> 0.8363801
+[TSM] [11:47:26] [debug] Ducking progressif: 0.8363801 -> 0.8343479
+[TSM] [11:47:26] [debug] Ducking progressif: 0.8343479 -> 0.83234596
+[TSM] [11:47:26] [debug] Ducking progressif: 0.83234596 -> 0.8303269
+[TSM] [11:47:26] [debug] Ducking progressif: 0.8303269 -> 0.82830256
+[TSM] [11:47:26] [debug] Ducking progressif: 0.82830256 -> 0.8262703
+[TSM] [11:47:26] [debug] Ducking progressif: 0.8262703 -> 0.82424057
+[TSM] [11:47:26] [debug] Ducking progressif: 0.82424057 -> 0.8222507
+[TSM] [11:47:26] [debug] Ducking progressif: 0.8222507 -> 0.8202158
+[TSM] [11:47:26] [debug] Ducking progressif: 0.8202158 -> 0.8181751
+[TSM] [11:47:26] [debug] Ducking progressif: 0.8181751 -> 0.81616586
+[TSM] [11:47:26] [debug] Ducking progressif: 0.81616586 -> 0.8141589
+[TSM] [11:47:26] [debug] Ducking progressif: 0.8141589 -> 0.81211853
+[TSM] [11:47:26] [debug] Ducking progressif: 0.81211853 -> 0.8101131
+[TSM] [11:47:26] [debug] Ducking progressif: 0.8101131 -> 0.8080998
+[TSM] [11:47:26] [debug] Ducking progressif: 0.8080998 -> 0.80608946
+[TSM] [11:47:26] [debug] Ducking progressif: 0.80608946 -> 0.80405253
+[TSM] [11:47:26] [debug] Ducking progressif: 0.80405253 -> 0.8020374
+[TSM] [11:47:26] [debug] Ducking progressif: 0.8020374 -> 0.80002636
+[TSM] [11:47:26] [debug] Ducking progressif: 0.80002636 -> 0.7980028
+[TSM] [11:47:26] [debug] Ducking progressif: 0.7980028 -> 0.7959704
+[TSM] [11:47:26] [debug] Ducking progressif: 0.7959704 -> 0.79396963
+[TSM] [11:47:26] [debug] Ducking progressif: 0.79396963 -> 0.7919518
+[TSM] [11:47:26] [debug] Ducking progressif: 0.7919518 -> 0.7899148
+[TSM] [11:47:26] [debug] Ducking progressif: 0.7899148 -> 0.7878991
+[TSM] [11:47:26] [debug] Ducking progressif: 0.7878991 -> 0.78584146
+[TSM] [11:47:26] [debug] Ducking progressif: 0.78584146 -> 0.7838723
+[TSM] [11:47:26] [debug] Ducking progressif: 0.7838723 -> 0.7818226
+[TSM] [11:47:26] [debug] Ducking progressif: 0.7818226 -> 0.7798179
+[TSM] [11:47:26] [debug] Ducking progressif: 0.7798179 -> 0.7778118
+[TSM] [11:47:26] [debug] Ducking progressif: 0.7778118 -> 0.7757703
+[TSM] [11:47:26] [debug] Ducking progressif: 0.7757703 -> 0.7737418
+[TSM] [11:47:26] [debug] Ducking progressif: 0.7737418 -> 0.77174824
+[TSM] [11:47:26] [debug] Ducking progressif: 0.77174824 -> 0.76971835
+[TSM] [11:47:26] [debug] Ducking progressif: 0.76971835 -> 0.76768315
+[TSM] [11:47:26] [debug] Ducking progressif: 0.76768315 -> 0.7656849
+[TSM] [11:47:26] [debug] Ducking progressif: 0.7656849 -> 0.7636446
+[TSM] [11:47:26] [debug] Ducking progressif: 0.7636446 -> 0.7616151
+[TSM] [11:47:26] [debug] Ducking progressif: 0.7616151 -> 0.75960964
+[TSM] [11:47:26] [debug] Ducking progressif: 0.75960964 -> 0.75759953
+[TSM] [11:47:26] [debug] Ducking progressif: 0.75759953 -> 0.7555844
+[TSM] [11:47:26] [debug] Ducking progressif: 0.7555844 -> 0.75355196
+[TSM] [11:47:26] [debug] Ducking progressif: 0.75355196 -> 0.75153345
+[TSM] [11:47:26] [debug] Ducking progressif: 0.75153345 -> 0.74950826
+[TSM] [11:47:26] [debug] Ducking progressif: 0.74950826 -> 0.7474989
+[TSM] [11:47:26] [debug] Ducking progressif: 0.7474989 -> 0.7454858
+[TSM] [11:47:26] [debug] Ducking progressif: 0.7454858 -> 0.7434595
+[TSM] [11:47:26] [debug] Ducking progressif: 0.7434595 -> 0.74142027
+[TSM] [11:47:26] [debug] Ducking progressif: 0.74142027 -> 0.7394297
+[TSM] [11:47:26] [debug] Ducking progressif: 0.7394297 -> 0.7373972
+[TSM] [11:47:26] [debug] Ducking progressif: 0.7373972 -> 0.73536336
+[TSM] [11:47:26] [debug] Ducking progressif: 0.73536336 -> 0.7333708
+[TSM] [11:47:26] [debug] Ducking progressif: 0.7333708 -> 0.7313079
+[TSM] [11:47:26] [debug] Ducking progressif: 0.7313079 -> 0.7292829
+[TSM] [11:47:26] [debug] Ducking progressif: 0.7292829 -> 0.7272991
+[TSM] [11:47:26] [debug] Ducking progressif: 0.7272991 -> 0.72527367
+[TSM] [11:47:27] [debug] Ducking progressif: 0.72527367 -> 0.7232606
+[TSM] [11:47:27] [debug] Ducking progressif: 0.7232606 -> 0.72122246
+[TSM] [11:47:27] [debug] Ducking progressif: 0.72122246 -> 0.71922016
+[TSM] [11:47:27] [debug] Ducking progressif: 0.71922016 -> 0.7171922
+[TSM] [11:47:27] [debug] Ducking progressif: 0.7171922 -> 0.7151019
+[TSM] [11:47:27] [debug] Ducking progressif: 0.7151019 -> 0.71312183
+[TSM] [11:47:27] [debug] Ducking progressif: 0.71312183 -> 0.71114856
+[TSM] [11:47:27] [debug] Ducking progressif: 0.71114856 -> 0.7090887
+[TSM] [11:47:27] [debug] Ducking progressif: 0.7090887 -> 0.70709074
+[TSM] [11:47:27] [debug] Ducking progressif: 0.70709074 -> 0.7050812
+[TSM] [11:47:27] [debug] Ducking progressif: 0.7050812 -> 0.7030589
+[TSM] [11:47:27] [debug] Ducking progressif: 0.7030589 -> 0.7010332
+[TSM] [11:47:27] [debug] Ducking progressif: 0.7010332 -> 0.6990273
+[TSM] [11:47:27] [debug] Ducking progressif: 0.6990273 -> 0.69700575
+[TSM] [11:47:27] [debug] Ducking progressif: 0.69700575 -> 0.69493717
+[TSM] [11:47:27] [debug] Ducking progressif: 0.69493717 -> 0.6929621
+[TSM] [11:47:27] [debug] Ducking progressif: 0.6929621 -> 0.69093835
+[TSM] [11:47:27] [debug] Ducking progressif: 0.69093835 -> 0.6889326
+[TSM] [11:47:27] [debug] Ducking progressif: 0.6889326 -> 0.68689245
+[TSM] [11:47:27] [debug] Ducking progressif: 0.68689245 -> 0.6848689
+[TSM] [11:47:27] [debug] Ducking progressif: 0.6848689 -> 0.68286616
+[TSM] [11:47:27] [debug] Ducking progressif: 0.68286616 -> 0.68084776
+[TSM] [11:47:27] [debug] Ducking progressif: 0.68084776 -> 0.6788032
+[TSM] [11:47:27] [debug] Ducking progressif: 0.6788032 -> 0.6767899
+[TSM] [11:47:27] [debug] Ducking progressif: 0.6767899 -> 0.6747712
+[TSM] [11:47:27] [debug] Ducking progressif: 0.6747712 -> 0.67274827
+[TSM] [11:47:27] [debug] Ducking progressif: 0.67274827 -> 0.67073584
+[TSM] [11:47:27] [debug] Ducking progressif: 0.67073584 -> 0.6687077
+[TSM] [11:47:27] [debug] Ducking progressif: 0.6687077 -> 0.66671115
+[TSM] [11:47:27] [debug] Ducking progressif: 0.66671115 -> 0.6646828
+[TSM] [11:47:27] [debug] Ducking progressif: 0.6646828 -> 0.6626635
+[TSM] [11:47:27] [debug] Ducking progressif: 0.6626635 -> 0.66063684
+[TSM] [11:47:27] [debug] Ducking progressif: 0.66063684 -> 0.65862113
+[TSM] [11:47:27] [debug] Ducking progressif: 0.65862113 -> 0.6565714
+[TSM] [11:47:27] [debug] Ducking progressif: 0.6565714 -> 0.65455675
+[TSM] [11:47:27] [debug] Ducking progressif: 0.65455675 -> 0.6525512
+[TSM] [11:47:27] [debug] Ducking progressif: 0.6525512 -> 0.6505496
+[TSM] [11:47:27] [debug] Ducking progressif: 0.6505496 -> 0.6485114
+[TSM] [11:47:27] [debug] Ducking progressif: 0.6485114 -> 0.64651
+[TSM] [11:47:27] [debug] Ducking progressif: 0.64651 -> 0.6444834
+[TSM] [11:47:27] [debug] Ducking progressif: 0.6444834 -> 0.64242506
+[TSM] [11:47:27] [debug] Ducking progressif: 0.64242506 -> 0.64041
+[TSM] [11:47:27] [debug] Ducking progressif: 0.64041 -> 0.63841057
+[TSM] [11:47:27] [debug] Ducking progressif: 0.63841057 -> 0.6363991
+[TSM] [11:47:27] [debug] Ducking progressif: 0.6363991 -> 0.63436496
+[TSM] [11:47:27] [debug] Ducking progressif: 0.63436496 -> 0.6323217
+[TSM] [11:47:27] [debug] Ducking progressif: 0.6323217 -> 0.63034093
+[TSM] [11:47:27] [debug] Ducking progressif: 0.63034093 -> 0.6283148
+[TSM] [11:47:27] [debug] Ducking progressif: 0.6283148 -> 0.6262947
+[TSM] [11:47:27] [debug] Ducking progressif: 0.6262947 -> 0.6242729
+[TSM] [11:47:27] [debug] Ducking progressif: 0.6242729 -> 0.62226903
+[TSM] [11:47:27] [debug] Ducking progressif: 0.62226903 -> 0.620229
+[TSM] [11:47:27] [debug] Ducking progressif: 0.620229 -> 0.6182307
+[TSM] [11:47:27] [debug] Ducking progressif: 0.6182307 -> 0.6161823
+[TSM] [11:47:27] [debug] Ducking progressif: 0.6161823 -> 0.614176
+[TSM] [11:47:27] [debug] Ducking progressif: 0.614176 -> 0.6121538
+[TSM] [11:47:27] [debug] Ducking progressif: 0.6121538 -> 0.6101472
+[TSM] [11:47:27] [debug] Ducking progressif: 0.6101472 -> 0.6081233
+[TSM] [11:47:27] [debug] Ducking progressif: 0.6081233 -> 0.6060723
+[TSM] [11:47:27] [debug] Ducking progressif: 0.6060723 -> 0.60403776
+[TSM] [11:47:27] [debug] Ducking progressif: 0.60403776 -> 0.6020615
+[TSM] [11:47:27] [debug] Ducking progressif: 0.6020615 -> 0.6000459
+[TSM] [11:47:27] [debug] Ducking progressif: 0.6000459 -> 0.5980067
+[TSM] [11:47:27] [debug] Ducking progressif: 0.5980067 -> 0.59599364
+[TSM] [11:47:27] [debug] Ducking progressif: 0.59599364 -> 0.5939785
+[TSM] [11:47:27] [debug] Ducking progressif: 0.5939785 -> 0.5919711
+[TSM] [11:47:27] [debug] Ducking progressif: 0.5919711 -> 0.5898889
+[TSM] [11:47:27] [debug] Ducking progressif: 0.5898889 -> 0.58789355
+[TSM] [11:47:27] [debug] Ducking progressif: 0.58789355 -> 0.58588594
+[TSM] [11:47:27] [debug] Ducking progressif: 0.58588594 -> 0.5838626
+[TSM] [11:47:27] [debug] Ducking progressif: 0.5838626 -> 0.5818528
+[TSM] [11:47:27] [debug] Ducking progressif: 0.5818528 -> 0.5798396
+[TSM] [11:47:27] [debug] Ducking progressif: 0.5798396 -> 0.5778091
+[TSM] [11:47:27] [debug] Ducking progressif: 0.5778091 -> 0.5757909
+[TSM] [11:47:27] [debug] Ducking progressif: 0.5757909 -> 0.57377714
+[TSM] [11:47:27] [debug] Ducking progressif: 0.57377714 -> 0.5717697
+[TSM] [11:47:27] [debug] Ducking progressif: 0.5717697 -> 0.5697034
+[TSM] [11:47:27] [debug] Ducking progressif: 0.5697034 -> 0.56768554
+[TSM] [11:47:27] [debug] Ducking progressif: 0.56768554 -> 0.56570995
+[TSM] [11:47:27] [debug] Ducking progressif: 0.56570995 -> 0.5636858
+[TSM] [11:47:27] [debug] Ducking progressif: 0.5636858 -> 0.5616685
+[TSM] [11:47:27] [debug] Ducking progressif: 0.5616685 -> 0.55965215
+[TSM] [11:47:27] [debug] Ducking progressif: 0.55965215 -> 0.5576274
+[TSM] [11:47:27] [debug] Ducking progressif: 0.5576274 -> 0.55561304
+[TSM] [11:47:27] [debug] Ducking progressif: 0.55561304 -> 0.55358016
+[TSM] [11:47:27] [debug] Ducking progressif: 0.55358016 -> 0.55156535
+[TSM] [11:47:27] [debug] Ducking progressif: 0.55156535 -> 0.5495345
+[TSM] [11:47:27] [debug] Ducking progressif: 0.5495345 -> 0.5475312
+[TSM] [11:47:27] [debug] Ducking progressif: 0.5475312 -> 0.54549605
+[TSM] [11:47:27] [debug] Ducking progressif: 0.54549605 -> 0.54347193
+[TSM] [11:47:27] [debug] Ducking progressif: 0.54347193 -> 0.5414017
+[TSM] [11:47:27] [debug] Ducking progressif: 0.5414017 -> 0.53940487
+[TSM] [11:47:27] [debug] Ducking progressif: 0.53940487 -> 0.5373868
+[TSM] [11:47:27] [debug] Ducking progressif: 0.5373868 -> 0.5353924
+[TSM] [11:47:27] [debug] Ducking progressif: 0.5353924 -> 0.53334326
+[TSM] [11:47:27] [debug] Ducking progressif: 0.53334326 -> 0.5313671
+[TSM] [11:47:27] [debug] Ducking progressif: 0.5313671 -> 0.5293383
+[TSM] [11:47:27] [debug] Ducking progressif: 0.5293383 -> 0.52730346
+[TSM] [11:47:27] [debug] Ducking progressif: 0.52730346 -> 0.52529854
+[TSM] [11:47:27] [debug] Ducking progressif: 0.52529854 -> 0.5232518
+[TSM] [11:47:27] [debug] Ducking progressif: 0.5232518 -> 0.5212637
+[TSM] [11:47:27] [debug] Ducking progressif: 0.5212637 -> 0.51916665
+[TSM] [11:47:27] [debug] Ducking progressif: 0.51916665 -> 0.5172254
+[TSM] [11:47:27] [debug] Ducking progressif: 0.5172254 -> 0.5151529
+[TSM] [11:47:27] [debug] Ducking progressif: 0.5151529 -> 0.51317006
+[TSM] [11:47:27] [debug] Ducking progressif: 0.51317006 -> 0.5111361
+[TSM] [11:47:27] [debug] Ducking progressif: 0.5111361 -> 0.5091502
+[TSM] [11:47:27] [debug] Ducking progressif: 0.5091502 -> 0.50709826
+[TSM] [11:47:27] [debug] Ducking progressif: 0.50709826 -> 0.5050945
+[TSM] [11:47:27] [debug] Ducking progressif: 0.5050945 -> 0.5030899
+[TSM] [11:47:27] [debug] Ducking progressif: 0.5030899 -> 0.50102556
+[TSM] [11:47:27] [debug] Ducking progressif: 0.50102556 -> 0.49904716
+[TSM] [11:47:27] [debug] Ducking progressif: 0.49904716 -> 0.49701256
+[TSM] [11:47:27] [debug] Ducking progressif: 0.49701256 -> 0.49501103
+[TSM] [11:47:27] [debug] Ducking progressif: 0.49501103 -> 0.49298716
+[TSM] [11:47:27] [debug] Ducking progressif: 0.49298716 -> 0.49094743
+[TSM] [11:47:27] [debug] Ducking progressif: 0.49094743 -> 0.4889431
+[TSM] [11:47:27] [debug] Ducking progressif: 0.4889431 -> 0.4869162
+[TSM] [11:47:27] [debug] Ducking progressif: 0.4869162 -> 0.4848987
+[TSM] [11:47:27] [debug] Ducking progressif: 0.4848987 -> 0.48287833
+[TSM] [11:47:27] [debug] Ducking progressif: 0.48287833 -> 0.48084718
+[TSM] [11:47:27] [debug] Ducking progressif: 0.48084718 -> 0.4788158
+[TSM] [11:47:27] [debug] Ducking progressif: 0.4788158 -> 0.47682428
+[TSM] [11:47:27] [debug] Ducking progressif: 0.47682428 -> 0.47478
+[TSM] [11:47:27] [debug] Ducking progressif: 0.47478 -> 0.4727786
+[TSM] [11:47:27] [debug] Ducking progressif: 0.4727786 -> 0.47073168
+[TSM] [11:47:27] [debug] Ducking progressif: 0.47073168 -> 0.46872538
+[TSM] [11:47:27] [debug] Ducking progressif: 0.46872538 -> 0.46669754
+[TSM] [11:47:27] [debug] Ducking progressif: 0.46669754 -> 0.46469048
+[TSM] [11:47:27] [debug] Ducking progressif: 0.46469048 -> 0.462667
+[TSM] [11:47:27] [debug] Ducking progressif: 0.462667 -> 0.46065465
+[TSM] [11:47:27] [debug] Ducking progressif: 0.46065465 -> 0.4586401
+[TSM] [11:47:27] [debug] Ducking progressif: 0.4586401 -> 0.45659444
+[TSM] [11:47:27] [debug] Ducking progressif: 0.45659444 -> 0.45458916
+[TSM] [11:47:27] [debug] Ducking progressif: 0.45458916 -> 0.452546
+[TSM] [11:47:27] [debug] Ducking progressif: 0.452546 -> 0.45055833
+[TSM] [11:47:27] [debug] Ducking progressif: 0.45055833 -> 0.44854936
+[TSM] [11:47:27] [debug] Ducking progressif: 0.44854936 -> 0.4465018
+[TSM] [11:47:27] [debug] Ducking progressif: 0.4465018 -> 0.44450814
+[TSM] [11:47:27] [debug] Ducking progressif: 0.44450814 -> 0.44245687
+[TSM] [11:47:27] [debug] Ducking progressif: 0.44245687 -> 0.4404571
+[TSM] [11:47:27] [debug] Ducking progressif: 0.4404571 -> 0.43843403
+[TSM] [11:47:27] [debug] Ducking progressif: 0.43843403 -> 0.4364204
+[TSM] [11:47:27] [debug] Ducking progressif: 0.4364204 -> 0.4344015
+[TSM] [11:47:27] [debug] Ducking progressif: 0.4344015 -> 0.43237793
+[TSM] [11:47:27] [debug] Ducking progressif: 0.43237793 -> 0.43032998
+[TSM] [11:47:27] [debug] Ducking progressif: 0.43032998 -> 0.42832968
+[TSM] [11:47:27] [debug] Ducking progressif: 0.42832968 -> 0.42632523
+[TSM] [11:47:27] [debug] Ducking progressif: 0.42632523 -> 0.42428997
+[TSM] [11:47:27] [debug] Ducking progressif: 0.42428997 -> 0.4222866
+[TSM] [11:47:27] [debug] Ducking progressif: 0.4222866 -> 0.42024222
+[TSM] [11:47:27] [debug] Ducking progressif: 0.42024222 -> 0.4182325
+[TSM] [11:47:27] [debug] Ducking progressif: 0.4182325 -> 0.41618806
+[TSM] [11:47:27] [debug] Ducking progressif: 0.41618806 -> 0.41418865
+[TSM] [11:47:27] [debug] Ducking progressif: 0.41418865 -> 0.4121596
+[TSM] [11:47:27] [debug] Ducking progressif: 0.4121596 -> 0.41009343
+[TSM] [11:47:27] [debug] Ducking progressif: 0.41009343 -> 0.40814662
+[TSM] [11:47:27] [debug] Ducking progressif: 0.40814662 -> 0.4061192
+[TSM] [11:47:27] [debug] Ducking progressif: 0.4061192 -> 0.40408388
+[TSM] [11:47:27] [debug] Ducking progressif: 0.40408388 -> 0.4020675
+[TSM] [11:47:27] [debug] Ducking progressif: 0.4020675 -> 0.40006992
+[TSM] [11:47:27] [debug] Ducking progressif: 0.40006992 -> 0.3980465
+[TSM] [11:47:27] [debug] Ducking progressif: 0.3980465 -> 0.39603114
+[TSM] [11:47:27] [debug] Ducking progressif: 0.39603114 -> 0.39400837
+[TSM] [11:47:27] [debug] Ducking progressif: 0.39400837 -> 0.3919886
+[TSM] [11:47:28] [debug] Ducking progressif: 0.3919886 -> 0.38996652
+[TSM] [11:47:28] [debug] Ducking progressif: 0.38996652 -> 0.38795158
+[TSM] [11:47:28] [debug] Ducking progressif: 0.38795158 -> 0.385893
+[TSM] [11:47:28] [debug] Ducking progressif: 0.385893 -> 0.38389003
+[TSM] [11:47:28] [debug] Ducking progressif: 0.38389003 -> 0.38187903
+[TSM] [11:47:28] [debug] Ducking progressif: 0.38187903 -> 0.3798413
+[TSM] [11:47:28] [debug] Ducking progressif: 0.3798413 -> 0.37785223
+[TSM] [11:47:28] [debug] Ducking progressif: 0.37785223 -> 0.37581223
+[TSM] [11:47:28] [debug] Ducking progressif: 0.37581223 -> 0.3738083
+[TSM] [11:47:28] [debug] Ducking progressif: 0.3738083 -> 0.37175938
+[TSM] [11:47:28] [debug] Ducking progressif: 0.37175938 -> 0.36976677
+[TSM] [11:47:28] [debug] Ducking progressif: 0.36976677 -> 0.36772978
+[TSM] [11:47:28] [debug] Ducking progressif: 0.36772978 -> 0.36570624
+[TSM] [11:47:28] [debug] Ducking progressif: 0.36570624 -> 0.36370075
+[TSM] [11:47:28] [debug] Ducking progressif: 0.36370075 -> 0.36164898
+[TSM] [11:47:28] [debug] Ducking progressif: 0.36164898 -> 0.35965887
+[TSM] [11:47:28] [debug] Ducking progressif: 0.35965887 -> 0.35759804
+[TSM] [11:47:28] [debug] Ducking progressif: 0.35759804 -> 0.35562497
+[TSM] [11:47:28] [debug] Ducking progressif: 0.35562497 -> 0.35360053
+[TSM] [11:47:28] [debug] Ducking progressif: 0.35360053 -> 0.351581
+[TSM] [11:47:28] [debug] Ducking progressif: 0.351581 -> 0.34955812
+[TSM] [11:47:28] [debug] Ducking progressif: 0.34955812 -> 0.3475518
+[TSM] [11:47:28] [debug] Ducking progressif: 0.3475518 -> 0.3455261
+[TSM] [11:47:28] [debug] Ducking progressif: 0.3455261 -> 0.3434886
+[TSM] [11:47:28] [debug] Ducking progressif: 0.3434886 -> 0.3414788
+[TSM] [11:47:28] [debug] Ducking progressif: 0.3414788 -> 0.3394451
+[TSM] [11:47:28] [debug] Ducking progressif: 0.3394451 -> 0.33739972
+[TSM] [11:47:28] [debug] Ducking progressif: 0.33739972 -> 0.3354308
+[TSM] [11:47:28] [debug] Ducking progressif: 0.3354308 -> 0.33340976
+[TSM] [11:47:28] [debug] Ducking progressif: 0.33340976 -> 0.33134726
+[TSM] [11:47:28] [debug] Ducking progressif: 0.33134726 -> 0.32934272
+[TSM] [11:47:28] [debug] Ducking progressif: 0.32934272 -> 0.32733092
+[TSM] [11:47:28] [debug] Ducking progressif: 0.32733092 -> 0.32532847
+[TSM] [11:47:28] [debug] Ducking progressif: 0.32532847 -> 0.32327965
+[TSM] [11:47:28] [debug] Ducking progressif: 0.32327965 -> 0.32128197
+[TSM] [11:47:28] [debug] Ducking progressif: 0.32128197 -> 0.31926593
+[TSM] [11:47:28] [debug] Ducking progressif: 0.31926593 -> 0.31723335
+[TSM] [11:47:28] [debug] Ducking progressif: 0.31723335 -> 0.3152266
+[TSM] [11:47:28] [debug] Ducking progressif: 0.3152266 -> 0.31320748
+[TSM] [11:47:28] [debug] Ducking progressif: 0.31320748 -> 0.31118965
+[TSM] [11:47:28] [debug] Ducking progressif: 0.31118965 -> 0.30915618
+[TSM] [11:47:28] [info] Ducking progressif terminé pour la phase 2
+[TSM] [11:47:31] [info] Received: WEDDING_PHASE3
+
+[TSM] [11:47:31] [info] Toutes les playlists ont été arrêtées avec fade-out
+[TSM] [11:47:31] [info] FMOD playSound success: wedding_exit_sound
+[TSM] [11:47:31] [info] Volume of wedding_exit_sound after configuration: 0.25
+[TSM] [11:47:31] [info] Phase 3 de mariage démarrée via Bluetooth
+[TSM] [11:47:34] [info] Received: NEXT_PHASE
+
+[TSM] [11:47:34] [info] Toutes les playlists ont été arrêtées avec fade-out
+[TSM] [11:47:34] [info] Toutes les musiques ont été arrêtées via Bluetooth
+[TSM] [11:47:39] [info] Received: PLAY
+
+[TSM] [11:47:39] [info] FMOD playSound success: hi_diddle_dee
+[TSM] [11:47:39] [warning] Invalid channel state detected, attempting to recover
+[TSM] [11:47:39] [info] FMOD playSound success: hi_diddle_dee
+[TSM] [11:47:39] [info] Volume of hi_diddle_dee after configuration: 0.25
+[TSM] [11:47:39] [info] Volume of hi_diddle_dee after configuration: 0.25
+[TSM] [11:47:39] [error] Channel validation failed after start
+[TSM] [11:47:39] [error] Channel state check failed, restarting track
+[TSM] [11:47:39] [info] FMOD playSound success: hi_diddle_dee
+[TSM] [11:47:39] [info] Volume of hi_diddle_dee after configuration: 0.25
+[TSM] [11:47:43] [info] Received: STOP
+
+[TSM] [11:47:43] [info] Starting fade-out for sound: hi_diddle_dee (from volume: 0.25)
+[TSM] [11:47:43] [info] Toutes les playlists ont été arrêtées avec fade-out
+[TSM] [11:47:43] [info] Toutes les musiques ont été arrêtées via Bluetooth
+[TSM] [11:47:44] [info] Fade-out completed for sound: hi_diddle_dee
+[TSM] [11:47:45] [info] Received: PLAY_RANDOM
+
+[TSM] [11:47:45] [info] Toutes les playlists ont été arrêtées avec fade-out
+[TSM] [11:47:45] [info] FMOD playSound success: supercalifragilisticexpialidocious
+[TSM] [11:47:45] [info] Volume of supercalifragilisticexpialidocious after configuration: 0.25
+[TSM] [11:47:45] [info] Playlist 'playlist_test' started.
+[TSM] [11:47:45] [info] Playlist lancée en mode aléatoire via Bluetooth
+[TSM] [11:47:55] [info] Received: SET_VOLUME 0.85
+
+[TSM] [11:47:58] [info] Received: SET_VOLUME 0.29
+
+[TSM] [11:48:04] [info] Client disconnected.
+[TSM] [11:48:04] [info] Waiting for new connection...
+[TSM] [11:48:09] [info] FMOD shutdown successfully.

@@ -44,6 +44,17 @@ public:
     void SetDuckFactor(float factor)   { m_duckFactor = factor; }
     float GetDuckFactor() const        { return m_duckFactor; }
 
+    void UpdateWeddingMode(float deltaTime);
+    
+    void UpdateWeddingFilePaths();
+
+    void PlayRandomMusic();
+    void StartWeddingPhase1();
+    void StartWeddingPhase2();
+    void StartWeddingPhase3();
+    void NextWeddingPhase();
+    void StopAllMusic();
+
 private:
     UIManager();
     ~UIManager() = default;
@@ -62,8 +73,13 @@ private:
     void RenderMusicPlaylistTab();
     void RenderAnnouncementsTab();
     void RenderSFXTab();
+    void RenderWeddingModeTab();
 
     void UpdateAllVolumes();
+    void CheckWeddingPhaseTransition();
+    
+    bool ImportWeddingMusic(int phase, const std::string& filePath);
+    void StartNormalMusicAfterWedding();
 
     struct AudioTrack {
         std::string id;
@@ -94,6 +110,25 @@ private:
     float m_sfxVolume          = 0.5f;
 
     float m_duckFactor         = 1.0f;
+    
+    bool m_weddingModeActive = false;
+    int m_weddingPhase = 0;  
+    bool m_autoDuckingActive = false;
+    float m_originalDuckFactor = 1.0f;
+    float m_targetDuckFactor = 0.3f;
+    float m_crossfadeDuration = 5.0f;
+    bool m_autoTransitionToPhase2 = false;
+    bool m_transitionToNormalMusicAfterWedding = false;
+    
+    std::string m_weddingEntranceFilePath;
+    std::string m_weddingCeremonyFilePath;
+    std::string m_weddingExitFilePath;
+    
+    std::string m_weddingEntranceSoundId = "wedding_entrance_sound";
+    std::string m_weddingCeremonySoundId = "wedding_ceremony_sound";
+    std::string m_weddingExitSoundId = "wedding_exit_sound";
+    
+    std::string m_normalPlaylistAfterWedding = "playlist_test";
 };
 
 } // namespace TSM

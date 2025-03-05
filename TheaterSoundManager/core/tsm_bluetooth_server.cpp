@@ -87,7 +87,6 @@ int RegisterBluetoothService(SOCKET sock, SOCKADDR_BTH* localBthAddr)
         return err;
     }
     
-    // Convert wide string to narrow string for spdlog
     char serviceNameNarrow[32];
     wcstombs(serviceNameNarrow, serviceName, sizeof(serviceNameNarrow));
     spdlog::info("Service registered with name '{}'.", serviceNameNarrow);
@@ -104,10 +103,16 @@ void processCommand(SOCKET clientSocket, char* buffer)
         const char* response = "Playing";
         send(clientSocket, response, (int)strlen(response), 0);
     }
+    else if (strcmp(buffer, "PLAY_RANDOM") == 0)
+    {
+        TSM::UIManager::GetInstance().PlayRandomMusic();
+        const char* response = "Playing random music";
+        send(clientSocket, response, (int)strlen(response), 0);
+    }
     else if (strcmp(buffer, "STOP") == 0)
     {
-        TSM::PlaylistManager::GetInstance().Stop("playlist_test");
-        const char* response = "Stopped";
+        TSM::UIManager::GetInstance().StopAllMusic();
+        const char* response = "All music stopped";
         send(clientSocket, response, (int)strlen(response), 0);
     }
     else if (strcmp(buffer, "NEXT") == 0)
@@ -115,6 +120,30 @@ void processCommand(SOCKET clientSocket, char* buffer)
         TSM::PlaylistManager::GetInstance().Stop("playlist_test");
         TSM::PlaylistManager::GetInstance().PlayFromIndex("playlist_test", 1);
         const char* response = "Next track";
+        send(clientSocket, response, (int)strlen(response), 0);
+    }
+    else if (strcmp(buffer, "WEDDING_PHASE1") == 0)
+    {
+        TSM::UIManager::GetInstance().StartWeddingPhase1();
+        const char* response = "Wedding Phase 1 started";
+        send(clientSocket, response, (int)strlen(response), 0);
+    }
+    else if (strcmp(buffer, "WEDDING_PHASE2") == 0)
+    {
+        TSM::UIManager::GetInstance().StartWeddingPhase2();
+        const char* response = "Wedding Phase 2 started";
+        send(clientSocket, response, (int)strlen(response), 0);
+    }
+    else if (strcmp(buffer, "WEDDING_PHASE3") == 0)
+    {
+        TSM::UIManager::GetInstance().StartWeddingPhase3();
+        const char* response = "Wedding Phase 3 started";
+        send(clientSocket, response, (int)strlen(response), 0);
+    }
+    else if (strcmp(buffer, "NEXT_PHASE") == 0)
+    {
+        TSM::UIManager::GetInstance().NextWeddingPhase();
+        const char* response = "Moving to next wedding phase";
         send(clientSocket, response, (int)strlen(response), 0);
     }
     else if (strncmp(buffer, "SET_VOLUME", 10) == 0)

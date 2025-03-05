@@ -223,20 +223,317 @@ void AudioManager::SetChannelPitch(FMOD::Channel* channel, float pitch)
         channel->setFrequency(defaultFrequency * pitch);
     }
 }
-
 void AudioManager::Update(float deltaTime)
 {
     FModWrapper::GetInstance().GetSystem()->update();
+    
+    if (m_isFadingIn)
+    {
+        m_fadeTimer += deltaTime;
+        float progress = m_fadeTimer / m_fadeDuration;
+        
+        if (progress >= 1.0f)
+        {
+            auto it = m_sounds.find(m_fadingSoundName);
+            if (it != m_sounds.end())
+            {
+                for (auto* channel : it->second.channels)
+                {
+                    if (channel)
+                    {
+                        bool isPlaying = false;
+                        channel->isPlaying(&isPlaying);
+                        if (isPlaying)
+                        {
+                            channel->setVolume(m_fadeTargetVolume);
+                        }
+                    }
+                }
+            }
+            
+            m_isFadingIn = false;
+            spdlog::info("Fade-in completed for sound: {}", m_fadingSoundName);
+        }
+        else
+        {
+            float currentVolume = progress * m_fadeTargetVolume;
+            
+            auto it = m_sounds.find(m_fadingSoundName);
+            if (it != m_sounds.end())
+            {
+                for (auto* channel : it->second.channels)
+                {
+                    if (channel)
+                    {
+                        bool isPlaying = false;
+                        channel->isPlaying(&isPlaying);
+                        if (isPlaying)
+                        {
+                            channel->setVolume(currentVolume);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    if (m_isFadingOut)
+    {
+        m_fadeTimer += deltaTime;
+        float progress = m_fadeTimer / m_fadeDuration;
+        
+        if (progress >= 1.0f)
+        {
+            auto it = m_sounds.find(m_fadingSoundName);
+            if (it != m_sounds.end())
+            {
+                for (auto* channel : it->second.channels)
+                {
+                    if (channel)
+                    {
+                        bool isPlaying = false;
+                        channel->isPlaying(&isPlaying);
+                        if (isPlaying)
+                        {
+                            channel->stop();
+                        }
+                    }
+                }
+                
+                it->second.channels.clear();
+            }
+            
+            m_isFadingOut = false;
+            spdlog::info("Fade-out completed for sound: {}", m_fadingSoundName);
+        }
+        else
+        {
+            float currentVolume = (1.0f - progress) * m_fadeTargetVolume;
+            
+            auto it = m_sounds.find(m_fadingSoundName);
+            if (it != m_sounds.end())
+            {
+                for (auto* channel : it->second.channels)
+                {
+                    if (channel)
+                    {
+                        bool isPlaying = false;
+                        channel->isPlaying(&isPlaying);
+                        if (isPlaying)
+                        {
+                            channel->setVolume(currentVolume);
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 FMOD::Channel* AudioManager::GetLastChannelOfSound(const std::string& soundName)
 {
     auto it = m_sounds.find(soundName);
-    if (it == m_sounds.end()) return nullptr;
-    SoundData& data = it->second;
-    if (!data.channels.empty())
-        return data.channels.back();
+    if (it == m_sounds.end() || it->second.channels.empty())
+        return nullptr;
+    
+    return it->second.channels.back();
+}
+
+bool AudioManager::LoadWeddingPhaseSound(int phase, const std::string& filePath)
+{
+    std::string soundId;
+    
+    switch (phase) {
+        case 1:
+            soundId = "wedding_entrance_sound";
+            break;
+        case 2:
+            soundId = "wedding_ceremony_sound";
+            break;
+        case 3:
+            soundId = "wedding_exit_sound";
+            break;
+        default:
+            spdlog::error("Phase de mariage invalide: {}", phase);
+            return false;
+    }
+    
+    StopSound(soundId);
+    if (m_sounds.find(soundId) != m_sounds.end()) {
+        UnloadSound(soundId);
+    }
+    
+    bool success = LoadSound(soundId, filePath, true);
+    
+    if (success) {
+        spdlog::info("Son de mariage phase {} chargé avec succès: {}", phase, filePath);
+    } else {
+        spdlog::error("Échec du chargement du son de mariage phase {}: {}", phase, filePath);
+    }
+    
+    return success;
+}
+
+bool AudioManager::LoadAnnouncement(const std::string& announcementId, const std::string& filePath)
+{
+    StopSound(announcementId);
+    if (m_sounds.find(announcementId) != m_sounds.end()) {
+        UnloadSound(announcementId);
+    }
+    
+    bool success = LoadSound(announcementId, filePath, true);
+    
+    if (success) {
+        spdlog::info("Annonce '{}' chargée avec succès: {}", announcementId, filePath);
+    } else {
+        spdlog::error("Échec du chargement de l'annonce '{}': {}", announcementId, filePath);
+    }
+    
+    return success;
+}
+
+FMOD::Sound* AudioManager::GetSound(const std::string& soundName)
+{
+    auto it = m_sounds.find(soundName);
+    if (it != m_sounds.end()) {
+        return it->second.sound;
+    }
     return nullptr;
+}
+
+FMOD::Channel* AudioManager::PlaySoundWithFadeIn(const std::string& soundName, bool loop, float volume, float pitch)
+{
+    auto it = m_sounds.find(soundName);
+    if (it == m_sounds.end())
+    {
+        spdlog::error("Sound not found: {}", soundName);
+        return nullptr;
+    }
+    
+    SoundData& data = it->second;
+    if (!data.sound)
+    {
+        spdlog::error("Sound not valid: {}", soundName);
+        return nullptr;
+    }
+    
+    FMOD_MODE currentMode;
+    data.sound->getMode(&currentMode);
+    if (loop)
+        currentMode |= FMOD_LOOP_NORMAL;
+    else
+        currentMode &= ~FMOD_LOOP_NORMAL;
+    data.sound->setMode(currentMode);
+
+    FMOD::Channel* channel = nullptr;
+    FMOD_RESULT result = FModWrapper::GetInstance().GetSystem()->playSound(data.sound, nullptr, true, &channel);
+    if (result != FMOD_OK)
+    {
+        spdlog::error("FMOD playSound failed: {}", FMOD_ErrorString(result));
+        return nullptr;
+    }
+    else
+    {
+        spdlog::info("FMOD playSound success with fade-in: {}", soundName);
+    }
+    
+    channel->setVolume(0.0f);
+    float defaultFrequency;
+    channel->getFrequency(&defaultFrequency);
+    channel->setFrequency(defaultFrequency * pitch);
+    channel->setPaused(false);
+
+    data.channels.push_back(channel);
+    
+    m_isFadingIn = true;
+    m_isFadingOut = false;
+    m_fadeTimer = 0.0f;
+    m_fadeDuration = 1.5f;
+    m_fadingSoundName = soundName;
+    m_fadeTargetVolume = volume;
+    
+    spdlog::info("Starting fade-in for sound: {} (target volume: {})", soundName, volume);
+
+    return channel;
+}
+
+void AudioManager::StopSoundWithFadeOut(const std::string& soundName)
+{
+    auto it = m_sounds.find(soundName);
+    if (it == m_sounds.end())
+    {
+        spdlog::warn("Attempted to stop non-existent sound: {}", soundName);
+        return;
+    }
+    
+    if (it->second.channels.empty())
+    {
+        spdlog::warn("No active channels for sound: {}", soundName);
+        return;
+    }
+    
+    m_isFadingOut = true;
+    m_isFadingIn = false;
+    m_fadeTimer = 0.0f;
+    m_fadeDuration = 1.5f;
+    m_fadingSoundName = soundName;
+    
+    float currentVolume = 0.0f;
+    for (auto* channel : it->second.channels)
+    {
+        if (channel)
+        {
+            bool isPlaying = false;
+            channel->isPlaying(&isPlaying);
+            if (isPlaying)
+            {
+                channel->getVolume(&currentVolume);
+                break;
+            }
+        }
+    }
+    
+    m_fadeTargetVolume = currentVolume;
+    
+    spdlog::info("Starting fade-out for sound: {} (from volume: {})", soundName, currentVolume);
+}
+
+void AudioManager::StopAllSoundsWithFadeOut()
+{
+    for (auto& pair : m_sounds)
+    {
+        const std::string& soundName = pair.first;
+        
+        if (soundName.find("sfx") != std::string::npos || 
+            soundName.find("announce") != std::string::npos)
+        {
+            continue;
+        }
+        
+        if (!pair.second.channels.empty())
+        {
+            bool hasActiveChannel = false;
+            for (auto* channel : pair.second.channels)
+            {
+                if (channel)
+                {
+                    bool isPlaying = false;
+                    channel->isPlaying(&isPlaying);
+                    if (isPlaying)
+                    {
+                        hasActiveChannel = true;
+                        break;
+                    }
+                }
+            }
+            
+            if (hasActiveChannel)
+            {
+                StopSoundWithFadeOut(soundName);
+                break;
+            }
+        }
+    }
 }
 
 } // namespace TSM

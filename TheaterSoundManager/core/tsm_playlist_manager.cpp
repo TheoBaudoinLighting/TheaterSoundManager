@@ -120,47 +120,80 @@ void PlaylistManager::Stop(const std::string& playlistName)
 {
     if (playlistName.empty())
     {
-        spdlog::warn("Playlist name is empty, stopping all playlists.");
         for (auto& plist : m_playlists)
         {
-            if (plist.currentChannel) plist.currentChannel->stop();
-            plist.currentChannel = nullptr;
+            if (plist.isPlaying)
+            {
+                if (plist.currentChannel)
+                {
+                    bool isPlaying = false;
+                    plist.currentChannel->isPlaying(&isPlaying);
+                    if (isPlaying)
+                    {
+                        std::string currentTrack = plist.tracks[plist.currentIndex];
+                        AudioManager::GetInstance().StopSoundWithFadeOut(currentTrack);
+                    }
+                }
+                
+                if (plist.nextChannel)
+                {
+                    bool isPlaying = false;
+                    plist.nextChannel->isPlaying(&isPlaying);
+                    if (isPlaying)
+                    {
+                        int nextIndex = (plist.currentIndex + 1) % plist.tracks.size();
+                        std::string nextTrack = plist.tracks[nextIndex];
+                        AudioManager::GetInstance().StopSoundWithFadeOut(nextTrack);
+                    }
+                }
+                
+                plist.isPlaying = false;
+                plist.isCrossfading = false;
+                plist.currentChannel = nullptr;
+                plist.nextChannel = nullptr;
+            }
         }
-        return;
-    }
-
-    auto it = std::find_if(m_playlists.begin(), m_playlists.end(),
-        [&playlistName](const Playlist& p) { return p.name == playlistName; });
-
-    if (it != m_playlists.end())
-    {
-        Playlist& plist = *it;
-        if (plist.currentChannel)
-        {
-            bool isPlaying;
-            plist.currentChannel->isPlaying(&isPlaying);
-            if (isPlaying)
-                plist.currentChannel->stop();
-            plist.currentChannel = nullptr;
-        }
-        if (plist.nextChannel)
-        {
-            bool isPlaying;
-            plist.nextChannel->isPlaying(&isPlaying);
-            if (isPlaying)
-                plist.nextChannel->stop();
-            plist.nextChannel = nullptr;
-        }
-        plist.isPlaying = false;
-        plist.isCrossfading = false;
-        plist.currentIndex = -1;
-        plist.randomIndexPos = 0;
-
-        spdlog::info("Playlist '{}' stopped.", playlistName);
+        
+        spdlog::info("Toutes les playlists ont été arrêtées avec fade-out");
     }
     else
     {
-        spdlog::error("Playlist '{}' not found (Stop).", playlistName);
+        for (auto& plist : m_playlists)
+        {
+            if (plist.name == playlistName && plist.isPlaying)
+            {
+                if (plist.currentChannel)
+                {
+                    bool isPlaying = false;
+                    plist.currentChannel->isPlaying(&isPlaying);
+                    if (isPlaying)
+                    {
+                        std::string currentTrack = plist.tracks[plist.currentIndex];
+                        AudioManager::GetInstance().StopSoundWithFadeOut(currentTrack);
+                    }
+                }
+                
+                if (plist.nextChannel)
+                {
+                    bool isPlaying = false;
+                    plist.nextChannel->isPlaying(&isPlaying);
+                    if (isPlaying)
+                    {
+                        int nextIndex = (plist.currentIndex + 1) % plist.tracks.size();
+                        std::string nextTrack = plist.tracks[nextIndex];
+                        AudioManager::GetInstance().StopSoundWithFadeOut(nextTrack);
+                    }
+                }
+                
+                plist.isPlaying = false;
+                plist.isCrossfading = false;
+                plist.currentChannel = nullptr;
+                plist.nextChannel = nullptr;
+                
+                spdlog::info("Playlist '{}' arrêtée avec fade-out", playlistName);
+                break;
+            }
+        }
     }
 }
 
@@ -227,13 +260,18 @@ void PlaylistManager::Update(float deltaTime)
 
             if (!isPlaying && !plist.segmentModeActive)
             {
-                if (plist.options.loopPlaylist)
+                if (plist.options.loopPlaylist && plist.tracks.size() == 1)
                 {
                     StartTrackAtIndex(plist, plist.currentIndex);
                 }
-                else
+                else if (plist.options.loopPlaylist || plist.tracks.size() > 1)
                 {
                     StartNextTrack(plist);
+                }
+                else
+                {
+                    plist.isPlaying = false;
+                    spdlog::info("Playlist '{}' finished playing (no loop option).", plist.name);
                 }
                 continue;
             }
@@ -253,7 +291,14 @@ void PlaylistManager::Update(float deltaTime)
                         plist.segmentTimer += deltaTime;
                         if (plist.segmentTimer >= effectiveSegmentDuration)
                         {
-                            StartNextTrack(plist);
+                            if (plist.tracks.size() == 1)
+                            {
+                                StartTrackAtIndex(plist, plist.currentIndex);
+                            }
+                            else
+                            {
+                                StartNextTrack(plist);
+                            }
                             continue;
                         }
                     }
@@ -439,7 +484,8 @@ void PlaylistManager::StartTrackAtIndex(Playlist& plist, int index)
     float userVolume = UIManager::GetInstance().GetMasterVolume() 
                      * UIManager::GetInstance().GetMusicVolume();
 
-    bool doLoop = (!plist.segmentModeActive && plist.options.loopPlaylist);
+    bool doLoop = (!plist.options.randomSegment && plist.options.loopPlaylist && plist.tracks.size() == 1);
+    
     FMOD::Channel* ch = AudioManager::GetInstance().PlaySound(track, doLoop, userVolume);
     if (!ch) {
         spdlog::error("Failed to start track at index {}", index);
@@ -464,8 +510,11 @@ void PlaylistManager::StartTrackAtIndex(Playlist& plist, int index)
     }
 
     plist.segmentTimer = 0.0f;
-    if (plist.segmentModeActive && ch)
+    
+    if (plist.options.randomSegment && ch)
     {
+        plist.segmentModeActive = true;
+        
         FMOD::Sound* sound = nullptr;
         ch->getCurrentSound(&sound);
         if (sound)
@@ -474,13 +523,21 @@ void PlaylistManager::StartTrackAtIndex(Playlist& plist, int index)
             sound->getLength(&lengthMs, FMOD_TIMEUNIT_MS);
             float lengthSec = lengthMs / 1000.0f;
 
-            float maxStart = (lengthSec > plist.segmentMaxDuration)
-                             ? (lengthSec - plist.segmentMaxDuration)
+            float maxStart = (lengthSec > plist.options.segmentDuration)
+                             ? (lengthSec - plist.options.segmentDuration)
                              : 0.0f;
+            
             std::uniform_real_distribution<float> dist(0.0f, maxStart);
             plist.chosenStartTime = dist(m_rng);
+            
             ch->setPosition((unsigned int)(plist.chosenStartTime * 1000.0f), FMOD_TIMEUNIT_MS);
+            
+            plist.segmentMaxDuration = plist.options.segmentDuration;
         }
+    }
+    else
+    {
+        plist.segmentModeActive = false;
     }
 }
 
@@ -566,15 +623,20 @@ void PlaylistManager::PlayFromIndex(const std::string& playlistName, int index)
     Playlist& plist = *it;
     if (index < 0 || index >= (int)plist.tracks.size()) return;
 
-    PlaylistOptions opts;
-    plist.options = opts; 
+    if (!plist.isPlaying) {
+        PlaylistOptions opts;
+        plist.options = opts;
+    }
+    
     plist.isPlaying = true;
-
     plist.currentIndex = index;
     plist.currentChannel = nullptr;
-    plist.nextChannel    = nullptr;
-    plist.isCrossfading  = false;
+    plist.nextChannel = nullptr;
+    plist.isCrossfading = false;
     plist.crossfadeTimer = 0.0f;
+
+    plist.segmentModeActive = plist.options.randomSegment;
+    plist.segmentTimer = 0.0f;
 
     StartTrackAtIndex(plist, index);
 }

@@ -27,12 +27,35 @@ public:
         return instance;
     }
 
-    FMOD::Channel* PlayAnnouncement(const std::string& announceName, float volumeDuck, bool useSFXBefore = true, bool useSFXAfter = true);
-    bool LoadAnnouncement(const std::string& announceName, const std::string& filePath);
+    FMOD::Channel* PlayAnnouncement(const std::string& announcementId, float volumeDuck, bool useSFXBefore = true, bool useSFXAfter = true);
+    
+    void ScheduleAnnouncement(int hour, int minute, const std::string& announcementId);
+    void AddScheduledAnnouncement(int hour, int minute, const std::string& annID);
+    
+    bool LoadAnnouncement(const std::string& announcementId, const std::string& filePath);
+    
     void Update(float deltaTime);
     void StopAnnouncement();
-
-    void AddScheduledAnnouncement(int hour, int minute, const std::string& annID);
+    
+    struct ScheduledAnnouncement
+    {
+        int hour;
+        int minute;
+        std::string announcementId;
+        std::string announceID;
+        bool triggered = false;
+    };
+    
+    const std::vector<ScheduledAnnouncement>& GetScheduledAnnouncements() const { return m_scheduled; }
+    void RemoveScheduledAnnouncement(size_t index);
+    void UpdateScheduledAnnouncement(size_t index, int hour, int minute, const std::string& announcementId);
+    void ResetTriggeredAnnouncements();
+    
+    bool IsAnnouncing() const { return m_isAnnouncing; }
+    AnnouncementState GetAnnouncementState() const { return m_state; }
+    std::string GetCurrentAnnouncementName() const { return m_currentAnnouncementName; }
+    float GetAnnouncementProgress() const;
+    std::string GetAnnouncementStateString() const;
 
 private:
     AnnouncementManager() = default;
@@ -40,19 +63,11 @@ private:
     AnnouncementManager(const AnnouncementManager&) = delete;
     AnnouncementManager& operator=(const AnnouncementManager&) = delete;
 
-    struct ScheduledAnnouncement
-    {
-        int hour;
-        int minute;
-        std::string announceID;
-        bool triggered = false;
-    };
-
     AnnouncementState m_state = AnnouncementState::IDLE;
 
-    float m_duckVolume       = 0.3f;   // 0.3 => 30%
-    float m_duckFadeDuration = 1.5f;   // 1.5 secondes
-    float m_duckTimer        = 0.0f;   // compteur d'interpolation
+    float m_duckVolume       = 0.3f;
+    float m_duckFadeDuration = 1.5f;  
+    float m_duckTimer        = 0.0f;
 
     bool  m_useSFXBefore = true;
     bool  m_useSFXAfter  = true;
@@ -62,12 +77,6 @@ private:
     FMOD::Channel* m_currentAnnouncementChannel = nullptr;
     std::string    m_currentAnnouncementName;
     bool           m_isAnnouncing = false;
-
-    struct AnnounceData
-    {
-        FMOD::Sound* sound = nullptr;
-    };
-    std::map<std::string, AnnounceData> m_announcements;
 
 private:
     void CheckSchedules(float deltaTime);
