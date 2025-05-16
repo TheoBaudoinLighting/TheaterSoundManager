@@ -1173,4 +1173,27 @@ std::string PlaylistManager::GetTrackDuration(int index) const
     return activePlaylist->tracks[index];
 }
 
+void PlaylistManager::SkipToNextTrack(const std::string& playlistName)
+{
+    auto it = std::find_if(m_playlists.begin(), m_playlists.end(),
+        [&playlistName](const Playlist& p) { return p.name == playlistName; });
+
+    if (it == m_playlists.end() || !it->isPlaying)
+    {
+        spdlog::error("Playlist '{}' introuvable ou pas en lecture.", playlistName);
+        return;
+    }
+
+    Playlist& plist = *it;
+    
+    if (plist.isCrossfading)
+    {
+        FinishCrossfade(plist);
+    }
+    
+    StartNextTrack(plist);
+    
+    spdlog::info("Passage à la piste suivante dans la playlist '{}'.", playlistName);
+}
+
 } // namespace TSM

@@ -64,7 +64,7 @@ public:
     float GetCrossfadeProgress() const;
     FMOD::Channel* GetNextChannel() const;
     
-    
+    void SkipToNextTrack(const std::string& playlistName);
 
 private:
     PlaylistManager() : m_rng(std::random_device{}()) {}
@@ -103,7 +103,6 @@ private:
     Playlist* m_currentPlaylist = nullptr;
     std::string m_activePlaylistName;
 
-    
 
     void StartNextTrack(Playlist& plist);
     void StartTrackAtIndex(Playlist& plist, int index);

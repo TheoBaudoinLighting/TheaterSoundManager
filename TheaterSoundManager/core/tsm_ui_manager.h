@@ -7,6 +7,8 @@
 #include <vector>
 #include <optional>
 
+#include "tsm_playlist_manager.h"
+
 namespace TSM
 {
 
@@ -129,7 +131,11 @@ private:
     std::string m_weddingCeremonySoundId = "wedding_ceremony_sound";
     std::string m_weddingExitSoundId = "wedding_exit_sound";
     
-    std::string m_normalPlaylistAfterWedding = "playlist_test";
+    std::string m_normalPlaylistAfterWedding = "playlist_after_wedding";
+
+    
+    PlaylistOptions m_opts;
+    std::string m_playlistName = "playlist_sample";
 };
 
 } // namespace TSM

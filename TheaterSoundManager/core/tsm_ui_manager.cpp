@@ -253,7 +253,8 @@ UIManager::UIManager()
       m_weddingEntranceSoundId("wedding_entrance_sound"),
       m_weddingCeremonySoundId("wedding_ceremony_sound"),
       m_weddingExitSoundId("wedding_exit_sound"),
-      m_normalPlaylistAfterWedding("playlist_test")
+      m_normalPlaylistAfterWedding("playlist_test"),
+      m_playlistName("playlist_test")
 {
 }
 
@@ -1311,28 +1312,34 @@ void UIManager::RenderPlaylistControls()
     if (ImGui::Button("Play")) {
         auto& playlistManager = PlaylistManager::GetInstance();
         
-        playlistManager.SetCrossfadeDuration(crossfadeDuration);
+        playlistManager.SetCrossfadeDuration(m_crossfadeDuration);
         
-        playlistManager.Play(playlistName, opts);
+        playlistManager.Play(m_playlistName, m_opts);
         UpdateAllVolumes();
     }
 
     ImGui::SameLine();
 
     if (ImGui::Button("Stop")) {
-        PlaylistManager::GetInstance().Stop(playlistName);
+        PlaylistManager::GetInstance().Stop(m_playlistName);
+    }
+
+    ImGui::SameLine();
+
+    if (ImGui::Button("Skip")) {
+        PlaylistManager::GetInstance().SkipToNextTrack(m_playlistName);
     }
 
     ImGui::Separator();
     ImGui::Text("Options de lecture:");
     
-    ImGui::Checkbox("Random Order", &opts.randomOrder);
-    ImGui::Checkbox("Random Segment", &opts.randomSegment);
-    ImGui::Checkbox("Loop Playlist", &opts.loopPlaylist);
-    ImGui::SliderFloat("Segment Duration", &opts.segmentDuration, 10.0f, 300.0f, "%.1f s");
+    ImGui::Checkbox("Random Order", &m_opts.randomOrder);
+    ImGui::Checkbox("Random Segment", &m_opts.randomSegment);
+    ImGui::Checkbox("Loop Playlist", &m_opts.loopPlaylist);
+    ImGui::SliderFloat("Segment Duration", &m_opts.segmentDuration, 10.0f, 300.0f, "%.1f s");
     
-    if (ImGui::SliderFloat("Crossfade Duration", &crossfadeDuration, 0.0f, 10.0f, "%.1f s")) {
-        PlaylistManager::GetInstance().SetCrossfadeDuration(crossfadeDuration);
+    if (ImGui::SliderFloat("Crossfade Duration", &m_crossfadeDuration, 0.0f, 10.0f, "%.1f s")) {
+        PlaylistManager::GetInstance().SetCrossfadeDuration(m_crossfadeDuration);
     }
     
     ImGui::Spacing();
@@ -1426,10 +1433,10 @@ void UIManager::RenderPlaylistControls()
             ImGui::PopStyleColor();
         }
 
-        if (opts.randomSegment)
+        if (m_opts.randomSegment)
         {
             float segmentProgress = PlaylistManager::GetInstance().GetSegmentProgress();
-            float remainingSegmentTime = opts.segmentDuration * (1.0f - segmentProgress);
+            float remainingSegmentTime = m_opts.segmentDuration * (1.0f - segmentProgress);
             
             char segmentText[32];
             snprintf(segmentText, sizeof(segmentText), "%.1fs remaining", remainingSegmentTime);
