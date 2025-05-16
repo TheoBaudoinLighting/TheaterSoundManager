@@ -41,6 +41,11 @@
 TheaterSoundManager/external*
 TheaterSoundManager/out*
 
+TheaterSoundManager_Tests/x64/*
+x64/*
 packages/*
 *.log
 *.ini
+
+*.json
+*.log

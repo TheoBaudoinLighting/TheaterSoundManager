@@ -1,55 +1,55 @@
-[TSM] [20:14:11] [info] FMOD initialized successfully.
-[TSM] [20:14:12] [info] Playlist 'playlist_test' created.
-[TSM] [20:14:12] [info] Local Bluetooth address: 0x136685073311034.
-[TSM] [20:14:12] [info] FMOD createSound success: hi_diddle_dee for file: assets/musics/Entrance(Fantasia Gardens) - Hi diddle dee dee (Pinocchio).mp3
-[TSM] [20:14:12] [info] Sound loaded successfully: hi_diddle_dee
-[TSM] [20:14:12] [info] Server listening on RFCOMM port: 4.
-[TSM] [20:14:12] [info] FMOD createSound success: be_our_guest for file: assets/musics/Entrance(Fantasia Gardens) - Be our guest (Beauty and the beast).mp3
-[TSM] [20:14:12] [info] Sound loaded successfully: be_our_guest
-[TSM] [20:14:12] [info] Service registered with name 'TheaterSound'.
-[TSM] [20:14:12] [info] Waiting for Bluetooth connection...
-[TSM] [20:14:12] [info] FMOD createSound success: rise_and_shine for file: assets/musics/Entrance(Fantasia Gardens) - Rise and shine (Monsters university).mp3
-[TSM] [20:14:12] [info] Sound loaded successfully: rise_and_shine
-[TSM] [20:14:12] [info] FMOD createSound success: supercalifragilisticexpialidocious for file: assets/musics/Entrance(Fantasia Gardens) - Supercalifragilisticexpialidocious (Mary Poppins).mp3
-[TSM] [20:14:12] [info] Sound loaded successfully: supercalifragilisticexpialidocious
-[TSM] [20:14:12] [info] FMOD createSound success: walk_to_work for file: assets/musics/Entrance(Fantasia Gardens) - Walk to work (Monsters inc. ).mp3
-[TSM] [20:14:12] [info] Sound loaded successfully: walk_to_work
-[TSM] [20:14:12] [info] FMOD createSound success: pinocchio_village_haus for file: assets/musics/Pinocchio Village Haus Magic Kingdom Walt Disney World full Area music (1991-present).mp3
-[TSM] [20:14:12] [info] Sound loaded successfully: pinocchio_village_haus
-[TSM] [20:14:12] [info] FMOD createSound success: indiana_jones for file: assets/musics/The Music Of Indiana Jones And The Temple Of Peril・Disneyland Paris (BGMComplete Loop).mp3
-[TSM] [20:14:12] [info] Sound loaded successfully: indiana_jones
-[TSM] [20:14:12] [info] FMOD createSound success: mickey_minnie_runaway_railway for file: assets/musics/Mickey & Minnie's Runaway Railway - Full Exit Music.mp3
-[TSM] [20:14:12] [info] Sound loaded successfully: mickey_minnie_runaway_railway
-[TSM] [20:14:12] [info] FMOD createSound success: royal_street for file: assets/musics/RoyalStreet - Area Background Music  at Tokyo Disneyland.mp3
-[TSM] [20:14:12] [info] Sound loaded successfully: royal_street
-[TSM] [20:14:12] [info] FMOD createSound success: whistle_while_you_work for file: assets/musics/Entrance(Fantasia Gardens) - Whistle while you work (Snow white).mp3
-[TSM] [20:14:12] [info] Sound loaded successfully: whistle_while_you_work
-[TSM] [20:14:12] [info] Added 'hi_diddle_dee' to playlist 'playlist_test'.
-[TSM] [20:14:12] [info] Added 'be_our_guest' to playlist 'playlist_test'.
-[TSM] [20:14:12] [info] Added 'rise_and_shine' to playlist 'playlist_test'.
-[TSM] [20:14:12] [info] Added 'supercalifragilisticexpialidocious' to playlist 'playlist_test'.
-[TSM] [20:14:12] [info] Added 'walk_to_work' to playlist 'playlist_test'.
-[TSM] [20:14:12] [info] Added 'pinocchio_village_haus' to playlist 'playlist_test'.
-[TSM] [20:14:12] [info] Added 'indiana_jones' to playlist 'playlist_test'.
-[TSM] [20:14:12] [info] Added 'mickey_minnie_runaway_railway' to playlist 'playlist_test'.
-[TSM] [20:14:12] [info] Added 'royal_street' to playlist 'playlist_test'.
-[TSM] [20:14:12] [info] Added 'whistle_while_you_work' to playlist 'playlist_test'.
-[TSM] [20:14:12] [info] FMOD createSound success: wedding_entrance_sound for file: assets/wedding/Entree_RunrigHeartsOfOldenGlory.mp3
-[TSM] [20:14:12] [info] Sound loaded successfully: wedding_entrance_sound
-[TSM] [20:14:12] [info] Son de mariage phase 1 chargé avec succès: assets/wedding/Entree_RunrigHeartsOfOldenGlory.mp3
-[TSM] [20:14:12] [info] FMOD createSound success: wedding_ceremony_sound for file: assets/wedding/Loop_PortOrleanAmbience.mp3
-[TSM] [20:14:12] [info] Sound loaded successfully: wedding_ceremony_sound
-[TSM] [20:14:12] [info] Son de mariage phase 2 chargé avec succès: assets/wedding/Loop_PortOrleanAmbience.mp3
-[TSM] [20:14:12] [info] FMOD createSound success: wedding_exit_sound for file: assets/wedding/Camille Saint-Saens - The Swan.mp3
-[TSM] [20:14:12] [info] Sound loaded successfully: wedding_exit_sound
-[TSM] [20:14:12] [info] Son de mariage phase 3 chargé avec succès: assets/wedding/Camille Saint-Saens - The Swan.mp3
-[TSM] [20:14:12] [info] FMOD createSound success: sfx_shine for file: assets/sfx/DisneyShine_SFX.mp3
-[TSM] [20:14:12] [info] Sound loaded successfully: sfx_shine
-[TSM] [20:14:12] [info] FMOD createSound success: announce_5min_buffet for file: assets/annonces/French/5min_buffet.mp3
-[TSM] [20:14:12] [info] Sound loaded successfully: announce_5min_buffet
-[TSM] [20:14:12] [info] Annonce 'announce_5min_buffet' chargée avec succès: assets/annonces/French/5min_buffet.mp3
-[TSM] [20:14:12] [info] Annonce 'announce_5min_buffet' planifiée à 19:45
-[TSM] [20:14:12] [info] Chemin de la musique d'entrée mis à jour: assets/wedding/Entree_RunrigHeartsOfOldenGlory.mp3
-[TSM] [20:14:12] [info] Chemin de la musique de cérémonie mis à jour: assets/wedding/Loop_PortOrleanAmbience.mp3
-[TSM] [20:14:12] [info] Chemin de la musique de sortie mis à jour: assets/wedding/Camille Saint-Saens - The Swan.mp3
-[TSM] [20:14:32] [info] FMOD shutdown successfully.
+[TSM] [21:03:56] [info] FMOD initialized successfully.
+[TSM] [21:03:56] [info] Playlist 'playlist_test' created.
+[TSM] [21:03:56] [info] Local Bluetooth address: 0x136685073311034.
+[TSM] [21:03:56] [info] FMOD createSound success: hi_diddle_dee for file: assets/musics/Entrance(Fantasia Gardens) - Hi diddle dee dee (Pinocchio).mp3
+[TSM] [21:03:56] [info] Sound loaded successfully: hi_diddle_dee
+[TSM] [21:03:56] [info] Server listening on RFCOMM port: 4.
+[TSM] [21:03:56] [info] FMOD createSound success: be_our_guest for file: assets/musics/Entrance(Fantasia Gardens) - Be our guest (Beauty and the beast).mp3
+[TSM] [21:03:56] [info] Sound loaded successfully: be_our_guest
+[TSM] [21:03:56] [info] Service registered with name 'TheaterSound'.
+[TSM] [21:03:56] [info] FMOD createSound success: rise_and_shine for file: assets/musics/Entrance(Fantasia Gardens) - Rise and shine (Monsters university).mp3
+[TSM] [21:03:56] [info] Waiting for Bluetooth connection...
+[TSM] [21:03:56] [info] Sound loaded successfully: rise_and_shine
+[TSM] [21:03:56] [info] FMOD createSound success: supercalifragilisticexpialidocious for file: assets/musics/Entrance(Fantasia Gardens) - Supercalifragilisticexpialidocious (Mary Poppins).mp3
+[TSM] [21:03:56] [info] Sound loaded successfully: supercalifragilisticexpialidocious
+[TSM] [21:03:56] [info] FMOD createSound success: walk_to_work for file: assets/musics/Entrance(Fantasia Gardens) - Walk to work (Monsters inc. ).mp3
+[TSM] [21:03:56] [info] Sound loaded successfully: walk_to_work
+[TSM] [21:03:56] [info] FMOD createSound success: pinocchio_village_haus for file: assets/musics/Pinocchio Village Haus Magic Kingdom Walt Disney World full Area music (1991-present).mp3
+[TSM] [21:03:56] [info] Sound loaded successfully: pinocchio_village_haus
+[TSM] [21:03:56] [info] FMOD createSound success: indiana_jones for file: assets/musics/The Music Of Indiana Jones And The Temple Of Peril・Disneyland Paris (BGMComplete Loop).mp3
+[TSM] [21:03:56] [info] Sound loaded successfully: indiana_jones
+[TSM] [21:03:56] [info] FMOD createSound success: mickey_minnie_runaway_railway for file: assets/musics/Mickey & Minnie's Runaway Railway - Full Exit Music.mp3
+[TSM] [21:03:56] [info] Sound loaded successfully: mickey_minnie_runaway_railway
+[TSM] [21:03:56] [info] FMOD createSound success: royal_street for file: assets/musics/RoyalStreet - Area Background Music  at Tokyo Disneyland.mp3
+[TSM] [21:03:56] [info] Sound loaded successfully: royal_street
+[TSM] [21:03:56] [info] FMOD createSound success: whistle_while_you_work for file: assets/musics/Entrance(Fantasia Gardens) - Whistle while you work (Snow white).mp3
+[TSM] [21:03:56] [info] Sound loaded successfully: whistle_while_you_work
+[TSM] [21:03:56] [info] Added 'hi_diddle_dee' to playlist 'playlist_test'.
+[TSM] [21:03:56] [info] Added 'be_our_guest' to playlist 'playlist_test'.
+[TSM] [21:03:56] [info] Added 'rise_and_shine' to playlist 'playlist_test'.
+[TSM] [21:03:56] [info] Added 'supercalifragilisticexpialidocious' to playlist 'playlist_test'.
+[TSM] [21:03:56] [info] Added 'walk_to_work' to playlist 'playlist_test'.
+[TSM] [21:03:56] [info] Added 'pinocchio_village_haus' to playlist 'playlist_test'.
+[TSM] [21:03:56] [info] Added 'indiana_jones' to playlist 'playlist_test'.
+[TSM] [21:03:56] [info] Added 'mickey_minnie_runaway_railway' to playlist 'playlist_test'.
+[TSM] [21:03:56] [info] Added 'royal_street' to playlist 'playlist_test'.
+[TSM] [21:03:56] [info] Added 'whistle_while_you_work' to playlist 'playlist_test'.
+[TSM] [21:03:56] [info] FMOD createSound success: wedding_entrance_sound for file: assets/wedding/Entree_RunrigHeartsOfOldenGlory.mp3
+[TSM] [21:03:56] [info] Sound loaded successfully: wedding_entrance_sound
+[TSM] [21:03:56] [info] Son de mariage phase 1 chargé avec succès: assets/wedding/Entree_RunrigHeartsOfOldenGlory.mp3
+[TSM] [21:03:56] [info] FMOD createSound success: wedding_ceremony_sound for file: assets/wedding/Loop_PortOrleanAmbience.mp3
+[TSM] [21:03:56] [info] Sound loaded successfully: wedding_ceremony_sound
+[TSM] [21:03:56] [info] Son de mariage phase 2 chargé avec succès: assets/wedding/Loop_PortOrleanAmbience.mp3
+[TSM] [21:03:56] [info] FMOD createSound success: wedding_exit_sound for file: assets/wedding/Camille Saint-Saens - The Swan.mp3
+[TSM] [21:03:56] [info] Sound loaded successfully: wedding_exit_sound
+[TSM] [21:03:56] [info] Son de mariage phase 3 chargé avec succès: assets/wedding/Camille Saint-Saens - The Swan.mp3
+[TSM] [21:03:56] [info] FMOD createSound success: sfx_shine for file: assets/sfx/DisneyShine_SFX.mp3
+[TSM] [21:03:56] [info] Sound loaded successfully: sfx_shine
+[TSM] [21:03:56] [info] FMOD createSound success: announce_5min_buffet for file: assets/annonces/French/5min_buffet.mp3
+[TSM] [21:03:56] [info] Sound loaded successfully: announce_5min_buffet
+[TSM] [21:03:56] [info] Annonce 'announce_5min_buffet' chargée avec succès: assets/annonces/French/5min_buffet.mp3
+[TSM] [21:03:56] [info] Annonce 'announce_5min_buffet' planifiée à 19:45
+[TSM] [21:03:56] [info] Chemin de la musique d'entrée mis à jour: assets/wedding/Entree_RunrigHeartsOfOldenGlory.mp3
+[TSM] [21:03:56] [info] Chemin de la musique de cérémonie mis à jour: assets/wedding/Loop_PortOrleanAmbience.mp3
+[TSM] [21:03:56] [info] Chemin de la musique de sortie mis à jour: assets/wedding/Camille Saint-Saens - The Swan.mp3
+[TSM] [21:04:03] [info] FMOD shutdown successfully.

@@ -110,7 +110,7 @@
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)external\imgui;$(ProjectDir)external\imgui\backends;$(ProjectDir)external\sdl\include;$(ProjectDir)external\sdl_mixer\include;$(ProjectDir)external\fmod\inc;$(ProjectDir)core;$(ProjectDir)core\imgui;$(ProjectDir)core\math;$(ProjectDir)core\sdl;$(ProjectDir)core\sound;$(ProjectDir)external\spdlog\include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)external\imgui;$(ProjectDir)external\imgui\backends;$(ProjectDir)external\sdl\include;$(ProjectDir)external\sdl_mixer\include;$(ProjectDir)external\fmod\inc;$(ProjectDir)core;$(ProjectDir)core\imgui;$(ProjectDir)core\math;$(ProjectDir)core\sdl;$(ProjectDir)core\sound;$(ProjectDir)external\spdlog\include\;$(ProjectDir)external\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>

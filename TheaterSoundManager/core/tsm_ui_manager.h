@@ -71,6 +71,7 @@ private:
 
     void RenderAudioLibrary();
     void RenderMusicPlaylistTab();
+    void RenderPlaylistManagerTab();
     void RenderAnnouncementsTab();
     void RenderSFXTab();
     void RenderWeddingModeTab();

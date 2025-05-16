@@ -1,0 +1,61 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="pch.cpp" />
+    <ClCompile Include="..\TheaterSoundManager\core\tsm_announcement_manager.cpp">
+      <Filter>main</Filter>
+    </ClCompile>
+    <ClCompile Include="..\TheaterSoundManager\core\tsm_audio_manager.cpp">
+      <Filter>main</Filter>
+    </ClCompile>
+    <ClCompile Include="..\TheaterSoundManager\core\tsm_bluetooth_server.cpp">
+      <Filter>main</Filter>
+    </ClCompile>
+    <ClCompile Include="..\TheaterSoundManager\core\tsm_fmod_wrapper.cpp">
+      <Filter>main</Filter>
+    </ClCompile>
+    <ClCompile Include="..\TheaterSoundManager\core\tsm_playlist_manager.cpp">
+      <Filter>main</Filter>
+    </ClCompile>
+    <ClCompile Include="..\TheaterSoundManager\core\tsm_ui_manager.cpp">
+      <Filter>main</Filter>
+    </ClCompile>
+    <ClCompile Include="..\TheaterSoundManager\external\imgui\imgui.cpp">
+      <Filter>imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\TheaterSoundManager\external\imgui\imgui_demo.cpp">
+      <Filter>imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\TheaterSoundManager\external\imgui\imgui_draw.cpp">
+      <Filter>imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\TheaterSoundManager\external\imgui\imgui_tables.cpp">
+      <Filter>imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\TheaterSoundManager\external\imgui\imgui_widgets.cpp">
+      <Filter>imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\TheaterSoundManager\external\imgui\backends\imgui_impl_opengl3.cpp">
+      <Filter>imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\TheaterSoundManager\external\imgui\backends\imgui_impl_sdl2.cpp">
+      <Filter>imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="tsm_playlist_manager_test.cpp" />
+    <ClCompile Include="tsm_annoucement_manager_tests.cpp" />
+    <ClCompile Include="tsm_ui_manager_tests.cpp" />
+    <ClCompile Include="tsm_audio_manager_logic_tests.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="pch.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="main">
+      <UniqueIdentifier>{d79ae093-dd8c-4a12-9f93-1a29dbdbe572}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="imgui">
+      <UniqueIdentifier>{50eabcf1-19fe-43f3-8c92-7bb8906aedda}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

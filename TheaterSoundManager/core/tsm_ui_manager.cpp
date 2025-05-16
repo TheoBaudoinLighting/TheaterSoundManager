@@ -598,11 +598,421 @@ void UIManager::PostRender()
     SDL_GL_SwapWindow(m_window);
 }
 
+void UIManager::RenderPlaylistManagerTab()
+{
+    static char newPlaylistName[256] = "";
+    static int selectedPlaylistIndex = -1;
+    static std::vector<std::string> playlistNames;
+    static char renameBuffer[256] = "";
+    static bool renameMode = false;
+    static bool showImportExportOptions = false;
+    static char importExportPath[512] = "playlists.json";
+    
+    if (ImGui::Button("Actualiser les playlists", ImVec2(200, 30)))
+    {
+        playlistNames = PlaylistManager::GetInstance().GetPlaylistNames();
+        if (selectedPlaylistIndex >= static_cast<int>(playlistNames.size()))
+        {
+            selectedPlaylistIndex = -1;
+        }
+    }
+    
+    // Section création de playlist
+    ImGui::Separator();
+    ImGui::Text("Créer une nouvelle playlist");
+    
+    ImGui::InputText("Nom de la playlist", newPlaylistName, IM_ARRAYSIZE(newPlaylistName));
+    
+    if (ImGui::Button("Créer", ImVec2(100, 30)))
+    {
+        if (strlen(newPlaylistName) > 0)
+        {
+            PlaylistManager::GetInstance().CreatePlaylist(newPlaylistName);
+            playlistNames = PlaylistManager::GetInstance().GetPlaylistNames();
+            newPlaylistName[0] = '\0';
+        }
+    }
+    
+    // Section liste des playlists
+    ImGui::Separator();
+    ImGui::Text("Playlists disponibles");
+    
+    if (playlistNames.empty())
+    {
+        playlistNames = PlaylistManager::GetInstance().GetPlaylistNames();
+    }
+    
+    if (ImGui::BeginTable("PlaylistsTable", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+    {
+        ImGui::TableSetupColumn("Nom", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn("Pistes", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+        ImGui::TableSetupColumn("Statut", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+        ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, 300.0f);
+        ImGui::TableHeadersRow();
+        
+        for (int i = 0; i < playlistNames.size(); i++)
+        {
+            const auto& playlistName = playlistNames[i];
+            
+            ImGui::TableNextRow();
+            
+            ImGui::TableNextColumn();
+            ImGui::PushID(i);
+            
+            bool selected = (selectedPlaylistIndex == i);
+            if (ImGui::Selectable(playlistName.c_str(), selected, ImGuiSelectableFlags_SpanAllColumns))
+            {
+                selectedPlaylistIndex = i;
+                if (!renameMode)
+                {
+                    strncpy(renameBuffer, playlistName.c_str(), IM_ARRAYSIZE(renameBuffer) - 1);
+                    renameBuffer[IM_ARRAYSIZE(renameBuffer) - 1] = '\0';
+                }
+            }
+            
+            ImGui::TableNextColumn();
+            int trackCount = static_cast<int>(PlaylistManager::GetInstance().GetPlaylistTrackCount(playlistName));
+            ImGui::Text("%d", trackCount);
+            
+            ImGui::TableNextColumn();
+            bool isPlaying = PlaylistManager::GetInstance().IsPlaylistPlaying(playlistName);
+            ImGui::TextColored(isPlaying ? ImVec4(0.0f, 1.0f, 0.0f, 1.0f) : ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
+                            isPlaying ? "En lecture" : "Arrêtée");
+            
+            ImGui::TableNextColumn();
+            if (ImGui::Button("Lecture", ImVec2(70, 25)))
+            {
+                PlaylistOptions opts;
+                opts.randomOrder = false;
+                opts.loopPlaylist = true;
+                PlaylistManager::GetInstance().Play(playlistName, opts);
+            }
+            
+            ImGui::SameLine();
+            
+            if (ImGui::Button("Arrêter", ImVec2(70, 25)))
+            {
+                PlaylistManager::GetInstance().Stop(playlistName);
+            }
+            
+            ImGui::SameLine();
+            
+            if (ImGui::Button("Renommer", ImVec2(80, 25)))
+            {
+                renameMode = true;
+                selectedPlaylistIndex = i;
+                strncpy(renameBuffer, playlistName.c_str(), IM_ARRAYSIZE(renameBuffer) - 1);
+                renameBuffer[IM_ARRAYSIZE(renameBuffer) - 1] = '\0';
+            }
+            
+            ImGui::SameLine();
+            
+            if (ImGui::Button("Supprimer", ImVec2(80, 25)))
+            {
+                ImGui::OpenPopup("Confirmer suppression");
+            }
+            
+            if (ImGui::BeginPopupModal("Confirmer suppression", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+            {
+                ImGui::Text("Êtes-vous sûr de vouloir supprimer la playlist '%s'?", playlistName.c_str());
+                ImGui::Text("Cette action est irréversible!");
+                
+                if (ImGui::Button("Confirmer", ImVec2(120, 30)))
+                {
+                    PlaylistManager::GetInstance().DeletePlaylist(playlistName);
+                    playlistNames = PlaylistManager::GetInstance().GetPlaylistNames();
+                    if (selectedPlaylistIndex == i)
+                    {
+                        selectedPlaylistIndex = -1;
+                    }
+                    ImGui::CloseCurrentPopup();
+                }
+                
+                ImGui::SameLine();
+                
+                if (ImGui::Button("Annuler", ImVec2(120, 30)))
+                {
+                    ImGui::CloseCurrentPopup();
+                }
+                
+                ImGui::EndPopup();
+            }
+            
+            ImGui::PopID();
+        }
+        
+        ImGui::EndTable();
+    }
+    
+    // Section renommage de playlist
+    if (renameMode && selectedPlaylistIndex >= 0 && selectedPlaylistIndex < playlistNames.size())
+    {
+        ImGui::Separator();
+        ImGui::Text("Renommer la playlist '%s'", playlistNames[selectedPlaylistIndex].c_str());
+        
+        ImGui::InputText("Nouveau nom", renameBuffer, IM_ARRAYSIZE(renameBuffer));
+        
+        if (ImGui::Button("Appliquer", ImVec2(100, 30)))
+        {
+            if (strlen(renameBuffer) > 0)
+            {
+                PlaylistManager::GetInstance().RenamePlaylist(
+                    playlistNames[selectedPlaylistIndex], renameBuffer);
+                playlistNames = PlaylistManager::GetInstance().GetPlaylistNames();
+                renameMode = false;
+            }
+        }
+        
+        ImGui::SameLine();
+        
+        if (ImGui::Button("Annuler", ImVec2(100, 30)))
+        {
+            renameMode = false;
+        }
+    }
+    
+    // Section détail de la playlist sélectionnée
+    if (selectedPlaylistIndex >= 0 && selectedPlaylistIndex < playlistNames.size())
+    {
+        const std::string& selectedPlaylist = playlistNames[selectedPlaylistIndex];
+        const auto* playlist = PlaylistManager::GetInstance().GetPlaylistByName(selectedPlaylist);
+        
+        if (playlist)
+        {
+            ImGui::Separator();
+            ImGui::Text("Détails de la playlist: %s", selectedPlaylist.c_str());
+            
+            // Options de lecture
+            ImGui::Checkbox("Lecture aléatoire", const_cast<bool*>(&playlist->options.randomOrder));
+            ImGui::SameLine();
+            ImGui::Checkbox("Segment aléatoire", const_cast<bool*>(&playlist->options.randomSegment));
+            ImGui::SameLine();
+            ImGui::Checkbox("Boucler la playlist", const_cast<bool*>(&playlist->options.loopPlaylist));
+            ImGui::SliderFloat("Durée du segment", const_cast<float*>(&playlist->options.segmentDuration), 10.0f, 300.0f, "%.1fs");
+            
+            // Liste des pistes
+            ImGui::Text("Pistes dans la playlist:");
+            
+            if (ImGui::BeginTable("TracksTable", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+            {
+                ImGui::TableSetupColumn("Index", ImGuiTableColumnFlags_WidthFixed, 40.0f);
+                ImGui::TableSetupColumn("Nom", ImGuiTableColumnFlags_WidthStretch);
+                ImGui::TableSetupColumn("ID", ImGuiTableColumnFlags_WidthStretch);
+                ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, 200.0f);
+                ImGui::TableHeadersRow();
+                
+                for (size_t i = 0; i < playlist->tracks.size(); i++)
+                {
+                    const auto& trackId = playlist->tracks[i];
+                    
+                    ImGui::TableNextRow();
+                    
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%d", static_cast<int>(i));
+                    
+                    ImGui::TableNextColumn();
+                    
+                    std::string trackName = "Unknown";
+                    auto soundIt = AudioManager::GetInstance().GetAllSounds().find(trackId);
+                    if (soundIt != AudioManager::GetInstance().GetAllSounds().end())
+                    {
+                        trackName = GetDisplayName(soundIt->second.filePath);
+                    }
+                    
+                    ImGui::Text("%s", trackName.c_str());
+                    
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%s", trackId.c_str());
+                    
+                    ImGui::TableNextColumn();
+                    
+                    ImGui::PushID(static_cast<int>(i) + 10000);
+                    
+                    if (ImGui::Button("Jouer", ImVec2(50, 25)))
+                    {
+                        PlaylistManager::GetInstance().PlayFromIndex(selectedPlaylist, static_cast<int>(i));
+                    }
+                    
+                    ImGui::SameLine();
+                    
+                    if (i > 0)
+                    {
+                        if (ImGui::Button("↑", ImVec2(25, 25)))
+                        {
+                            PlaylistManager::GetInstance().MoveTrackUp(selectedPlaylist, static_cast<int>(i));
+                        }
+                        
+                        ImGui::SameLine();
+                    }
+                    else
+                    {
+                        ImGui::Dummy(ImVec2(25, 25));
+                        ImGui::SameLine();
+                    }
+                    
+                    if (i < playlist->tracks.size() - 1)
+                    {
+                        if (ImGui::Button("↓", ImVec2(25, 25)))
+                        {
+                            PlaylistManager::GetInstance().MoveTrackDown(selectedPlaylist, static_cast<int>(i));
+                        }
+                        
+                        ImGui::SameLine();
+                    }
+                    else
+                    {
+                        ImGui::Dummy(ImVec2(25, 25));
+                        ImGui::SameLine();
+                    }
+                    
+                    if (ImGui::Button("Supprimer", ImVec2(70, 25)))
+                    {
+                        PlaylistManager::GetInstance().RemoveFromPlaylistAtIndex(selectedPlaylist, i);
+                    }
+                    
+                    ImGui::PopID();
+                }
+                
+                ImGui::EndTable();
+            }
+            
+            // Ajouter de nouvelles pistes
+            static int selectedTrackToAdd = -1;
+            static std::vector<std::pair<std::string, std::string>> availableTracks;
+            
+            if (ImGui::Button("Rafraîchir les pistes disponibles", ImVec2(250, 30)))
+            {
+                availableTracks.clear();
+                
+                for (const auto& [soundId, soundData] : AudioManager::GetInstance().GetAllSounds())
+                {
+                    if (soundId.find("sfx_") == std::string::npos && 
+                        soundId.find("announce_") == std::string::npos)
+                    {
+                        availableTracks.push_back({soundId, GetDisplayName(soundData.filePath)});
+                    }
+                }
+                
+                std::sort(availableTracks.begin(), availableTracks.end(), 
+                    [](const auto& a, const auto& b) { return a.second < b.second; });
+            }
+            
+            if (availableTracks.empty())
+            {
+                if (ImGui::Button("Charger les pistes disponibles", ImVec2(250, 30)))
+                {
+                    availableTracks.clear();
+                    
+                    for (const auto& [soundId, soundData] : AudioManager::GetInstance().GetAllSounds())
+                    {
+                        if (soundId.find("sfx_") == std::string::npos && 
+                            soundId.find("announce_") == std::string::npos)
+                        {
+                            availableTracks.push_back({soundId, GetDisplayName(soundData.filePath)});
+                        }
+                    }
+                    
+                    std::sort(availableTracks.begin(), availableTracks.end(), 
+                        [](const auto& a, const auto& b) { return a.second < b.second; });
+                }
+            }
+            else
+            {
+                ImGui::Text("Ajouter une piste à la playlist:");
+                
+                if (ImGui::BeginListBox("##TracksToAdd", ImVec2(-1, 200)))
+                {
+                    for (int i = 0; i < availableTracks.size(); i++)
+                    {
+                        const bool isSelected = (selectedTrackToAdd == i);
+                        std::string displayName = availableTracks[i].second + " (" + availableTracks[i].first + ")";
+                        
+                        if (ImGui::Selectable(displayName.c_str(), isSelected))
+                        {
+                            selectedTrackToAdd = i;
+                        }
+                        
+                        if (isSelected)
+                        {
+                            ImGui::SetItemDefaultFocus();
+                        }
+                    }
+                    ImGui::EndListBox();
+                }
+                
+                if (selectedTrackToAdd >= 0 && selectedTrackToAdd < availableTracks.size())
+                {
+                    if (ImGui::Button("Ajouter à la playlist", ImVec2(200, 30)))
+                    {
+                        PlaylistManager::GetInstance().AddToPlaylist(
+                            selectedPlaylist, availableTracks[selectedTrackToAdd].first);
+                        selectedTrackToAdd = -1;
+                    }
+                }
+            }
+        }
+    }
+    
+    // Import/Export options
+    ImGui::Separator();
+    
+    if (ImGui::CollapsingHeader("Options d'importation/exportation", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        ImGui::InputText("Chemin du fichier", importExportPath, IM_ARRAYSIZE(importExportPath));
+        
+        if (ImGui::Button("Importer toutes les playlists", ImVec2(250, 30)))
+        {
+            if (PlaylistManager::GetInstance().LoadPlaylistsFromFile(importExportPath))
+            {
+                playlistNames = PlaylistManager::GetInstance().GetPlaylistNames();
+                selectedPlaylistIndex = -1;
+            }
+        }
+        
+        ImGui::SameLine();
+        
+        if (ImGui::Button("Exporter toutes les playlists", ImVec2(250, 30)))
+        {
+            PlaylistManager::GetInstance().SavePlaylistsToFile(importExportPath);
+        }
+        
+        if (selectedPlaylistIndex >= 0 && selectedPlaylistIndex < playlistNames.size())
+        {
+            const std::string& selectedPlaylist = playlistNames[selectedPlaylistIndex];
+            
+            ImGui::Separator();
+            ImGui::Text("Import/Export pour la playlist sélectionnée: %s", selectedPlaylist.c_str());
+            
+            static char singlePlaylistPath[512] = "playlist_single.json";
+            ImGui::InputText("Chemin du fichier unique", singlePlaylistPath, IM_ARRAYSIZE(singlePlaylistPath));
+            
+            if (ImGui::Button("Exporter cette playlist", ImVec2(200, 30)))
+            {
+                PlaylistManager::GetInstance().ExportPlaylist(selectedPlaylist, singlePlaylistPath);
+            }
+            
+            ImGui::SameLine();
+            
+            if (ImGui::Button("Importer comme nouvelle playlist", ImVec2(250, 30)))
+            {
+                if (PlaylistManager::GetInstance().ImportPlaylist(singlePlaylistPath))
+                {
+                    playlistNames = PlaylistManager::GetInstance().GetPlaylistNames();
+                }
+            }
+        }
+    }
+}
+
 void UIManager::RenderAudioLibrary() {
     ImGui::Begin("Audio Library Manager");
     if (ImGui::BeginTabBar("AudioLibraryTabs")) {
         if (ImGui::BeginTabItem("Music / Playlists")) {
             RenderMusicPlaylistTab();
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("Playlist Manager")) {  
+            RenderPlaylistManagerTab();
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Announcements")) {
@@ -628,9 +1038,11 @@ void UIManager::EnsureDefaultPlaylist() {
     }
 }
 
-std::string UIManager::GetDisplayName(const std::string& path) const {
+std::string UIManager::GetDisplayName(const std::string& path) const
+{
     size_t lastSlash = path.find_last_of("/\\");
-    if (lastSlash != std::string::npos) {
+    if (lastSlash != std::string::npos)
+    {
         return path.substr(lastSlash + 1);
     }
     return path;
@@ -896,26 +1308,6 @@ void UIManager::RenderSFXTab() {
 
 void UIManager::RenderPlaylistControls()
 {
-    static char playlistName[256] = "playlist_test";
-    static PlaylistOptions opts = {
-        .randomOrder = true,      
-        .randomSegment = true,    
-        .segmentDuration = 30.0f,
-        .loopPlaylist = true      
-    };
-    static float crossfadeDuration = 5.0f;
-    
-    ImGui::Text("Playlist Controls");
-    ImGui::Separator();
-
-    ImGui::InputText("Playlist Name", playlistName, IM_ARRAYSIZE(playlistName));
-
-    if (ImGui::Button("Create Playlist")) {
-        PlaylistManager::GetInstance().CreatePlaylist(playlistName);
-    }
-
-    ImGui::SameLine();
-    
     if (ImGui::Button("Play")) {
         auto& playlistManager = PlaylistManager::GetInstance();
         

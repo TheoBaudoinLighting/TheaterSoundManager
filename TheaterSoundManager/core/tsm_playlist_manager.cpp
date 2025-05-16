@@ -4,17 +4,18 @@
 #include "tsm_audio_manager.h"
 #include "tsm_fmod_wrapper.h"
 #include "tsm_ui_manager.h"
-
+#include <fstream>
+#include <spdlog/spdlog.h>
+#include <nlohmann/json.hpp>
 #include <algorithm>
 #include <random>
 #include <ctime>
 #include <cmath>
 
-#include <spdlog/spdlog.h>
-
 namespace TSM
 {
-    
+    using json = nlohmann::json;
+
 void PlaylistManager::CreatePlaylist(const std::string& playlistName)
 {
     auto it = std::find_if(m_playlists.begin(), m_playlists.end(),
@@ -26,11 +27,107 @@ void PlaylistManager::CreatePlaylist(const std::string& playlistName)
         newPlaylist.name = playlistName;
         m_playlists.push_back(newPlaylist);
         spdlog::info("Playlist '{}' created.", playlistName);
+        NotifyPlaylistChanged();
     }
     else
     {
         spdlog::error("Playlist '{}' already exists.", playlistName);
     }
+}
+
+void PlaylistManager::DeletePlaylist(const std::string& playlistName)
+{
+    auto it = std::find_if(m_playlists.begin(), m_playlists.end(),
+        [&playlistName](const Playlist& p) { return p.name == playlistName; });
+
+    if (it != m_playlists.end())
+    {
+        if (it->isPlaying)
+        {
+            Stop(playlistName);
+        }
+        
+        m_playlists.erase(it);
+        
+        if (m_activePlaylistName == playlistName)
+        {
+            m_activePlaylistName = "";
+        }
+        
+        spdlog::info("Playlist '{}' deleted.", playlistName);
+        NotifyPlaylistChanged();
+    }
+    else
+    {
+        spdlog::error("Playlist '{}' not found.", playlistName);
+    }
+}
+
+void PlaylistManager::RenamePlaylist(const std::string& oldName, const std::string& newName)
+{
+    if (oldName == newName) return;
+    
+    auto existingNew = std::find_if(m_playlists.begin(), m_playlists.end(),
+        [&newName](const Playlist& p) { return p.name == newName; });
+
+    if (existingNew != m_playlists.end())
+    {
+        spdlog::error("Cannot rename playlist. Target name '{}' already exists.", newName);
+        return;
+    }
+    
+    auto it = std::find_if(m_playlists.begin(), m_playlists.end(),
+        [&oldName](const Playlist& p) { return p.name == oldName; });
+
+    if (it != m_playlists.end())
+    {
+        it->name = newName;
+        
+        if (m_activePlaylistName == oldName)
+        {
+            m_activePlaylistName = newName;
+        }
+        
+        spdlog::info("Playlist renamed from '{}' to '{}'.", oldName, newName);
+        NotifyPlaylistChanged();
+    }
+    else
+    {
+        spdlog::error("Playlist '{}' not found.", oldName);
+    }
+}
+
+void PlaylistManager::DuplicatePlaylist(const std::string& sourceName, const std::string& destName)
+{
+    auto sourceIt = std::find_if(m_playlists.begin(), m_playlists.end(),
+        [&sourceName](const Playlist& p) { return p.name == sourceName; });
+
+    if (sourceIt == m_playlists.end())
+    {
+        spdlog::error("Source playlist '{}' not found.", sourceName);
+        return;
+    }
+    
+    auto destIt = std::find_if(m_playlists.begin(), m_playlists.end(),
+        [&destName](const Playlist& p) { return p.name == destName; });
+
+    if (destIt != m_playlists.end())
+    {
+        spdlog::error("Destination playlist '{}' already exists.", destName);
+        return;
+    }
+    
+    Playlist newPlaylist = *sourceIt;
+    newPlaylist.name = destName;
+    newPlaylist.isPlaying = false;
+    newPlaylist.currentChannel = nullptr;
+    newPlaylist.nextChannel = nullptr;
+    newPlaylist.isCrossfading = false;
+    
+    m_playlists.push_back(newPlaylist);
+    
+    spdlog::info("Playlist '{}' duplicated to '{}'.", sourceName, destName);
+    NotifyPlaylistChanged();
 }
 
 void PlaylistManager::AddToPlaylist(const std::string& playlistName, const std::string& soundName)
@@ -42,6 +139,7 @@ void PlaylistManager::AddToPlaylist(const std::string& playlistName, const std::
     {
         it->tracks.push_back(soundName);
         spdlog::info("Added '{}' to playlist '{}'.", soundName, playlistName);
+        NotifyPlaylistChanged();
     }
     else
     {
@@ -57,12 +155,432 @@ void PlaylistManager::RemoveFromPlaylist(const std::string& playlistName, const 
     if (it != m_playlists.end())
     {
         auto& tracks = it->tracks;
-        tracks.erase(std::remove(tracks.begin(), tracks.end(), soundName), tracks.end());
-        spdlog::info("Removed '{}' from playlist '{}'.", soundName, playlistName);
+        auto trackIt = std::find(tracks.begin(), tracks.end(), soundName);
+        
+        if (trackIt != tracks.end())
+        {
+            tracks.erase(trackIt);
+            spdlog::info("Removed '{}' from playlist '{}'.", soundName, playlistName);
+            NotifyPlaylistChanged();
+        }
+        else
+        {
+            spdlog::error("Track '{}' not found in playlist '{}'.", soundName, playlistName);
+        }
     }
     else
     {
         spdlog::error("Playlist '{}' not found.", playlistName);
+    }
+}
+
+void PlaylistManager::RemoveFromPlaylistAtIndex(const std::string& playlistName, size_t index)
+{
+    auto it = std::find_if(m_playlists.begin(), m_playlists.end(),
+        [&playlistName](const Playlist& p) { return p.name == playlistName; });
+
+    if (it != m_playlists.end())
+    {
+        if (index < it->tracks.size())
+        {
+            std::string trackName = it->tracks[index];
+            it->tracks.erase(it->tracks.begin() + index);
+            spdlog::info("Removed track at index {} from playlist '{}'.", index, playlistName);
+            NotifyPlaylistChanged();
+        }
+        else
+        {
+            spdlog::error("Index {} out of range for playlist '{}'.", index, playlistName);
+        }
+    }
+    else
+    {
+        spdlog::error("Playlist '{}' not found.", playlistName);
+    }
+}
+
+void PlaylistManager::ClearPlaylist(const std::string& playlistName)
+{
+    auto it = std::find_if(m_playlists.begin(), m_playlists.end(),
+        [&playlistName](const Playlist& p) { return p.name == playlistName; });
+
+    if (it != m_playlists.end())
+    {
+        if (it->isPlaying)
+        {
+            Stop(playlistName);
+        }
+        
+        it->tracks.clear();
+        spdlog::info("Cleared all tracks from playlist '{}'.", playlistName);
+        NotifyPlaylistChanged();
+    }
+    else
+    {
+        spdlog::error("Playlist '{}' not found.", playlistName);
+    }
+}
+
+bool PlaylistManager::ExportPlaylist(const std::string& playlistName, const std::string& filePath)
+{
+    auto it = std::find_if(m_playlists.begin(), m_playlists.end(),
+        [&playlistName](const Playlist& p) { return p.name == playlistName; });
+
+    if (it == m_playlists.end())
+    {
+        spdlog::error("Playlist '{}' not found for export.", playlistName);
+        return false;
+    }
+    
+    try
+    {
+        json j;
+        j["name"] = it->name;
+        j["options"]["randomOrder"] = it->options.randomOrder;
+        j["options"]["randomSegment"] = it->options.randomSegment;
+        j["options"]["segmentDuration"] = it->options.segmentDuration;
+        j["options"]["loopPlaylist"] = it->options.loopPlaylist;
+        j["tracks"] = json::array();
+        
+        const auto& audioManager = AudioManager::GetInstance();
+        const auto& allSounds = audioManager.GetAllSounds();
+        
+        for (const auto& trackId : it->tracks)
+        {
+            json track;
+            track["id"] = trackId;
+            
+            auto soundIt = allSounds.find(trackId);
+            if (soundIt != allSounds.end())
+            {
+                track["path"] = soundIt->second.filePath;
+            }
+            
+            j["tracks"].push_back(track);
+        }
+        
+        std::ofstream file(filePath.c_str());
+        if (!file.is_open())
+        {
+            spdlog::error("Failed to open file '{}' for writing.", filePath);
+            return false;
+        }
+        
+        file << j.dump(4);
+        file.close();
+        
+        spdlog::info("Playlist '{}' exported to '{}'.", playlistName, filePath);
+        return true;
+    }
+    catch(const std::exception& e)
+    {
+        spdlog::error("Error exporting playlist: {}", e.what());
+        return false;
+    }
+}
+
+bool PlaylistManager::ImportPlaylist(const std::string& filePath, const std::string& playlistName)
+{
+    try
+    {
+        std::ifstream file(filePath.c_str());
+        if (!file.is_open())
+        {
+            spdlog::error("Failed to open file '{}' for reading.", filePath);
+            return false;
+        }
+        
+        json j;
+        file >> j;
+        file.close();
+        
+        std::string importedName = playlistName.empty() ? j["name"].get<std::string>() : playlistName;
+        
+        auto existingIt = std::find_if(m_playlists.begin(), m_playlists.end(),
+            [&importedName](const Playlist& p) { return p.name == importedName; });
+            
+        if (existingIt != m_playlists.end())
+        {
+            spdlog::warn("Playlist '{}' already exists. It will be overwritten.", importedName);
+            existingIt->tracks.clear();
+        }
+        else
+        {
+            CreatePlaylist(importedName);
+            existingIt = std::find_if(m_playlists.begin(), m_playlists.end(),
+                [&importedName](const Playlist& p) { return p.name == importedName; });
+        }
+        
+        if (existingIt != m_playlists.end())
+        {
+            if (j.contains("options"))
+            {
+                const auto& options = j["options"];
+                if (options.contains("randomOrder"))
+                    existingIt->options.randomOrder = options["randomOrder"].get<bool>();
+                if (options.contains("randomSegment"))
+                    existingIt->options.randomSegment = options["randomSegment"].get<bool>();
+                if (options.contains("segmentDuration"))
+                    existingIt->options.segmentDuration = options["segmentDuration"].get<float>();
+                if (options.contains("loopPlaylist"))
+                    existingIt->options.loopPlaylist = options["loopPlaylist"].get<bool>();
+            }
+            
+            auto& audioManager = AudioManager::GetInstance();
+            
+            for (const auto& trackJson : j["tracks"])
+            {
+                std::string trackId = trackJson["id"].get<std::string>();
+                
+                if (!audioManager.GetSound(trackId) && trackJson.contains("path"))
+                {
+                    std::string trackPath = trackJson["path"].get<std::string>();
+                    audioManager.LoadSound(trackId, trackPath, true);
+                }
+                
+                if (audioManager.GetSound(trackId))
+                {
+                    existingIt->tracks.push_back(trackId);
+                }
+                else
+                {
+                    spdlog::warn("Track '{}' could not be loaded during import. Skipping.", trackId);
+                }
+            }
+            
+            spdlog::info("Playlist '{}' imported from '{}' with {} tracks.", 
+                        importedName, filePath, existingIt->tracks.size());
+            NotifyPlaylistChanged();
+            return true;
+        }
+    }
+    catch(const std::exception& e)
+    {
+        spdlog::error("Error importing playlist: {}", e.what());
+    }
+    
+    return false;
+}
+
+PlaylistManager::Playlist* PlaylistManager::GetPlaylistByName(const std::string& name)
+{
+    auto it = std::find_if(m_playlists.begin(), m_playlists.end(),
+        [&name](const Playlist& p) { return p.name == name; });
+    
+    return (it != m_playlists.end()) ? &(*it) : nullptr;
+}
+
+std::vector<std::string> PlaylistManager::GetPlaylistNames() const
+{
+    std::vector<std::string> names;
+    names.reserve(m_playlists.size());
+    
+    for (const auto& playlist : m_playlists)
+    {
+        names.push_back(playlist.name);
+    }
+    
+    return names;
+}
+
+bool PlaylistManager::IsPlaylistPlaying(const std::string& playlistName) const
+{
+    auto it = std::find_if(m_playlists.begin(), m_playlists.end(),
+        [&playlistName](const Playlist& p) { return p.name == playlistName; });
+    
+    return (it != m_playlists.end() && it->isPlaying);
+}
+
+size_t PlaylistManager::GetPlaylistTrackCount(const std::string& playlistName) const
+{
+    auto it = std::find_if(m_playlists.begin(), m_playlists.end(),
+        [&playlistName](const Playlist& p) { return p.name == playlistName; });
+    
+    return (it != m_playlists.end()) ? it->tracks.size() : 0;
+}
+
+void PlaylistManager::MoveTrackToPosition(const std::string& playlistName, int sourceIndex, int targetIndex)
+{
+    auto it = std::find_if(m_playlists.begin(), m_playlists.end(),
+        [&playlistName](const Playlist& p) { return p.name == playlistName; });
+    
+    if (it == m_playlists.end())
+    {
+        spdlog::error("Playlist '{}' not found.", playlistName);
+        return;
+    }
+    
+    auto& tracks = it->tracks;
+    
+    if (sourceIndex < 0 || sourceIndex >= static_cast<int>(tracks.size()) ||
+        targetIndex < 0 || targetIndex >= static_cast<int>(tracks.size()))
+    {
+        spdlog::error("Invalid source or target index for track move operation.");
+        return;
+    }
+    
+    if (sourceIndex == targetIndex)
+    {
+        return;
+    }
+    
+    std::string trackToMove = tracks[sourceIndex];
+    
+    tracks.erase(tracks.begin() + sourceIndex);
+    
+    if (targetIndex > sourceIndex)
+    {
+        targetIndex--;
+    }
+    
+    tracks.insert(tracks.begin() + targetIndex, trackToMove);
+    
+    spdlog::info("Moved track from index {} to index {} in playlist '{}'.", 
+                sourceIndex, targetIndex, playlistName);
+    NotifyPlaylistChanged();
+}
+
+bool PlaylistManager::SavePlaylistsToFile(const std::string& filePath)
+{
+    try
+    {
+        json j = json::array();
+        
+        for (const auto& playlist : m_playlists)
+        {
+            json playlistJson;
+            playlistJson["name"] = playlist.name;
+            playlistJson["options"]["randomOrder"] = playlist.options.randomOrder;
+            playlistJson["options"]["randomSegment"] = playlist.options.randomSegment;
+            playlistJson["options"]["segmentDuration"] = playlist.options.segmentDuration;
+            playlistJson["options"]["loopPlaylist"] = playlist.options.loopPlaylist;
+            playlistJson["tracks"] = json::array();
+            
+            const auto& audioManager = AudioManager::GetInstance();
+            const auto& allSounds = audioManager.GetAllSounds();
+            
+            for (const auto& trackId : playlist.tracks)
+            {
+                json track;
+                track["id"] = trackId;
+                
+                auto soundIt = allSounds.find(trackId);
+                if (soundIt != allSounds.end())
+                {
+                    track["path"] = soundIt->second.filePath;
+                }
+                
+                playlistJson["tracks"].push_back(track);
+            }
+            
+            j.push_back(playlistJson);
+        }
+        
+        std::ofstream file(filePath.c_str());
+        if (!file.is_open())
+        {
+            spdlog::error("Failed to open file '{}' for writing.", filePath);
+            return false;
+        }
+        
+        file << j.dump(4);
+        file.close();
+        
+        spdlog::info("All playlists saved to '{}'.", filePath);
+        return true;
+    }
+    catch(const std::exception& e)
+    {
+        spdlog::error("Error saving playlists: {}", e.what());
+        return false;
+    }
+}
+
+bool PlaylistManager::LoadPlaylistsFromFile(const std::string& filePath)
+{
+    try
+    {
+        std::ifstream file(filePath.c_str());
+        if (!file.is_open())
+        {
+            spdlog::error("Failed to open file '{}' for reading.", filePath);
+            return false;
+        }
+        
+        json j;
+        file >> j;
+        file.close();
+        
+        std::vector<Playlist> newPlaylists;
+        
+        auto& audioManager = AudioManager::GetInstance();
+        
+        for (const auto& playlistJson : j)
+        {
+            Playlist playlist;
+            playlist.name = playlistJson["name"].get<std::string>();
+            
+            if (playlistJson.contains("options"))
+            {
+                const auto& options = playlistJson["options"];
+                if (options.contains("randomOrder"))
+                    playlist.options.randomOrder = options["randomOrder"].get<bool>();
+                if (options.contains("randomSegment"))
+                    playlist.options.randomSegment = options["randomSegment"].get<bool>();
+                if (options.contains("segmentDuration"))
+                    playlist.options.segmentDuration = options["segmentDuration"].get<float>();
+                if (options.contains("loopPlaylist"))
+                    playlist.options.loopPlaylist = options["loopPlaylist"].get<bool>();
+            }
+            
+            for (const auto& trackJson : playlistJson["tracks"])
+            {
+                std::string trackId = trackJson["id"].get<std::string>();
+                
+                if (!audioManager.GetSound(trackId) && trackJson.contains("path"))
+                {
+                    std::string trackPath = trackJson["path"].get<std::string>();
+                    audioManager.LoadSound(trackId, trackPath, true);
+                }
+                
+                if (audioManager.GetSound(trackId))
+                {
+                    playlist.tracks.push_back(trackId);
+                }
+                else
+                {
+                    spdlog::warn("Track '{}' in playlist '{}' could not be loaded. Skipping.", 
+                                trackId, playlist.name);
+                }
+            }
+            
+            newPlaylists.push_back(playlist);
+        }
+        
+        m_playlists = newPlaylists;
+        m_activePlaylistName = "";
+        
+        spdlog::info("Loaded {} playlists from '{}'.", m_playlists.size(), filePath);
+        NotifyPlaylistChanged();
+        return true;
+    }
+    catch(const std::exception& e)
+    {
+        spdlog::error("Error loading playlists: {}", e.what());
+        return false;
+    }
+}
+
+void PlaylistManager::RegisterPlaylistChangeCallback(PlaylistChangeCallback callback)
+{
+    m_changeCallbacks.push_back(callback);
+}
+
+void PlaylistManager::NotifyPlaylistChanged()
+{
+    for (const auto& callback : m_changeCallbacks)
+    {
+        callback();
     }
 }
 
