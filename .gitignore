@@ -40,3 +40,7 @@
 
 TheaterSoundManager/external*
 TheaterSoundManager/out*
+
+packages/*
+*.log
+*.ini
