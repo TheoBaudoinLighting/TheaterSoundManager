@@ -133,7 +133,6 @@ private:
     bool m_autoTransitionToPhase2 = false;
     bool m_transitionToNormalMusicAfterWedding = false;
     
-    // Fade-in for normal music playback
     bool m_musicFadeInActive = false;
     float m_musicFadeInTimer = 0.0f;
     float m_musicFadeInDuration = 5.0f;
@@ -157,7 +156,7 @@ private:
     float m_phase1DuckFadeDuration = 20.0f;
     float m_phase1FadeOutDuration = 5.0f;
     float m_phase1WaitDuration = 6.0f;
-    float m_phasesTransitionDuration = 10.0f;  // Durée des transitions entre les phases
+    float m_phasesTransitionDuration = 10.0f;  
     FMOD::Channel* m_phase1SfxChannel = nullptr;
     FMOD::Channel* m_phase1EntranceChannel = nullptr;
     std::string m_phase1SfxName = "sfx_shine";

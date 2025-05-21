@@ -16,7 +16,7 @@ void AnnouncementManager::ScheduleAnnouncement(int hour, int minute, const std::
 {
     FMOD::Sound* sound = AudioManager::GetInstance().GetSound(announcementId);
     if (!sound) {
-        spdlog::error("Impossible de planifier l'annonce '{}' car elle n'est pas chargée ou est introuvable.", announcementId);
+        spdlog::error("Impossible to schedule announcement '{}' because it is not loaded or not found.", announcementId);
         return;
     }
     
@@ -29,7 +29,7 @@ void AnnouncementManager::ScheduleAnnouncement(int hour, int minute, const std::
     
     m_scheduled.push_back(announcement);
     
-    spdlog::info("Annonce '{}' planifiée à {:02d}:{:02d}", announcementId, hour, minute);
+    spdlog::info("Announcement '{}' scheduled at {:02d}:{:02d}", announcementId, hour, minute);
 }
 
 void AnnouncementManager::UpdateScheduledAnnouncement(size_t index, int hour, int minute, const std::string& announcementId)
@@ -259,7 +259,7 @@ FMOD::Channel* AnnouncementManager::PlayAnnouncement(const std::string& announce
 
     FMOD::Sound* sound = AudioManager::GetInstance().GetSound(announcementId);
     if (!sound) {
-        spdlog::error("Annonce '{}' non chargée ou introuvable.", announcementId);
+        spdlog::error("Announcement '{}' not loaded or not found.", announcementId);
         return nullptr;
     }
 
@@ -275,7 +275,7 @@ FMOD::Channel* AnnouncementManager::PlayAnnouncement(const std::string& announce
     UIManager::GetInstance().SetDuckFactor(1.0f);
     UIManager::GetInstance().ForceUpdateAllVolumes();
 
-    spdlog::info("Démarrage de la séquence d'annonce '{}'. (duckVolume={}, sfxBefore={}, sfxAfter={})",
+    spdlog::info("Starting announcement sequence '{}'. (duckVolume={}, sfxBefore={}, sfxAfter={})",
                  announcementId, volumeDuck, useSFXBefore, useSFXAfter);
 
     return nullptr;
@@ -285,7 +285,7 @@ void AnnouncementManager::AddScheduledAnnouncement(int hour, int minute, const s
 {
     FMOD::Sound* sound = AudioManager::GetInstance().GetSound(annID);
     if (!sound) {
-        spdlog::error("Impossible de planifier l'annonce '{}' car elle n'est pas chargée ou est introuvable.", annID);
+        spdlog::error("Impossible to schedule announcement '{}' because it is not loaded or not found.", annID);
         return;
     }
     
@@ -298,7 +298,7 @@ void AnnouncementManager::AddScheduledAnnouncement(int hour, int minute, const s
     
     m_scheduled.push_back(announcement);
     
-    spdlog::info("Annonce '{}' planifiée à {:02d}:{:02d}", annID, hour, minute);
+    spdlog::info("Announcement '{}' scheduled at {:02d}:{:02d}", annID, hour, minute);
 }
 
 void AnnouncementManager::RemoveScheduledAnnouncement(size_t index)
@@ -390,7 +390,7 @@ void AnnouncementManager::CheckSchedules(float /*deltaTime*/)
             {
                 FMOD::Sound* sound = AudioManager::GetInstance().GetSound(s.announcementId);
                 if (!sound) {
-                    spdlog::error("Impossible de jouer l'annonce planifiée '{}' car elle n'est pas chargée ou est introuvable.", s.announcementId);
+                    spdlog::error("Impossible to play scheduled announcement '{}' because it is not loaded or not found.", s.announcementId);
                     s.triggered = true;
                     continue;
                 }

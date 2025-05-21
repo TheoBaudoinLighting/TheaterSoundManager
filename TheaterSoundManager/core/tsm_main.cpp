@@ -39,11 +39,9 @@ int main()
 
     StartBluetoothServer();
 
-    // Création de la playlist par défaut
     const std::string preShowPlaylist = "playlist_PreShow";
     TSM::PlaylistManager::GetInstance().CreatePlaylist(preShowPlaylist);
 
-    // Chargement des musiques pour le PreShow Mariage
     TSM::AudioManager::GetInstance().LoadSound("temps_amour", "assets/musics/PreShowMariage/01_Bon_Entendeur_Le_temps_de_l_amour.mp3", true);
     TSM::AudioManager::GetInstance().LoadSound("fio_maravilha", "assets/musics/PreShowMariage/Nicoletta_FioMaravilha.mp3", true);
     TSM::AudioManager::GetInstance().LoadSound("helwa_ya_baladi", "assets/musics/PreShowMariage/DalidaHelwaYaBaladi_LinaSleibiCover.mp3", true);
@@ -52,11 +50,10 @@ int main()
     TSM::AudioManager::GetInstance().LoadSound("bonnie_clyde", "assets/musics/PreShowMariage/SergeGainsbourg_BonnieClyde.mp3", true);
     TSM::AudioManager::GetInstance().LoadSound("perche_ti_amo", "assets/musics/PreShowMariage/SaraPercheTiAmo_NextGenRemix.mp3", true);
     TSM::AudioManager::GetInstance().LoadSound("emmenez_moi", "assets/musics/PreShowMariage/CharlesAznavour_EmmenezMoi.mp3", true);
-    TSM::AudioManager::GetInstance().LoadSound("boheme", "assets/musics/PreShowMariage/CharlesAznavour_ LaBohemeBoubouRemix.mp3", true);
+    TSM::AudioManager::GetInstance().LoadSound("boheme", "assets/musics/PreShowMariage/CharlesAznavour_LaBohemeBoubouRemix.mp3", true);
     TSM::AudioManager::GetInstance().LoadSound("amour", "assets/musics/PreShowMariage/Mouloudji_Lamour.mp3", true);
     TSM::AudioManager::GetInstance().LoadSound("foule", "assets/musics/PreShowMariage/EdithPiaf_LaFoule.mp3", true);
 
-    // Ajout des musiques à la playlist par défaut
     TSM::PlaylistManager::GetInstance().AddToPlaylist(preShowPlaylist, "temps_amour");
     TSM::PlaylistManager::GetInstance().AddToPlaylist(preShowPlaylist, "fio_maravilha");
     TSM::PlaylistManager::GetInstance().AddToPlaylist(preShowPlaylist, "helwa_ya_baladi");
@@ -69,21 +66,102 @@ int main()
     TSM::PlaylistManager::GetInstance().AddToPlaylist(preShowPlaylist, "amour");
     TSM::PlaylistManager::GetInstance().AddToPlaylist(preShowPlaylist, "foule");
 
-    // Chargement des musiques pour les phases du mode mariage
+    const std::string postShowPlaylist = "playlist_PostShow";
+    TSM::PlaylistManager::GetInstance().CreatePlaylist(postShowPlaylist);
+
+    TSM::AudioManager::GetInstance().LoadSound("bon_voyage", "assets/musics/PostShow/BonVoyage.mp3", true);
+    TSM::AudioManager::GetInstance().LoadSound("buddha_bar", "assets/musics/PostShow/BuddhaBarIII.mp3", true);
+    TSM::AudioManager::GetInstance().LoadSound("jazz_port_orleans", "assets/musics/PostShow/JazzPortOrleans.mp3", true);
+    TSM::AudioManager::GetInstance().LoadSound("coffee_portofino", "assets/musics/PostShow/CoffeePortofino.mp3", true);
+    TSM::AudioManager::GetInstance().LoadSound("country_bear", "assets/musics/PostShow/CountryBear.mp3", true);
+    TSM::AudioManager::GetInstance().LoadSound("fantasy_spring", "assets/musics/PostShow/FantasySpring.mp3", true);
+    TSM::AudioManager::GetInstance().LoadSound("forest_caffee", "assets/musics/PostShow/ForestCaffee.mp3", true);
+    TSM::AudioManager::GetInstance().LoadSound("grand_avenue", "assets/musics/PostShow/GrandAvenue.mp3", true);
+    TSM::AudioManager::GetInstance().LoadSound("hth", "assets/musics/PostShow/HTH.mp3", true);
+    TSM::AudioManager::GetInstance().LoadSound("jazz_01", "assets/musics/PostShow/Jazz01.mp3", true);
+    TSM::AudioManager::GetInstance().LoadSound("mmrr_exit_music", "assets/musics/PostShow/MMRR_ExitMusic.mp3", true);
+    TSM::AudioManager::GetInstance().LoadSound("mmrr_lobby", "assets/musics/PostShow/MMRR_Lobby.mp3", true);
+    TSM::AudioManager::GetInstance().LoadSound("bella_note", "assets/musics/PostShow/BellaNote.mp3", true);
+    TSM::AudioManager::GetInstance().LoadSound("secret_love", "assets/musics/PostShow/SecretLove.mp3", true);
+    TSM::AudioManager::GetInstance().LoadSound("agrabah_cafe_restaurant", "assets/musics/PostShow/AgrabahCafeRestaurant.mp3", true);
+    TSM::AudioManager::GetInstance().LoadSound("tiana_palace", "assets/musics/PostShow/TianaPalace.mp3", true);
+    TSM::AudioManager::GetInstance().LoadSound("town_center", "assets/musics/PostShow/TownCenter.mp3", true);
+
+    TSM::PlaylistManager::GetInstance().AddToPlaylist(postShowPlaylist, "bon_voyage");
+    TSM::PlaylistManager::GetInstance().AddToPlaylist(postShowPlaylist, "buddha_bar");
+    TSM::PlaylistManager::GetInstance().AddToPlaylist(postShowPlaylist, "jazz_port_orleans");
+    TSM::PlaylistManager::GetInstance().AddToPlaylist(postShowPlaylist, "coffee_portofino");
+    TSM::PlaylistManager::GetInstance().AddToPlaylist(postShowPlaylist, "country_bear");
+    TSM::PlaylistManager::GetInstance().AddToPlaylist(postShowPlaylist, "fantasy_spring");
+    TSM::PlaylistManager::GetInstance().AddToPlaylist(postShowPlaylist, "forest_caffee");
+    TSM::PlaylistManager::GetInstance().AddToPlaylist(postShowPlaylist, "grand_avenue");
+    TSM::PlaylistManager::GetInstance().AddToPlaylist(postShowPlaylist, "hth");
+    TSM::PlaylistManager::GetInstance().AddToPlaylist(postShowPlaylist, "jazz_01");
+    TSM::PlaylistManager::GetInstance().AddToPlaylist(postShowPlaylist, "mmrr_exit_music");
+    TSM::PlaylistManager::GetInstance().AddToPlaylist(postShowPlaylist, "mmrr_lobby");
+    TSM::PlaylistManager::GetInstance().AddToPlaylist(postShowPlaylist, "bella_note");
+    TSM::PlaylistManager::GetInstance().AddToPlaylist(postShowPlaylist, "secret_love");
+    TSM::PlaylistManager::GetInstance().AddToPlaylist(postShowPlaylist, "agrabah_cafe_restaurant");
+    TSM::PlaylistManager::GetInstance().AddToPlaylist(postShowPlaylist, "tiana_palace");
+    TSM::PlaylistManager::GetInstance().AddToPlaylist(postShowPlaylist, "town_center");
+
     TSM::AudioManager::GetInstance().LoadWeddingEntranceSound("assets/wedding/Entree_RunrigHeartsOfOldenGlory.mp3");
     TSM::AudioManager::GetInstance().LoadWeddingCeremonySound("assets/wedding/Loop_PortOrleanAmbience.mp3");
     TSM::AudioManager::GetInstance().LoadWeddingExitSound("assets/musics/PreShowMariage/MariagedAmour_PauldeSennevilleJacobsPiano.mp3");
 
-    // Chargement des effets sonores
     TSM::AudioManager::GetInstance().LoadSound("sfx_shine", "assets/sfx/DisneyShine_SFX.mp3", false);
     
-    // Chargement des annonces
-    TSM::AudioManager::GetInstance().LoadAnnouncement("announce_5min_buffet", "assets/annonces/French/5min_buffet.mp3");
+    // DAY 01
+    TSM::AudioManager::GetInstance().LoadAnnouncement("announce_bienvenue_01", "assets/annonces/French/bienvenue_01.mp3"); // 12h00
+
+    TSM::AudioManager::GetInstance().LoadAnnouncement("announce_15min_cl", "assets/annonces/French/15min_cl.mp3"); // 12h15
+    TSM::AudioManager::GetInstance().LoadAnnouncement("announce_10min_cl", "assets/annonces/French/10min_cl.mp3"); // 12h20
+    TSM::AudioManager::GetInstance().LoadAnnouncement("announce_5min_cl", "assets/annonces/French/5min_cl.mp3"); // 12h25
+
+    // 13h30 End of Ceremony
+
+    TSM::AudioManager::GetInstance().LoadAnnouncement("announce_15min_buffet", "assets/annonces/French/15min_buffet.mp3"); // 14h15
+    TSM::AudioManager::GetInstance().LoadAnnouncement("announce_10min_buffet", "assets/annonces/French/10min_buffet.mp3"); // 14h20
+    TSM::AudioManager::GetInstance().LoadAnnouncement("announce_5min_buffet", "assets/annonces/French/5min_buffet.mp3"); // 14h25
+
+    // 15h30 End of Buffet
+
+    TSM::AudioManager::GetInstance().LoadAnnouncement("announce_machine_photo", "assets/annonces/French/machine_photo_02.mp3"); // 15h00
+    TSM::AudioManager::GetInstance().LoadAnnouncement("announce_jeux_de_societer", "assets/annonces/French/jeux_societer_01.mp3"); // 15h15
+    TSM::AudioManager::GetInstance().LoadAnnouncement("announce_remerciements", "assets/annonces/French/merci_01.mp3"); // 16h00
+
+    // Programmation des annonces
+    TSM::AnnouncementManager::GetInstance().ScheduleAnnouncement(12, 00, "announce_bienvenue_01");
+    TSM::AnnouncementManager::GetInstance().ScheduleAnnouncement(12, 15, "announce_15min_cl");
+    TSM::AnnouncementManager::GetInstance().ScheduleAnnouncement(12, 20, "announce_10min_cl");
+    TSM::AnnouncementManager::GetInstance().ScheduleAnnouncement(12, 25, "announce_5min_cl");
+
+    TSM::AnnouncementManager::GetInstance().ScheduleAnnouncement(14, 15, "announce_15min_buffet");
+    TSM::AnnouncementManager::GetInstance().ScheduleAnnouncement(14, 20, "announce_10min_buffet");
+    TSM::AnnouncementManager::GetInstance().ScheduleAnnouncement(14, 25, "announce_5min_buffet");
+
+    TSM::AnnouncementManager::GetInstance().ScheduleAnnouncement(15, 00, "announce_machine_photo");
+    TSM::AnnouncementManager::GetInstance().ScheduleAnnouncement(15, 15, "announce_jeux_de_societer");
+    TSM::AnnouncementManager::GetInstance().ScheduleAnnouncement(16, 00, "announce_remerciements");
     
-    // Configuration d'un déclenchement temporisé d'annonce
-    TSM::AnnouncementManager::GetInstance().ScheduleAnnouncement(19, 45, "announce_5min_buffet");
-    
-    // Mettre à jour les chemins de fichiers des musiques de mariage
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     TSM::UIManager::GetInstance().UpdateWeddingFilePaths();
 
     bool isRunning = true;

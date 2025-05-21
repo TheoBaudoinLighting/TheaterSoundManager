@@ -672,7 +672,7 @@ void PlaylistManager::Stop(const std::string& playlistName)
             }
         }
         
-        spdlog::info("Toutes les playlists ont été arrêtées avec fade-out");
+        spdlog::info("All playlists stopped with fade-out");
     }
     else
     {
@@ -708,7 +708,7 @@ void PlaylistManager::Stop(const std::string& playlistName)
                 plist.currentChannel = nullptr;
                 plist.nextChannel = nullptr;
                 
-                spdlog::info("Playlist '{}' arrêtée avec fade-out", playlistName);
+                spdlog::info("Playlist '{}' stopped with fade-out", playlistName);
                 break;
             }
         }
@@ -1180,7 +1180,7 @@ void PlaylistManager::SkipToNextTrack(const std::string& playlistName)
 
     if (it == m_playlists.end() || !it->isPlaying)
     {
-        spdlog::error("Playlist '{}' introuvable ou pas en lecture.", playlistName);
+        spdlog::error("Playlist '{}' not found or not playing.", playlistName);
         return;
     }
 
@@ -1193,7 +1193,7 @@ void PlaylistManager::SkipToNextTrack(const std::string& playlistName)
     
     StartNextTrack(plist);
     
-    spdlog::info("Passage à la piste suivante dans la playlist '{}'.", playlistName);
+    spdlog::info("Passage to next track in playlist '{}'.", playlistName);
 }
 
 } // namespace TSM

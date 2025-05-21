@@ -354,7 +354,7 @@ bool AudioManager::LoadWeddingPhaseSound(int phase, const std::string& filePath)
             soundId = "wedding_exit_sound";
             break;
         default:
-            spdlog::error("Phase de mariage invalide: {}", phase);
+            spdlog::error("Invalid wedding phase: {}", phase);
             return false;
     }
     
@@ -366,9 +366,9 @@ bool AudioManager::LoadWeddingPhaseSound(int phase, const std::string& filePath)
     bool success = LoadSound(soundId, filePath, true);
     
     if (success) {
-        spdlog::info("Son de mariage phase {} chargé avec succès: {}", phase, filePath);
+        spdlog::info("Wedding phase {} sound loaded successfully: {}", phase, filePath);
     } else {
-        spdlog::error("Échec du chargement du son de mariage phase {}: {}", phase, filePath);
+        spdlog::error("Failed to load wedding phase {} sound: {}", phase, filePath);
     }
     
     return success;
@@ -384,9 +384,9 @@ bool AudioManager::LoadAnnouncement(const std::string& announcementId, const std
     bool success = LoadSound(announcementId, filePath, true);
     
     if (success) {
-        spdlog::info("Annonce '{}' chargée avec succès: {}", announcementId, filePath);
+        spdlog::info("Announcement '{}' loaded successfully: {}", announcementId, filePath);
     } else {
-        spdlog::error("Échec du chargement de l'annonce '{}': {}", announcementId, filePath);
+        spdlog::error("Failed to load announcement '{}': {}", announcementId, filePath);
     }
     
     return success;
