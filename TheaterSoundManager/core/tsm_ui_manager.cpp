@@ -247,15 +247,19 @@ UIManager::UIManager()
       m_autoDuckingActive(false),
       m_originalDuckFactor(1.0f),
       m_targetDuckFactor(0.3f),
-      m_crossfadeDuration(5.0f),
+      m_crossfadeDuration(10.0f),
       m_autoTransitionToPhase2(true), 
       m_transitionToNormalMusicAfterWedding(true),  
       m_weddingEntranceSoundId("wedding_entrance_sound"),
       m_weddingCeremonySoundId("wedding_ceremony_sound"),
       m_weddingExitSoundId("wedding_exit_sound"),
-      m_normalPlaylistAfterWedding("playlist_PreShow"),
+      m_normalPlaylistAfterWedding("playlist_PostShow"),
       m_playlistName("playlist_PreShow")
 {
+    m_opts.randomOrder = true;      
+    m_opts.randomSegment = true;     
+    m_opts.loopPlaylist = true;     
+    m_opts.segmentDuration = 900.0f; 
 }
 
 bool UIManager::Init(int width, int height)
@@ -2095,13 +2099,17 @@ void UIManager::StartNormalMusicAfterWedding()
     m_autoTransitionToPhase2 = false;
     m_transitionToNormalMusicAfterWedding = false;
 
+    m_playlistName = m_normalPlaylistAfterWedding;
+
     PlaylistOptions opts;
     opts.loopPlaylist = true;
     opts.randomOrder = true;
     opts.randomSegment = true;
-    opts.segmentDuration = 30.0f;
+    opts.segmentDuration = 900.0f;
 
     PlaylistManager::GetInstance().Play(m_normalPlaylistAfterWedding, opts);
+
+    PlaylistManager::GetInstance().SetCrossfadeDuration(10.0f);
 
     m_musicFadeInActive = true;
     m_musicFadeInTimer = 0.0f;
@@ -2111,7 +2119,7 @@ void UIManager::StartNormalMusicAfterWedding()
 
 void UIManager::RenderWeddingModeTab()
 {
-    static char normalPlaylistName[256] = "playlist_PreShow";
+    static char normalPlaylistName[256] = "playlist_PostShow";
     static float ceremonyDuckingFactor = 0.3f;
     static bool isWeddingModeInitialized = false;
     static float crossfadeDuration = 5.0f;
