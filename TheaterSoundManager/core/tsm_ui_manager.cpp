@@ -658,12 +658,14 @@ void UIManager::RenderPlaylistManagerTab()
             const auto& playlistName = playlistNames[i];
 
             ImGui::TableNextRow();
-
-            ImGui::TableNextColumn();
             ImGui::PushID(i);
 
+            // Colonne Name - Selectable SANS SpanAllColumns
+            ImGui::TableNextColumn();
             bool selected = (selectedPlaylistIndex == i);
-            if (ImGui::Selectable(playlistName.c_str(), selected, ImGuiSelectableFlags_SpanAllColumns))
+            
+            // Zone cliquable pour sélection uniquement dans la première colonne
+            if (ImGui::Selectable(playlistName.c_str(), selected, ImGuiSelectableFlags_None))
             {
                 selectedPlaylistIndex = i;
                 if (!renameMode)
@@ -673,17 +675,21 @@ void UIManager::RenderPlaylistManagerTab()
                 }
             }
 
+            // Colonne Tracks
             ImGui::TableNextColumn();
             int trackCount = static_cast<int>(PlaylistManager::GetInstance().GetPlaylistTrackCount(playlistName));
             ImGui::Text("%d", trackCount);
 
+            // Colonne Status
             ImGui::TableNextColumn();
             bool isPlaying = PlaylistManager::GetInstance().IsPlaylistPlaying(playlistName);
             ImGui::TextColored(isPlaying ? ImVec4(0.0f, 1.0f, 0.0f, 1.0f) : ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
                             isPlaying ? "Playing" : "Stopped");
 
+            // Colonne Actions - Boutons maintenant cliquables
             ImGui::TableNextColumn();
-            if (ImGui::Button("Play", ImVec2(70, 25)))
+            
+            if (ImGui::Button("Play", ImVec2(50, 25)))
             {
                 PlaylistOptions opts;
                 opts.randomOrder = false;
@@ -693,14 +699,14 @@ void UIManager::RenderPlaylistManagerTab()
 
             ImGui::SameLine();
 
-            if (ImGui::Button("Stop", ImVec2(70, 25)))
+            if (ImGui::Button("Stop", ImVec2(50, 25)))
             {
                 PlaylistManager::GetInstance().Stop(playlistName);
             }
 
             ImGui::SameLine();
 
-            if (ImGui::Button("Rename", ImVec2(80, 25)))
+            if (ImGui::Button("Rename", ImVec2(60, 25)))
             {
                 renameMode = true;
                 selectedPlaylistIndex = i;
@@ -710,11 +716,12 @@ void UIManager::RenderPlaylistManagerTab()
 
             ImGui::SameLine();
 
-            if (ImGui::Button("Delete", ImVec2(80, 25)))
+            if (ImGui::Button("Delete", ImVec2(60, 25)))
             {
                 ImGui::OpenPopup("Confirm delete");
             }
 
+            // Popup de confirmation pour la suppression
             if (ImGui::BeginPopupModal("Confirm delete", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
             {
                 ImGui::Text("Are you sure you want to delete the playlist '%s'?", playlistName.c_str());
@@ -747,6 +754,7 @@ void UIManager::RenderPlaylistManagerTab()
         ImGui::EndTable();
     }
 
+    // Reste du code de la fonction...
     if (renameMode && selectedPlaylistIndex >= 0 && selectedPlaylistIndex < playlistNames.size())
     {
         ImGui::Separator();

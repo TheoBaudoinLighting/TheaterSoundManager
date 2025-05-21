@@ -57,6 +57,7 @@ private:
 public:
     AudioManager() = default;
     ~AudioManager() = default;
+
     AudioManager(const AudioManager&) = delete;
     AudioManager& operator=(const AudioManager&) = delete;
 };
