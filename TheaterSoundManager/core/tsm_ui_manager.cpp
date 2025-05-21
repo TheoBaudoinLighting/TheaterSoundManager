@@ -248,8 +248,8 @@ UIManager::UIManager()
       m_originalDuckFactor(1.0f),
       m_targetDuckFactor(0.3f),
       m_crossfadeDuration(5.0f),
-      m_autoTransitionToPhase2(false),
-      m_transitionToNormalMusicAfterWedding(false),
+      m_autoTransitionToPhase2(true), 
+      m_transitionToNormalMusicAfterWedding(true),  
       m_weddingEntranceSoundId("wedding_entrance_sound"),
       m_weddingCeremonySoundId("wedding_ceremony_sound"),
       m_weddingExitSoundId("wedding_exit_sound"),
@@ -618,7 +618,6 @@ void UIManager::RenderPlaylistManagerTab()
         }
     }
     
-    // Section création de playlist
     ImGui::Separator();
     ImGui::Text("Créer une nouvelle playlist");
     
@@ -634,7 +633,6 @@ void UIManager::RenderPlaylistManagerTab()
         }
     }
     
-    // Section liste des playlists
     ImGui::Separator();
     ImGui::Text("Playlists disponibles");
     
@@ -745,7 +743,6 @@ void UIManager::RenderPlaylistManagerTab()
         ImGui::EndTable();
     }
     
-    // Section renommage de playlist
     if (renameMode && selectedPlaylistIndex >= 0 && selectedPlaylistIndex < playlistNames.size())
     {
         ImGui::Separator();
@@ -772,7 +769,6 @@ void UIManager::RenderPlaylistManagerTab()
         }
     }
     
-    // Section détail de la playlist sélectionnée
     if (selectedPlaylistIndex >= 0 && selectedPlaylistIndex < playlistNames.size())
     {
         const std::string& selectedPlaylist = playlistNames[selectedPlaylistIndex];
@@ -783,7 +779,6 @@ void UIManager::RenderPlaylistManagerTab()
             ImGui::Separator();
             ImGui::Text("Détails de la playlist: %s", selectedPlaylist.c_str());
             
-            // Options de lecture
             ImGui::Checkbox("Lecture aléatoire", const_cast<bool*>(&playlist->options.randomOrder));
             ImGui::SameLine();
             ImGui::Checkbox("Segment aléatoire", const_cast<bool*>(&playlist->options.randomSegment));
@@ -791,7 +786,6 @@ void UIManager::RenderPlaylistManagerTab()
             ImGui::Checkbox("Boucler la playlist", const_cast<bool*>(&playlist->options.loopPlaylist));
             ImGui::SliderFloat("Durée du segment", const_cast<float*>(&playlist->options.segmentDuration), 10.0f, 300.0f, "%.1fs");
             
-            // Liste des pistes
             ImGui::Text("Pistes dans la playlist:");
             
             if (ImGui::BeginTable("TracksTable", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
@@ -877,7 +871,6 @@ void UIManager::RenderPlaylistManagerTab()
                 ImGui::EndTable();
             }
             
-            // Ajouter de nouvelles pistes
             static int selectedTrackToAdd = -1;
             static std::vector<std::pair<std::string, std::string>> availableTracks;
             
@@ -954,7 +947,6 @@ void UIManager::RenderPlaylistManagerTab()
         }
     }
     
-    // Import/Export options
     ImGui::Separator();
     
     if (ImGui::CollapsingHeader("Options d'importation/exportation", ImGuiTreeNodeFlags_DefaultOpen))
@@ -1314,8 +1306,16 @@ void UIManager::RenderPlaylistControls()
         
         playlistManager.SetCrossfadeDuration(m_crossfadeDuration);
         
+        // Start with zero volume and fade in
+        m_originalDuckFactor = m_duckFactor; 
+        SetDuckFactor(0.0f);
+        
         playlistManager.Play(m_playlistName, m_opts);
         UpdateAllVolumes();
+        
+        // Activate fade-in effect
+        m_musicFadeInActive = true;
+        m_musicFadeInTimer = 0.0f;
     }
 
     ImGui::SameLine();
@@ -1443,6 +1443,18 @@ void UIManager::RenderPlaylistControls()
             
             ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.2f, 0.7f, 0.2f, 1.0f));
             ImGui::ProgressBar(segmentProgress, ImVec2(-1, 0), segmentText);
+            ImGui::PopStyleColor();
+        }
+        
+        // Display fade-in status if active
+        if (m_musicFadeInActive) {
+            float fadeInProgress = m_musicFadeInTimer / m_musicFadeInDuration;
+            
+            char fadeInText[32];
+            snprintf(fadeInText, sizeof(fadeInText), "Fade-in: %.1f%%", fadeInProgress * 100.0f);
+            
+            ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.2f, 0.6f, 0.9f, 0.8f));
+            ImGui::ProgressBar(fadeInProgress, ImVec2(-1, 0), fadeInText);
             ImGui::PopStyleColor();
         }
     }
@@ -1756,6 +1768,34 @@ void UIManager::UpdateAllVolumes()
 
 void UIManager::UpdateWeddingMode(float deltaTime)
 {
+    // Handle music fade-in if active
+    if (m_musicFadeInActive) {
+        m_musicFadeInTimer += deltaTime;
+        float t = m_musicFadeInTimer / m_musicFadeInDuration;
+        if (t > 1.0f) t = 1.0f;
+
+        // Linear fade from 0 to 1 over 5 seconds
+        float newFactor = t;
+        SetDuckFactor(newFactor);
+        
+        // Debug output to verify fade-in progression
+        spdlog::debug("Music fade-in: {:.2f}/{:.2f}s - Factor: {:.2f}", 
+                     m_musicFadeInTimer, m_musicFadeInDuration, newFactor);
+        
+        UpdateAllVolumes();
+
+        // When complete, restore regular volume
+        if (t >= 1.0f) {
+            spdlog::info("5-second music fade-in complete");
+            m_musicFadeInActive = false;
+            SetDuckFactor(1.0f);
+            UpdateAllVolumes();
+        }
+        
+        // Skip the rest of the function if we're only doing music fade-in
+        if (!m_weddingModeActive) return;
+    }
+
     if (!m_weddingModeActive) return;
     
     if (m_weddingPhase == 1) {
@@ -1763,8 +1803,7 @@ void UIManager::UpdateWeddingMode(float deltaTime)
             case WeddingPhase1State::IDLE:
                 break;
 
-            case WeddingPhase1State::FADING_OUT_PREVIOUS:
-            {
+            case WeddingPhase1State::FADING_OUT_PREVIOUS: {
                 // Réduire progressivement le volume pendant m_phase1FadeOutDuration secondes
                 m_phase1DuckTimer += deltaTime;
                 float t = m_phase1DuckTimer / m_phase1FadeOutDuration;
@@ -1806,11 +1845,10 @@ void UIManager::UpdateWeddingMode(float deltaTime)
                         m_phase1State = WeddingPhase1State::DUCKING_IN;
                     }
                 }
+                break;
             }
-            break;
 
-            case WeddingPhase1State::PLAYING_SFX_BEFORE:
-            {
+            case WeddingPhase1State::PLAYING_SFX_BEFORE: {
                 if (m_phase1SfxChannel) {
                     bool isPlaying = false;
                     m_phase1SfxChannel->isPlaying(&isPlaying);
@@ -1828,11 +1866,10 @@ void UIManager::UpdateWeddingMode(float deltaTime)
                     m_phase1DuckTimer = 0.0f;
                     m_phase1State = WeddingPhase1State::WAITING_AFTER_SFX;
                 }
+                break;
             }
-            break;
 
-            case WeddingPhase1State::WAITING_AFTER_SFX:
-            {
+            case WeddingPhase1State::WAITING_AFTER_SFX: {
                 // Attendre m_phase1WaitDuration secondes
                 m_phase1DuckTimer += deltaTime;
                 float progress = m_phase1DuckTimer / m_phase1WaitDuration;
@@ -1856,11 +1893,10 @@ void UIManager::UpdateWeddingMode(float deltaTime)
                     m_phase1DuckTimer = 0.0f;
                     m_phase1State = WeddingPhase1State::DUCKING_IN;
                 }
+                break;
             }
-            break;
 
-            case WeddingPhase1State::DUCKING_IN:
-            {
+            case WeddingPhase1State::DUCKING_IN: {
                 m_phase1DuckTimer += deltaTime;
                 float t = m_phase1DuckTimer / m_phase1DuckFadeDuration;
                 if (t > 1.0f) t = 1.0f;
@@ -1879,11 +1915,10 @@ void UIManager::UpdateWeddingMode(float deltaTime)
                     spdlog::info("Wedding Phase 1: 20-second ducking complete, music at full volume");
                     m_phase1State = WeddingPhase1State::PLAYING_ENTRANCE;
                 }
+                break;
             }
-            break;
 
-            case WeddingPhase1State::PLAYING_ENTRANCE:
-            {
+            case WeddingPhase1State::PLAYING_ENTRANCE: {
                 if (m_phase1EntranceChannel) {
                     bool isPlaying = false;
                     m_phase1EntranceChannel->isPlaying(&isPlaying);
@@ -1893,11 +1928,10 @@ void UIManager::UpdateWeddingMode(float deltaTime)
                         m_phase1State = WeddingPhase1State::DUCKING_OUT;
                     }
                 }
+                break;
             }
-            break;
 
-            case WeddingPhase1State::DUCKING_OUT:
-            {
+            case WeddingPhase1State::DUCKING_OUT: {
                 m_phase1DuckTimer += deltaTime;
                 float t = m_phase1DuckTimer / m_phase1DuckFadeDuration;
                 if (t > 1.0f) t = 1.0f;
@@ -1909,8 +1943,8 @@ void UIManager::UpdateWeddingMode(float deltaTime)
                 if (t >= 1.0f) {
                     m_phase1State = WeddingPhase1State::IDLE;
                 }
+                break;
             }
-            break;
         }
         return;
     }
@@ -1919,7 +1953,10 @@ void UIManager::UpdateWeddingMode(float deltaTime)
         float currentDuckFactor = GetDuckFactor();
         float targetDuckFactor = m_targetDuckFactor;
         
-        float newDuckFactor = std::max(targetDuckFactor, currentDuckFactor - (deltaTime / m_crossfadeDuration));
+        // Use max to avoid using std::max which might cause issues
+        float newDuckFactor = targetDuckFactor > (currentDuckFactor - (deltaTime / m_crossfadeDuration)) 
+            ? targetDuckFactor 
+            : (currentDuckFactor - (deltaTime / m_crossfadeDuration));
         
         if (newDuckFactor != currentDuckFactor) {
             SetDuckFactor(newDuckFactor);
@@ -1960,7 +1997,15 @@ void UIManager::CheckWeddingPhaseTransition()
     
     currentChannel->isPlaying(&isPlaying);
     if (!isPlaying) {
-        if (m_weddingPhase == 3 && m_transitionToNormalMusicAfterWedding) {
+        if (m_weddingPhase == 1 && m_phase1State == WeddingPhase1State::PLAYING_ENTRANCE && m_autoTransitionToPhase2) {
+            spdlog::info("Fin de la phase 1, transition automatique vers la phase 2");
+            StartWeddingPhase2(m_transitionToNormalMusicAfterWedding);
+        }
+        else if (m_weddingPhase == 2 && m_autoTransitionToPhase2) {
+            spdlog::info("Fin de la phase 2, transition automatique vers la phase 3");
+            StartWeddingPhase3(m_transitionToNormalMusicAfterWedding, m_normalPlaylistAfterWedding);
+        }
+        else if (m_weddingPhase == 3 && m_transitionToNormalMusicAfterWedding) {
             StartNormalMusicAfterWedding();
         }
         return;
@@ -1973,8 +2018,59 @@ void UIManager::CheckWeddingPhaseTransition()
     
     float progress = static_cast<float>(positionMs) / static_cast<float>(lengthMs);
     
-    if (m_weddingPhase == 3 && progress >= 0.95f && m_transitionToNormalMusicAfterWedding) {
-        StartNormalMusicAfterWedding();
+    // Calculer le temps restant en millisecondes
+    unsigned int remainingMs = lengthMs - positionMs;
+    
+    // Démarrer la transition 10 secondes avant la fin (ou un peu plus tôt)
+    unsigned int transitionStartMs = static_cast<unsigned int>(m_phasesTransitionDuration * 1000);
+    
+    // Si on est proche de la fin et que les transitions automatiques sont activées
+    if (remainingMs <= transitionStartMs) {
+        if (m_weddingPhase == 1 && m_phase1State == WeddingPhase1State::PLAYING_ENTRANCE && m_autoTransitionToPhase2) {
+            // Calculer le facteur de ducking basé sur le temps restant
+            float t = 1.0f - (static_cast<float>(remainingMs) / transitionStartMs);
+            float newDuckFactor = 1.0f * (1.0f - t); // Fade out progressif
+            
+            // Appliquer le ducking
+            SetDuckFactor(newDuckFactor);
+            UpdateAllVolumes();
+            
+            // Si on est presque à la fin, passer à la phase suivante
+            if (remainingMs < 200) { // Moins de 200ms restantes
+                spdlog::info("Fin de la phase 1 avec transition, passage à la phase 2");
+                StartWeddingPhase2(m_transitionToNormalMusicAfterWedding);
+            }
+        }
+        else if (m_weddingPhase == 2 && m_autoTransitionToPhase2) {
+            // Calculer le facteur de ducking basé sur le temps restant
+            float t = 1.0f - (static_cast<float>(remainingMs) / transitionStartMs);
+            float newDuckFactor = 1.0f * (1.0f - t); // Fade out progressif
+            
+            // Appliquer le ducking
+            SetDuckFactor(newDuckFactor);
+            UpdateAllVolumes();
+            
+            // Si on est presque à la fin, passer à la phase suivante
+            if (remainingMs < 200) { // Moins de 200ms restantes
+                spdlog::info("Fin de la phase 2 avec transition, passage à la phase 3");
+                StartWeddingPhase3(m_transitionToNormalMusicAfterWedding, m_normalPlaylistAfterWedding);
+            }
+        }
+        else if (m_weddingPhase == 3 && m_transitionToNormalMusicAfterWedding) {
+            // Calculer le facteur de ducking basé sur le temps restant
+            float t = 1.0f - (static_cast<float>(remainingMs) / transitionStartMs);
+            float newDuckFactor = 1.0f * (1.0f - t); // Fade out progressif
+            
+            // Appliquer le ducking
+            SetDuckFactor(newDuckFactor);
+            UpdateAllVolumes();
+            
+            // Si on est presque à la fin, passer à la playlist normale
+            if (remainingMs < 200) { // Moins de 200ms restantes
+                spdlog::info("Fin de la phase 3 avec transition, passage à la playlist normale");
+                StartNormalMusicAfterWedding();
+            }
+        }
     }
 }
 
@@ -2025,7 +2121,9 @@ void UIManager::StartNormalMusicAfterWedding()
     PlaylistManager::GetInstance().Stop("");
     AudioManager::GetInstance().StopAllSoundsWithFadeOut(); 
     
-    SetDuckFactor(1.0f);
+    // Commencer avec un volume à zéro
+    m_originalDuckFactor = m_duckFactor;
+    SetDuckFactor(0.0f);
     UpdateAllVolumes();
     
     m_weddingModeActive = false;
@@ -2042,7 +2140,11 @@ void UIManager::StartNormalMusicAfterWedding()
     
     PlaylistManager::GetInstance().Play(m_normalPlaylistAfterWedding, opts);
     
-    spdlog::info("Transition vers la playlist normale '{}' après la cérémonie de mariage", m_normalPlaylistAfterWedding);
+    // Activer le fade-in pour la musique normale
+    m_musicFadeInActive = true;
+    m_musicFadeInTimer = 0.0f;
+    
+    spdlog::info("Transition vers la playlist normale '{}' après la cérémonie de mariage avec fade-in de 5 secondes", m_normalPlaylistAfterWedding);
 }
 
 void UIManager::RenderWeddingModeTab()
@@ -2184,50 +2286,13 @@ void UIManager::RenderWeddingModeTab()
         }
         
         if (ImGui::Button("Phase 2: Pendant la cérémonie (avec ducking)", ImVec2(300, 50))) {
-            PlaylistManager::GetInstance().Stop("");
-            AudioManager::GetInstance().StopAllSounds();
-            
-            m_originalDuckFactor = 1.0f;
-            SetDuckFactor(m_originalDuckFactor);
-            
-            FMOD::Channel* channel = AudioManager::GetInstance().PlaySound(m_weddingCeremonySoundId, true, m_musicVolume * m_masterVolume);
-            
-            m_weddingModeActive = true;
-            m_weddingPhase = 2;
-            m_autoDuckingActive = true;
-            m_autoTransitionToPhase2 = false;
-            m_transitionToNormalMusicAfterWedding = transitionToNormalMusic;
-            
-            m_crossfadeDuration = 3.0f;
-            m_targetDuckFactor = ceremonyDuckingFactor;
-            
-            UpdateAllVolumes();
-            
-            spdlog::info("Phase 2 de mariage démarrée avec ducking progressif de 3 secondes");
+            // Appeler la fonction correcte au lieu de dupliquer l'implémentation
+            StartWeddingPhase2(transitionToNormalMusic);
         }
         
         if (ImGui::Button("Phase 3: Fin de la cérémonie", ImVec2(300, 50))) {
-            PlaylistManager::GetInstance().Stop("");
-            AudioManager::GetInstance().StopAllSounds();
-            
-            m_originalDuckFactor = 1.0f;
-            SetDuckFactor(m_originalDuckFactor);
-            
-            FMOD::Channel* channel = AudioManager::GetInstance().PlaySound(m_weddingExitSoundId, false, m_musicVolume * m_masterVolume);
-            
-            m_weddingModeActive = true;
-            m_weddingPhase = 3;
-            m_autoDuckingActive = true;
-            m_autoTransitionToPhase2 = false;
-            m_transitionToNormalMusicAfterWedding = transitionToNormalMusic;
-            
-            m_crossfadeDuration = 3.0f;
-            
-            m_normalPlaylistAfterWedding = normalPlaylistName;
-            
-            UpdateAllVolumes();
-            
-            spdlog::info("Phase 3 de mariage démarrée avec ducking progressif de 3 secondes");
+            // Appeler la fonction correcte au lieu de dupliquer l'implémentation
+            StartWeddingPhase3(transitionToNormalMusic, normalPlaylistName);
         }
         
         if (ImGui::Button("Arrêter toutes les musiques", ImVec2(300, 30))) {
@@ -2248,10 +2313,166 @@ void UIManager::RenderWeddingModeTab()
         
         if (m_weddingModeActive) {
             ImGui::Separator();
+            
+            // Bouton pour sauter à la fin de la phase actuelle
+            if (ImGui::Button("Sauter à la fin de la phase", ImVec2(300, 40))) {
+                if (m_weddingPhase == 1) {
+                    // Si on est dans la phase 1, on simule la fin du SFX et/ou du ducking
+                    if (m_phase1State == WeddingPhase1State::FADING_OUT_PREVIOUS) {
+                        spdlog::info("Saut: Fin du fade out des musiques précédentes");
+                        PlaylistManager::GetInstance().Stop("");
+                        AudioManager::GetInstance().StopAllSounds();
+                        m_phase1DuckTimer = 0.0f;
+                        m_phase1State = WeddingPhase1State::PLAYING_SFX_BEFORE;
+                        
+                        float sfxVolume = GetSFXVolume() * GetMasterVolume();
+                        m_phase1SfxChannel = AudioManager::GetInstance().PlaySound("sfx_shine", false, sfxVolume);
+                    }
+                    else if (m_phase1State == WeddingPhase1State::PLAYING_SFX_BEFORE) {
+                        spdlog::info("Saut: Fin du SFX");
+                        if (m_phase1SfxChannel) {
+                            m_phase1SfxChannel->stop();
+                            m_phase1SfxChannel = nullptr;
+                        }
+                        m_phase1DuckTimer = 0.0f;
+                        m_phase1State = WeddingPhase1State::WAITING_AFTER_SFX;
+                    }
+                    else if (m_phase1State == WeddingPhase1State::WAITING_AFTER_SFX) {
+                        spdlog::info("Saut: Fin de l'attente après SFX");
+                        m_phase1DuckTimer = m_phase1WaitDuration; // Forcer la fin de l'attente
+                        SetDuckFactor(0.0f);
+                        
+                        float musicVolume = GetMusicVolume() * GetMasterVolume();
+                        m_phase1EntranceChannel = AudioManager::GetInstance().PlaySound(
+                            m_weddingEntranceSoundId, false, musicVolume);
+                        UpdateAllVolumes();
+                        
+                        m_phase1DuckTimer = 0.0f;
+                        m_phase1State = WeddingPhase1State::DUCKING_IN;
+                    }
+                    else if (m_phase1State == WeddingPhase1State::DUCKING_IN) {
+                        spdlog::info("Saut: Fin du ducking in");
+                        SetDuckFactor(1.0f);
+                        UpdateAllVolumes();
+                        m_phase1State = WeddingPhase1State::PLAYING_ENTRANCE;
+                    }
+                    else if (m_phase1State == WeddingPhase1State::PLAYING_ENTRANCE) {
+                        spdlog::info("Saut: Fin de la musique d'entrée");
+                        if (m_phase1EntranceChannel) {
+                            m_phase1EntranceChannel->stop();
+                            m_phase1EntranceChannel = nullptr;
+                        }
+                        // Passer à la phase 2
+                        StartWeddingPhase2(m_transitionToNormalMusicAfterWedding);
+                    }
+                }
+                else if (m_weddingPhase == 2) {
+                    spdlog::info("Saut: Fin de la phase 2");
+                    // Passer à la phase 3
+                    StartWeddingPhase3(m_transitionToNormalMusicAfterWedding, m_normalPlaylistAfterWedding);
+                }
+                else if (m_weddingPhase == 3) {
+                    spdlog::info("Saut: Fin de la phase 3");
+                    // Arrêter la musique ou passer à la playlist normale selon la configuration
+                    if (m_transitionToNormalMusicAfterWedding) {
+                        StartNormalMusicAfterWedding();
+                    }
+                    else {
+                        StopAllMusic();
+                    }
+                }
+            }
+            
+            // Bouton pour passer directement à la phase suivante
+            if (ImGui::Button("Passer à la phase suivante", ImVec2(300, 40))) {
+                if (m_weddingPhase == 1) {
+                    spdlog::info("Transition directe: Phase 1 -> Phase 2");
+                    StartWeddingPhase2(m_transitionToNormalMusicAfterWedding);
+                }
+                else if (m_weddingPhase == 2) {
+                    spdlog::info("Transition directe: Phase 2 -> Phase 3");
+                    StartWeddingPhase3(m_transitionToNormalMusicAfterWedding, m_normalPlaylistAfterWedding);
+                }
+                else if (m_weddingPhase == 3) {
+                    spdlog::info("Transition directe: Phase 3 -> Fin");
+                    if (m_transitionToNormalMusicAfterWedding) {
+                        StartNormalMusicAfterWedding();
+                    }
+                    else {
+                        StopAllMusic();
+                    }
+                }
+            }
+            
+            // Bouton pour tester la transition vers la playlist normale
+            if (ImGui::Button("Tester transition vers playlist normale", ImVec2(300, 40))) {
+                StartNormalMusicAfterWedding();
+                spdlog::info("Test de transition vers la playlist normale: {}", m_normalPlaylistAfterWedding);
+            }
+            
+            // Bouton pour avancer à 30 secondes de la fin
+            if (ImGui::Button("Avancer à 30 sec de la fin", ImVec2(300, 40))) {
+                FMOD::Channel* currentChannel = nullptr;
+                
+                // Déterminer le canal actif selon la phase
+                if (m_weddingPhase == 1 && m_phase1State == WeddingPhase1State::PLAYING_ENTRANCE) {
+                    currentChannel = m_phase1EntranceChannel;
+                } else if (m_weddingPhase == 2) {
+                    currentChannel = AudioManager::GetInstance().GetLastChannelOfSound(m_weddingCeremonySoundId);
+                } else if (m_weddingPhase == 3) {
+                    currentChannel = AudioManager::GetInstance().GetLastChannelOfSound(m_weddingExitSoundId);
+                }
+                
+                if (currentChannel) {
+                    FMOD::Sound* currentSound = nullptr;
+                    bool isPlaying = false;
+                    currentChannel->isPlaying(&isPlaying);
+                    
+                    if (isPlaying && currentChannel->getCurrentSound(&currentSound) == FMOD_OK && currentSound) {
+                        // Obtenir la durée totale
+                        unsigned int lengthMs = 0;
+                        currentSound->getLength(&lengthMs, FMOD_TIMEUNIT_MS);
+                        
+                        // Calculer la position à 30 secondes de la fin
+                        unsigned int newPositionMs = 0;
+                        if (lengthMs > 30000) { // S'assurer qu'il y a au moins 30 secondes
+                            newPositionMs = lengthMs - 30000; // 30 secondes avant la fin
+                        }
+                        
+                        // Positionner la lecture
+                        FMOD_RESULT result = currentChannel->setPosition(newPositionMs, FMOD_TIMEUNIT_MS);
+                        if (result == FMOD_OK) {
+                            spdlog::info("Avancé à 30 secondes de la fin (position: {}ms / {}ms)", 
+                                         newPositionMs, lengthMs);
+                        } else {
+                            spdlog::error("Impossible de positionner la musique");
+                        }
+                    } else {
+                        spdlog::error("Impossible d'obtenir le son en cours");
+                    }
+                } else {
+                    spdlog::error("Aucun canal actif trouvé pour la phase {}", m_weddingPhase);
+                }
+            }
+            
+            ImGui::Separator();
             ImGui::Text("État actuel:");
             
             if (m_weddingPhase == 1) {
                 ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Phase 1: Entrée de la cérémonie en cours");
+                
+                // Afficher l'état détaillé de la phase 1
+                const char* stateStr = "Inconnu";
+                switch (m_phase1State) {
+                    case WeddingPhase1State::IDLE: stateStr = "Idle"; break;
+                    case WeddingPhase1State::FADING_OUT_PREVIOUS: stateStr = "Fade out des musiques précédentes"; break;
+                    case WeddingPhase1State::PLAYING_SFX_BEFORE: stateStr = "Lecture du SFX"; break;
+                    case WeddingPhase1State::WAITING_AFTER_SFX: stateStr = "Attente après SFX"; break;
+                    case WeddingPhase1State::DUCKING_IN: stateStr = "Ducking in (augmentation du volume)"; break;
+                    case WeddingPhase1State::PLAYING_ENTRANCE: stateStr = "Lecture de la musique d'entrée"; break;
+                    case WeddingPhase1State::DUCKING_OUT: stateStr = "Ducking out"; break;
+                }
+                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "Sous-phase: %s", stateStr);
                 
                 if (m_autoDuckingActive) {
                     ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.0f, 1.0f), "Ducking automatique actif");
@@ -2271,41 +2492,47 @@ void UIManager::RenderWeddingModeTab()
             
             if (m_weddingPhase == 1) {
                 currentChannel = AudioManager::GetInstance().GetLastChannelOfSound(m_weddingEntranceSoundId);
-            } else if (m_weddingPhase == 2) {
+            } else if (m_weddingPhase == 2) 
+            {
                 currentChannel = AudioManager::GetInstance().GetLastChannelOfSound(m_weddingCeremonySoundId);
-            } else if (m_weddingPhase == 3) {
+            }
+            else if (m_weddingPhase == 3)
+            {
                 currentChannel = AudioManager::GetInstance().GetLastChannelOfSound(m_weddingExitSoundId);
             }
             
+            // Display information about the current audio if available
             if (currentChannel) {
                 FMOD::Sound* currentSound = nullptr;
                 unsigned int positionMs = 0;
                 unsigned int lengthMs = 0;
                 bool isPlaying = false;
-
+                
                 currentChannel->isPlaying(&isPlaying);
                 
-                if (isPlaying && 
-                    currentChannel->getCurrentSound(&currentSound) == FMOD_OK && 
-                    currentSound) {
+                if (isPlaying && currentChannel->getCurrentSound(&currentSound) == FMOD_OK && currentSound) {
                     currentSound->getLength(&lengthMs, FMOD_TIMEUNIT_MS);
                     currentChannel->getPosition(&positionMs, FMOD_TIMEUNIT_MS);
-
+                    
+                    float totalMinutes = floorf((lengthMs / 1000.0f) / 60.0f);
+                    float totalSeconds = fmodf((lengthMs / 1000.0f), 60.0f);
+                    
+                    float currentMinutes = floorf((positionMs / 1000.0f) / 60.0f);
+                    float currentSeconds = fmodf((positionMs / 1000.0f), 60.0f);
+                    
+                    ImGui::Text("Position: %.0f:%.02f / %.0f:%.02f", 
+                               currentMinutes, currentSeconds, totalMinutes, totalSeconds);
+                    
                     float progress = static_cast<float>(positionMs) / static_cast<float>(lengthMs);
-                    
-                    float remainingTimeMs = lengthMs - positionMs;
-                    float remainingMinutes = floorf((remainingTimeMs / 1000.0f) / 60.0f);
-                    float remainingSeconds = fmodf((remainingTimeMs / 1000.0f), 60.0f);
-                    
-                    char progressText[32];
-                    snprintf(progressText, sizeof(progressText), "%.0f:%.02f restant", 
-                            remainingMinutes, remainingSeconds);
-
-                    ImGui::ProgressBar(progress, ImVec2(-1, 0), progressText);
+                    ImGui::ProgressBar(progress, ImVec2(-1, 0), "Progression");
                 }
             }
         }
     }
+    
+    // Add ImGui delta time for smooth animations
+    float deltaTime = ImGui::GetIO().DeltaTime;
+    CheckWeddingPhaseTransition();
 }
 
 void UIManager::UpdateWeddingFilePaths()
@@ -2348,68 +2575,69 @@ void UIManager::PlayRandomMusic() {
 }
 
 void UIManager::StartWeddingPhase1(bool transitionToNormalMusicAfter) {
-    // Ne pas arrêter les musiques immédiatement, on va les fader out
-    // PlaylistManager::GetInstance().Stop("");
-    // AudioManager::GetInstance().StopAllSounds();
 
-    // Sauvegarder le volume original
-    m_originalDuckFactor = m_duckFactor; // Sauvegarder le facteur de duck actuel
+    m_originalDuckFactor = m_duckFactor; 
     
-    // Initialiser l'état pour la Phase 1
     m_weddingModeActive = true;
     m_weddingPhase = 1;
     m_phase1State = WeddingPhase1State::FADING_OUT_PREVIOUS;
     m_phase1DuckTimer = 0.0f;
-    m_autoTransitionToPhase2 = false;
     m_transitionToNormalMusicAfterWedding = transitionToNormalMusicAfter;
 
     spdlog::info("Wedding Phase 1: Starting with progressive fade out ({:.1f} seconds)", m_phase1FadeOutDuration);
 }
 
-void UIManager::StartWeddingPhase2() {
+void UIManager::StartWeddingPhase2(bool transitionToNormalMusicAfter) {
     PlaylistManager::GetInstance().Stop("");
     AudioManager::GetInstance().StopAllSounds();
     
     m_originalDuckFactor = 1.0f;
-    SetDuckFactor(m_originalDuckFactor);
+    SetDuckFactor(0.0f);  // Commencer avec le volume à zéro
     
     FMOD::Channel* channel = AudioManager::GetInstance().PlaySound(m_weddingCeremonySoundId, true, m_musicVolume * m_masterVolume);
     
     m_weddingModeActive = true;
     m_weddingPhase = 2;
-    m_autoDuckingActive = true;
-    m_autoTransitionToPhase2 = false;
-    m_transitionToNormalMusicAfterWedding = false;
+    m_autoDuckingActive = true;  // Activer le ducking automatique
+    m_autoTransitionToPhase2 = transitionToNormalMusicAfter;
+    m_transitionToNormalMusicAfterWedding = transitionToNormalMusicAfter;
     
-    m_crossfadeDuration = 3.0f;
-    m_targetDuckFactor = 0.3f;
+    // Fixed 10-second ducking duration for phase 2
+    m_crossfadeDuration = 10.0f;
+    m_targetDuckFactor = 1.0f;  // Cible de ducking à 1.0, volume normal
     
     UpdateAllVolumes();
     
-    spdlog::info("Phase 2 de mariage démarrée via Bluetooth");
+    spdlog::info("Phase 2 de mariage démarrée avec ducking in de 10 secondes");
 }
 
-void UIManager::StartWeddingPhase3() {
+void UIManager::StartWeddingPhase3(bool transitionToNormalMusicAfter, const std::string& postWeddingPlaylist) {
     PlaylistManager::GetInstance().Stop("");
     AudioManager::GetInstance().StopAllSounds();
     
     m_originalDuckFactor = 1.0f;
-    m_targetDuckFactor = 1.0f;  // Définir explicitement avant SetDuckFactor
-    SetDuckFactor(m_originalDuckFactor);
+    m_targetDuckFactor = 1.0f;  // Définir la cible de ducking à 1.0, volume normal
+    SetDuckFactor(0.0f);  // Commencer avec le volume à zéro
     
     FMOD::Channel* channel = AudioManager::GetInstance().PlaySound(m_weddingExitSoundId, false, m_musicVolume * m_masterVolume);
     
     m_weddingModeActive = true;
     m_weddingPhase = 3;
-    m_autoDuckingActive = true;
+    m_autoDuckingActive = true;  // Activer le ducking automatique
     m_autoTransitionToPhase2 = false;
-    m_transitionToNormalMusicAfterWedding = false;
+    m_transitionToNormalMusicAfterWedding = transitionToNormalMusicAfter;
     
-    m_crossfadeDuration = 3.0f;
+    // Si une playlist post-mariage est spécifiée, l'utiliser
+    if (!postWeddingPlaylist.empty()) {
+        m_normalPlaylistAfterWedding = postWeddingPlaylist;
+    }
+    
+    // Fixed 10-second ducking duration for phase 3
+    m_crossfadeDuration = 10.0f;
     
     UpdateAllVolumes();
     
-    spdlog::info("Phase 3 de mariage démarrée via Bluetooth");
+    spdlog::info("Phase 3 de mariage démarrée avec ducking in de 10 secondes");
 }
 
 void UIManager::NextWeddingPhase() {
@@ -2419,9 +2647,9 @@ void UIManager::NextWeddingPhase() {
     }
     
     if (m_weddingPhase == 1) {
-        StartWeddingPhase2();
+        StartWeddingPhase2(m_transitionToNormalMusicAfterWedding);
     } else if (m_weddingPhase == 2) {
-        StartWeddingPhase3();
+        StartWeddingPhase3(m_transitionToNormalMusicAfterWedding, m_normalPlaylistAfterWedding);
     } else if (m_weddingPhase == 3) {
         StopAllMusic();
     }

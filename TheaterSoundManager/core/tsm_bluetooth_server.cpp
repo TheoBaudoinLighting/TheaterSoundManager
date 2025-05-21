@@ -124,13 +124,13 @@ void processCommand(SOCKET clientSocket, char* buffer)
     }
     else if (strcmp(buffer, "WEDDING_PHASE1") == 0)
     {
-        TSM::UIManager::GetInstance().StartWeddingPhase1();
+        TSM::UIManager::GetInstance().StartWeddingPhase1(true);
         const char* response = "Wedding Phase 1 started";
         send(clientSocket, response, (int)strlen(response), 0);
     }
     else if (strcmp(buffer, "WEDDING_PHASE2") == 0)
     {
-        TSM::UIManager::GetInstance().StartWeddingPhase2();
+        TSM::UIManager::GetInstance().StartWeddingPhase2(true);
         const char* response = "Wedding Phase 2 started";
         send(clientSocket, response, (int)strlen(response), 0);
     }
