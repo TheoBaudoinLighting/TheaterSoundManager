@@ -15,6 +15,16 @@ namespace TSM
 class UIManager
 {
 public:
+    enum class WeddingPhase1State {
+        IDLE,
+        FADING_OUT_PREVIOUS,
+        PLAYING_SFX_BEFORE,
+        WAITING_AFTER_SFX,
+        DUCKING_IN,
+        PLAYING_ENTRANCE,
+        DUCKING_OUT
+    };
+
     static UIManager& GetInstance()
     {
         static UIManager instance;
@@ -51,7 +61,7 @@ public:
     void UpdateWeddingFilePaths();
 
     void PlayRandomMusic();
-    void StartWeddingPhase1();
+    void StartWeddingPhase1(bool transitionToNormalMusicAfter = false);
     void StartWeddingPhase2();
     void StartWeddingPhase3();
     void NextWeddingPhase();
@@ -119,7 +129,7 @@ private:
     bool m_autoDuckingActive = false;
     float m_originalDuckFactor = 1.0f;
     float m_targetDuckFactor = 0.3f;
-    float m_crossfadeDuration = 5.0f;
+    float m_crossfadeDuration = 10.0f;
     bool m_autoTransitionToPhase2 = false;
     bool m_transitionToNormalMusicAfterWedding = false;
     
@@ -136,6 +146,15 @@ private:
     
     PlaylistOptions m_opts;
     std::string m_playlistName = "playlist_sample";
+
+    WeddingPhase1State m_phase1State = WeddingPhase1State::IDLE;
+    float m_phase1DuckTimer = 0.0f;
+    float m_phase1DuckFadeDuration = 20.0f;
+    float m_phase1FadeOutDuration = 5.0f;
+    float m_phase1WaitDuration = 6.0f;
+    FMOD::Channel* m_phase1SfxChannel = nullptr;
+    FMOD::Channel* m_phase1EntranceChannel = nullptr;
+    std::string m_phase1SfxName = "sfx_shine";
 };
 
 } // namespace TSM

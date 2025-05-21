@@ -40,37 +40,39 @@ int main()
     StartBluetoothServer();
 
     // Création de la playlist par défaut
-    const std::string defaultPlaylist = "playlist_test";
-    TSM::PlaylistManager::GetInstance().CreatePlaylist(defaultPlaylist);
+    const std::string preShowPlaylist = "playlist_PreShow";
+    TSM::PlaylistManager::GetInstance().CreatePlaylist(preShowPlaylist);
 
-    // Chargement des musiques pour les phases du mode mariage
-    TSM::AudioManager::GetInstance().LoadSound("hi_diddle_dee", "assets/musics/Entrance(Fantasia Gardens) - Hi diddle dee dee (Pinocchio).mp3", true);
-    TSM::AudioManager::GetInstance().LoadSound("be_our_guest", "assets/musics/Entrance(Fantasia Gardens) - Be our guest (Beauty and the beast).mp3", true);
-    TSM::AudioManager::GetInstance().LoadSound("rise_and_shine", "assets/musics/Entrance(Fantasia Gardens) - Rise and shine (Monsters university).mp3", true);
-    TSM::AudioManager::GetInstance().LoadSound("supercalifragilisticexpialidocious", "assets/musics/Entrance(Fantasia Gardens) - Supercalifragilisticexpialidocious (Mary Poppins).mp3", true);
-    TSM::AudioManager::GetInstance().LoadSound("walk_to_work", "assets/musics/Entrance(Fantasia Gardens) - Walk to work (Monsters inc. ).mp3", true);
-    TSM::AudioManager::GetInstance().LoadSound("pinocchio_village_haus", "assets/musics/Pinocchio Village Haus Magic Kingdom Walt Disney World full Area music (1991-present).mp3", true);
-    TSM::AudioManager::GetInstance().LoadSound("indiana_jones", "assets/musics/The Music Of Indiana Jones And The Temple Of Peril・Disneyland Paris (BGMComplete Loop).mp3", true);
-    TSM::AudioManager::GetInstance().LoadSound("mickey_minnie_runaway_railway", "assets/musics/Mickey & Minnie's Runaway Railway - Full Exit Music.mp3", true);
-    TSM::AudioManager::GetInstance().LoadSound("royal_street", "assets/musics/RoyalStreet - Area Background Music  at Tokyo Disneyland.mp3", true);
-    TSM::AudioManager::GetInstance().LoadSound("whistle_while_you_work", "assets/musics/Entrance(Fantasia Gardens) - Whistle while you work (Snow white).mp3", true);
+    // Chargement des musiques pour le PreShow Mariage
+    TSM::AudioManager::GetInstance().LoadSound("temps_amour", "assets/musics/PreShowMariage/01_Bon_Entendeur_Le_temps_de_l_amour.mp3", true);
+    TSM::AudioManager::GetInstance().LoadSound("fio_maravilha", "assets/musics/PreShowMariage/Nicoletta_FioMaravilha.mp3", true);
+    TSM::AudioManager::GetInstance().LoadSound("helwa_ya_baladi", "assets/musics/PreShowMariage/DalidaHelwaYaBaladi_LinaSleibiCover.mp3", true);
+    TSM::AudioManager::GetInstance().LoadSound("laisse_moi_taimer", "assets/musics/PreShowMariage/LaisseMoiTaimer_MikeBrant.mp3", true);
+    TSM::AudioManager::GetInstance().LoadSound("yeux_emilie", "assets/musics/PreShowMariage/JoeDassin_LesYeuxEmilie.mp3", true);
+    TSM::AudioManager::GetInstance().LoadSound("bonnie_clyde", "assets/musics/PreShowMariage/SergeGainsbourg_BonnieClyde.mp3", true);
+    TSM::AudioManager::GetInstance().LoadSound("perche_ti_amo", "assets/musics/PreShowMariage/SaraPercheTiAmo_NextGenRemix.mp3", true);
+    TSM::AudioManager::GetInstance().LoadSound("emmenez_moi", "assets/musics/PreShowMariage/CharlesAznavour_EmmenezMoi.mp3", true);
+    TSM::AudioManager::GetInstance().LoadSound("boheme", "assets/musics/PreShowMariage/CharlesAznavour_ LaBohemeBoubouRemix.mp3", true);
+    TSM::AudioManager::GetInstance().LoadSound("amour", "assets/musics/PreShowMariage/Mouloudji_Lamour.mp3", true);
+    TSM::AudioManager::GetInstance().LoadSound("foule", "assets/musics/PreShowMariage/EdithPiaf_LaFoule.mp3", true);
 
     // Ajout des musiques à la playlist par défaut
-    TSM::PlaylistManager::GetInstance().AddToPlaylist(defaultPlaylist, "hi_diddle_dee");
-    TSM::PlaylistManager::GetInstance().AddToPlaylist(defaultPlaylist, "be_our_guest");
-    TSM::PlaylistManager::GetInstance().AddToPlaylist(defaultPlaylist, "rise_and_shine");
-    TSM::PlaylistManager::GetInstance().AddToPlaylist(defaultPlaylist, "supercalifragilisticexpialidocious");
-    TSM::PlaylistManager::GetInstance().AddToPlaylist(defaultPlaylist, "walk_to_work");
-    TSM::PlaylistManager::GetInstance().AddToPlaylist(defaultPlaylist, "pinocchio_village_haus");
-    TSM::PlaylistManager::GetInstance().AddToPlaylist(defaultPlaylist, "indiana_jones");
-    TSM::PlaylistManager::GetInstance().AddToPlaylist(defaultPlaylist, "mickey_minnie_runaway_railway");
-    TSM::PlaylistManager::GetInstance().AddToPlaylist(defaultPlaylist, "royal_street");
-    TSM::PlaylistManager::GetInstance().AddToPlaylist(defaultPlaylist, "whistle_while_you_work");
+    TSM::PlaylistManager::GetInstance().AddToPlaylist(preShowPlaylist, "temps_amour");
+    TSM::PlaylistManager::GetInstance().AddToPlaylist(preShowPlaylist, "fio_maravilha");
+    TSM::PlaylistManager::GetInstance().AddToPlaylist(preShowPlaylist, "helwa_ya_baladi");
+    TSM::PlaylistManager::GetInstance().AddToPlaylist(preShowPlaylist, "laisse_moi_taimer");
+    TSM::PlaylistManager::GetInstance().AddToPlaylist(preShowPlaylist, "yeux_emilie");
+    TSM::PlaylistManager::GetInstance().AddToPlaylist(preShowPlaylist, "bonnie_clyde");
+    TSM::PlaylistManager::GetInstance().AddToPlaylist(preShowPlaylist, "perche_ti_amo");
+    TSM::PlaylistManager::GetInstance().AddToPlaylist(preShowPlaylist, "emmenez_moi");
+    TSM::PlaylistManager::GetInstance().AddToPlaylist(preShowPlaylist, "boheme");
+    TSM::PlaylistManager::GetInstance().AddToPlaylist(preShowPlaylist, "amour");
+    TSM::PlaylistManager::GetInstance().AddToPlaylist(preShowPlaylist, "foule");
 
     // Chargement des musiques pour les phases du mode mariage
     TSM::AudioManager::GetInstance().LoadWeddingEntranceSound("assets/wedding/Entree_RunrigHeartsOfOldenGlory.mp3");
     TSM::AudioManager::GetInstance().LoadWeddingCeremonySound("assets/wedding/Loop_PortOrleanAmbience.mp3");
-    TSM::AudioManager::GetInstance().LoadWeddingExitSound("assets/wedding/Camille Saint-Saens - The Swan.mp3");
+    TSM::AudioManager::GetInstance().LoadWeddingExitSound("assets/musics/PreShowMariage/MariagedAmour_PauldeSennevilleJacobsPiano.mp3");
 
     // Chargement des effets sonores
     TSM::AudioManager::GetInstance().LoadSound("sfx_shine", "assets/sfx/DisneyShine_SFX.mp3", false);
