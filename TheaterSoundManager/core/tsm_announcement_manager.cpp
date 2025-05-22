@@ -398,7 +398,7 @@ void AnnouncementManager::CheckSchedules(float /*deltaTime*/)
                 spdlog::info("Auto-playing announcement '{}' scheduled at {:02d}:{:02d}",
                              s.announcementId, s.hour, s.minute);
 
-                PlayAnnouncement(s.announcementId, 0.3f, true, true);
+                PlayAnnouncement(s.announcementId, 0.05f, true, true);
                 s.triggered = true;
             }
         }

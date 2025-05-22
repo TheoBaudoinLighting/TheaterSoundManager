@@ -2197,15 +2197,35 @@ void UIManager::StartNormalMusicAfterWedding()
 
     m_playlistName = m_normalPlaylistAfterWedding;
 
-    PlaylistOptions opts;
-    opts.loopPlaylist = true;
-    opts.randomOrder = true;
-    opts.randomSegment = true;
-    opts.segmentDuration = 900.0f;
-
-    PlaylistManager::GetInstance().Play(m_normalPlaylistAfterWedding, opts);
-
-    PlaylistManager::GetInstance().SetCrossfadeDuration(10.0f);
+    // Check if "secret_love" track exists in the playlist
+    auto* playlist = PlaylistManager::GetInstance().GetPlaylistByName(m_normalPlaylistAfterWedding);
+    bool secretLoveFound = false;
+    
+    if (playlist) {
+        // Find the "secret_love" track directly by ID
+        for (size_t i = 0; i < playlist->tracks.size(); i++) {
+            if (playlist->tracks[i] == "secret_love") {
+                spdlog::info("Found 'secret_love' track at index {} in playlist, starting from there", i);
+                PlaylistManager::GetInstance().SetCrossfadeDuration(10.0f);
+                PlaylistManager::GetInstance().PlayFromIndex(m_normalPlaylistAfterWedding, static_cast<int>(i));
+                secretLoveFound = true;
+                break;
+            }
+        }
+    }
+    
+    // If the track wasn't found or the playlist doesn't exist, use default settings
+    if (!secretLoveFound) {
+        spdlog::warn("'secret_love' track not found in playlist, starting with regular settings");
+        PlaylistOptions opts;
+        opts.loopPlaylist = true;
+        opts.randomOrder = true;
+        opts.randomSegment = true;
+        opts.segmentDuration = 900.0f;
+        
+        PlaylistManager::GetInstance().Play(m_normalPlaylistAfterWedding, opts);
+        PlaylistManager::GetInstance().SetCrossfadeDuration(10.0f);
+    }
 
     m_musicFadeInActive = true;
     m_musicFadeInTimer = 0.0f;
@@ -2650,12 +2670,12 @@ void UIManager::StartWeddingPhase2(bool transitionToNormalMusicAfter) {
     m_autoTransitionToPhase2 = transitionToNormalMusicAfter;
     m_transitionToNormalMusicAfterWedding = transitionToNormalMusicAfter;
 
-    m_crossfadeDuration = 10.0f;
-    m_targetDuckFactor = 1.0f;
+    m_crossfadeDuration = 20.0f;
+    m_targetDuckFactor = 0.05f;
 
     UpdateAllVolumes();
 
-    spdlog::info("Wedding phase 2 started with 10-second ducking in");
+    spdlog::info("Wedding phase 2 started with 20-second ducking in");
 }
 
 void UIManager::StartWeddingPhase3(bool transitionToNormalMusicAfter, const std::string& postWeddingPlaylist) {
