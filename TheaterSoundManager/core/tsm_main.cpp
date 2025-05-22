@@ -21,6 +21,8 @@
     #define SDL_MAIN_HANDLED
 #endif
 
+//#define TROLL
+
 int main()
 {
     TSM::Logger::Init();
@@ -143,6 +145,13 @@ int main()
     TSM::AnnouncementManager::GetInstance().ScheduleAnnouncement(15, 00, "announce_machine_photo");
     TSM::AnnouncementManager::GetInstance().ScheduleAnnouncement(15, 15, "announce_jeux_de_societer");
     TSM::AnnouncementManager::GetInstance().ScheduleAnnouncement(16, 00, "announce_remerciements");
+
+
+#ifdef TROLL
+
+	TSM::AnnouncementManager::GetInstance().LoadAnnouncement("announce_deco_accident", "assets/annonces/Both/decoration_acidentelle.mp3");
+    TSM::AnnouncementManager::GetInstance().ScheduleAnnouncement(15, 30, "announce_deco_accident");
+#endif
     
 
 
