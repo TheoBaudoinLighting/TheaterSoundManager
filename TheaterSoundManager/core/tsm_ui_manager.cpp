@@ -707,12 +707,18 @@ void UIManager::RenderPlaylistManagerTab()
                     
                     // Appliquer aussi la durée de crossfade si elle existe
                     PlaylistManager::GetInstance().SetCrossfadeDuration(playlist->crossfadeDuration);
+                    
+                    // Mettre à jour le nom de playlist actuel dans l'UIManager pour que les contrôles principaux fonctionnent
+                    m_playlistName = playlistName;
                 } else {
                     // Fallback avec options par défaut si la playlist n'est pas trouvée
                     PlaylistOptions defaultOpts;
                     defaultOpts.randomOrder = true;
                     defaultOpts.loopPlaylist = true;
                     PlaylistManager::GetInstance().Play(playlistName, defaultOpts);
+                    
+                    // Mettre à jour le nom de playlist actuel dans l'UIManager
+                    m_playlistName = playlistName;
                 }
             }
 
@@ -910,6 +916,9 @@ void UIManager::RenderPlaylistManagerTab()
                         PlaylistManager::GetInstance().Stop(selectedPlaylist);
                         PlaylistManager::GetInstance().SetCrossfadeDuration(playlist->crossfadeDuration);
                         PlaylistManager::GetInstance().PlayFromIndex(selectedPlaylist, static_cast<int>(i));
+                        
+                        // Mettre à jour le nom de playlist actuel dans l'UIManager
+                        m_playlistName = selectedPlaylist;
                     }
 
                     ImGui::SameLine();
@@ -1184,6 +1193,8 @@ void UIManager::RenderMusicPlaylistTab()
             ImGui::TableNextColumn();
             if (ImGui::Button("Play")) {
                 PlaylistManager::GetInstance().PlayFromIndex(g_playlistName, i);
+                // Mettre à jour le nom de playlist actuel dans l'UIManager
+                m_playlistName = g_playlistName;
             }
             ImGui::SameLine();
             
@@ -1261,6 +1272,10 @@ void UIManager::RenderMusicPlaylistTab()
             if (!inPlaylist) {
                 if (ImGui::Button("Add to Playlist")) {
                     PlaylistManager::GetInstance().AddToPlaylist(g_playlistName, soundId);
+                    // Si c'est la playlist active, mettre à jour m_playlistName
+                    if (PlaylistManager::GetInstance().IsPlaylistPlaying(g_playlistName)) {
+                        m_playlistName = g_playlistName;
+                    }
                 }
             } else {
                 ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.00f), "In Playlist");
