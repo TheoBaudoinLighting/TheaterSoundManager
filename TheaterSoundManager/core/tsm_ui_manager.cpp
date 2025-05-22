@@ -2197,17 +2197,34 @@ void UIManager::StartNormalMusicAfterWedding()
 
     m_playlistName = m_normalPlaylistAfterWedding;
 
+    // Définir les options standard pour la playlist
+    PlaylistOptions opts;
+    opts.loopPlaylist = true;
+    opts.randomOrder = true;
+    opts.randomSegment = true;
+    opts.segmentDuration = 900.0f;
+
     // Check if "secret_love" track exists in the playlist
     auto* playlist = PlaylistManager::GetInstance().GetPlaylistByName(m_normalPlaylistAfterWedding);
     bool secretLoveFound = false;
     
     if (playlist) {
+        // Appliquer les options à la playlist indépendamment de si on trouve secret_love
+        playlist->options = opts;
+        
         // Find the "secret_love" track directly by ID
         for (size_t i = 0; i < playlist->tracks.size(); i++) {
             if (playlist->tracks[i] == "secret_love") {
                 spdlog::info("Found 'secret_love' track at index {} in playlist, starting from there", i);
+                
+                // D'abord, activer la playlist avec les options
+                PlaylistManager::GetInstance().Play(m_normalPlaylistAfterWedding, opts);
+                
+                // Ensuite, passer directement à l'index de secret_love
+                PlaylistManager::GetInstance().Stop(m_normalPlaylistAfterWedding);
                 PlaylistManager::GetInstance().SetCrossfadeDuration(10.0f);
                 PlaylistManager::GetInstance().PlayFromIndex(m_normalPlaylistAfterWedding, static_cast<int>(i));
+                
                 secretLoveFound = true;
                 break;
             }
@@ -2217,12 +2234,6 @@ void UIManager::StartNormalMusicAfterWedding()
     // If the track wasn't found or the playlist doesn't exist, use default settings
     if (!secretLoveFound) {
         spdlog::warn("'secret_love' track not found in playlist, starting with regular settings");
-        PlaylistOptions opts;
-        opts.loopPlaylist = true;
-        opts.randomOrder = true;
-        opts.randomSegment = true;
-        opts.segmentDuration = 900.0f;
-        
         PlaylistManager::GetInstance().Play(m_normalPlaylistAfterWedding, opts);
         PlaylistManager::GetInstance().SetCrossfadeDuration(10.0f);
     }

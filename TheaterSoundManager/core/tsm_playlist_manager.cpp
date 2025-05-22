@@ -25,6 +25,13 @@ void PlaylistManager::CreatePlaylist(const std::string& playlistName)
     {
         Playlist newPlaylist;
         newPlaylist.name = playlistName;
+        
+        // Paramètres par défaut
+        newPlaylist.options.randomOrder = true;
+        newPlaylist.options.randomSegment = true;
+        newPlaylist.options.loopPlaylist = true;
+        newPlaylist.options.segmentDuration = 900.0f;
+        
         m_playlists.push_back(newPlaylist);
         spdlog::info("Playlist '{}' created.", playlistName);
         NotifyPlaylistChanged();
@@ -313,6 +320,13 @@ bool PlaylistManager::ImportPlaylist(const std::string& filePath, const std::str
         
         if (existingIt != m_playlists.end())
         {
+            // Options par défaut
+            existingIt->options.randomOrder = true;
+            existingIt->options.randomSegment = true;
+            existingIt->options.loopPlaylist = true;
+            existingIt->options.segmentDuration = 900.0f;
+            
+            // Remplacer par les options du fichier si elles existent
             if (j.contains("options"))
             {
                 const auto& options = j["options"];
@@ -520,6 +534,13 @@ bool PlaylistManager::LoadPlaylistsFromFile(const std::string& filePath)
             Playlist playlist;
             playlist.name = playlistJson["name"].get<std::string>();
             
+            // Options par défaut
+            playlist.options.randomOrder = true;
+            playlist.options.randomSegment = true;
+            playlist.options.loopPlaylist = true;
+            playlist.options.segmentDuration = 900.0f;
+            
+            // Remplacer par les options du fichier si elles existent
             if (playlistJson.contains("options"))
             {
                 const auto& options = playlistJson["options"];
