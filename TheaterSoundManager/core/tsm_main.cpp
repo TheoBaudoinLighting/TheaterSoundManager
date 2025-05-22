@@ -112,23 +112,23 @@ int main()
     TSM::AudioManager::GetInstance().LoadSound("sfx_shine", "assets/sfx/DisneyShine_SFX.mp3", false);
     
     // DAY 01
-    TSM::AudioManager::GetInstance().LoadAnnouncement("announce_bienvenue_01", "assets/annonces/French/bienvenue_01.mp3"); // 12h00
+    TSM::AudioManager::GetInstance().LoadAnnouncement("announce_bienvenue_01", "assets/annonces/Both/bienvenue_01.mp3"); // 12h00
 
-    TSM::AudioManager::GetInstance().LoadAnnouncement("announce_15min_cl", "assets/annonces/French/15min_cl.mp3"); // 12h15
-    TSM::AudioManager::GetInstance().LoadAnnouncement("announce_10min_cl", "assets/annonces/French/10min_cl.mp3"); // 12h20
-    TSM::AudioManager::GetInstance().LoadAnnouncement("announce_5min_cl", "assets/annonces/French/5min_cl.mp3"); // 12h25
+    TSM::AudioManager::GetInstance().LoadAnnouncement("announce_15min_cl", "assets/annonces/Both/15min_cl.mp3"); // 12h15
+    TSM::AudioManager::GetInstance().LoadAnnouncement("announce_10min_cl", "assets/annonces/Both/10min_cl.mp3"); // 12h20
+    TSM::AudioManager::GetInstance().LoadAnnouncement("announce_5min_cl", "assets/annonces/Both/5min_cl.mp3"); // 12h25
 
     // 13h30 End of Ceremony
 
-    TSM::AudioManager::GetInstance().LoadAnnouncement("announce_15min_buffet", "assets/annonces/French/15min_buffet.mp3"); // 14h15
-    TSM::AudioManager::GetInstance().LoadAnnouncement("announce_10min_buffet", "assets/annonces/French/10min_buffet.mp3"); // 14h20
-    TSM::AudioManager::GetInstance().LoadAnnouncement("announce_5min_buffet", "assets/annonces/French/5min_buffet.mp3"); // 14h25
+    TSM::AudioManager::GetInstance().LoadAnnouncement("announce_15min_buffet", "assets/annonces/Both/15min_buffet.mp3"); // 14h15
+    TSM::AudioManager::GetInstance().LoadAnnouncement("announce_10min_buffet", "assets/annonces/Both/10min_buffet.mp3"); // 14h20
+    TSM::AudioManager::GetInstance().LoadAnnouncement("announce_5min_buffet", "assets/annonces/Both/5min_buffet.mp3"); // 14h25
 
     // 15h30 End of Buffet
 
-    TSM::AudioManager::GetInstance().LoadAnnouncement("announce_machine_photo", "assets/annonces/French/machine_photo_02.mp3"); // 15h00
-    TSM::AudioManager::GetInstance().LoadAnnouncement("announce_jeux_de_societer", "assets/annonces/French/jeux_societer_01.mp3"); // 15h15
-    TSM::AudioManager::GetInstance().LoadAnnouncement("announce_remerciements", "assets/annonces/French/merci_01.mp3"); // 16h00
+    TSM::AudioManager::GetInstance().LoadAnnouncement("announce_machine_photo", "assets/annonces/Both/machine_photo_02.mp3"); // 15h00
+    TSM::AudioManager::GetInstance().LoadAnnouncement("announce_jeux_de_societer", "assets/annonces/Both/jeux_societer_01.mp3"); // 15h15
+    TSM::AudioManager::GetInstance().LoadAnnouncement("announce_remerciements", "assets/annonces/Both/merci_01.mp3"); // 16h00
 
     // Programmation des annonces
     TSM::AnnouncementManager::GetInstance().ScheduleAnnouncement(12, 00, "announce_bienvenue_01");

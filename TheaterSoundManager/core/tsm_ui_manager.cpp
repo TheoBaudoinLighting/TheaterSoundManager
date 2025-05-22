@@ -664,7 +664,6 @@ void UIManager::RenderPlaylistManagerTab()
             ImGui::TableNextColumn();
             bool selected = (selectedPlaylistIndex == i);
             
-            // Zone cliquable pour sélection uniquement dans la première colonne
             if (ImGui::Selectable(playlistName.c_str(), selected, ImGuiSelectableFlags_None))
             {
                 selectedPlaylistIndex = i;
@@ -675,26 +674,34 @@ void UIManager::RenderPlaylistManagerTab()
                 }
             }
 
-            // Colonne Tracks
             ImGui::TableNextColumn();
             int trackCount = static_cast<int>(PlaylistManager::GetInstance().GetPlaylistTrackCount(playlistName));
             ImGui::Text("%d", trackCount);
 
-            // Colonne Status
             ImGui::TableNextColumn();
             bool isPlaying = PlaylistManager::GetInstance().IsPlaylistPlaying(playlistName);
             ImGui::TextColored(isPlaying ? ImVec4(0.0f, 1.0f, 0.0f, 1.0f) : ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
                             isPlaying ? "Playing" : "Stopped");
 
-            // Colonne Actions - Boutons maintenant cliquables
             ImGui::TableNextColumn();
             
             if (ImGui::Button("Play", ImVec2(50, 25)))
             {
-                PlaylistOptions opts;
-                opts.randomOrder = false;
-                opts.loopPlaylist = true;
-                PlaylistManager::GetInstance().Play(playlistName, opts);
+                // CORRECTION : Utiliser les options de la playlist au lieu des valeurs par défaut
+                auto* playlist = PlaylistManager::GetInstance().GetPlaylistByName(playlistName);
+                if (playlist) {
+                    // Utiliser les options configurées de la playlist
+                    PlaylistManager::GetInstance().Play(playlistName, playlist->options);
+                    
+                    // Appliquer aussi la durée de crossfade si elle existe
+                    PlaylistManager::GetInstance().SetCrossfadeDuration(playlist->crossfadeDuration);
+                } else {
+                    // Fallback avec options par défaut si la playlist n'est pas trouvée
+                    PlaylistOptions defaultOpts;
+                    defaultOpts.randomOrder = true;
+                    defaultOpts.loopPlaylist = true;
+                    PlaylistManager::GetInstance().Play(playlistName, defaultOpts);
+                }
             }
 
             ImGui::SameLine();
@@ -721,7 +728,6 @@ void UIManager::RenderPlaylistManagerTab()
                 ImGui::OpenPopup("Confirm delete");
             }
 
-            // Popup de confirmation pour la suppression
             if (ImGui::BeginPopupModal("Confirm delete", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
             {
                 ImGui::Text("Are you sure you want to delete the playlist '%s'?", playlistName.c_str());
@@ -754,7 +760,6 @@ void UIManager::RenderPlaylistManagerTab()
         ImGui::EndTable();
     }
 
-    // Reste du code de la fonction...
     if (renameMode && selectedPlaylistIndex >= 0 && selectedPlaylistIndex < playlistNames.size())
     {
         ImGui::Separator();
@@ -784,20 +789,72 @@ void UIManager::RenderPlaylistManagerTab()
     if (selectedPlaylistIndex >= 0 && selectedPlaylistIndex < playlistNames.size())
     {
         const std::string& selectedPlaylist = playlistNames[selectedPlaylistIndex];
-        const auto* playlist = PlaylistManager::GetInstance().GetPlaylistByName(selectedPlaylist);
+        auto* playlist = PlaylistManager::GetInstance().GetPlaylistByName(selectedPlaylist);
 
         if (playlist)
         {
             ImGui::Separator();
-            ImGui::Text("Playlist details: %s", selectedPlaylist.c_str());
+            ImGui::Text("Playlist settings: %s", selectedPlaylist.c_str());
 
-            ImGui::Checkbox("Random order", const_cast<bool*>(&playlist->options.randomOrder));
+            // AMÉLIORATION : Rendre les contrôles plus intuitifs
+            ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.2f, 0.7f, 0.2f, 0.3f));
+            
+            bool optionsChanged = false;
+            
+            if (ImGui::Checkbox("Random order", const_cast<bool*>(&playlist->options.randomOrder))) {
+                optionsChanged = true;
+            }
             ImGui::SameLine();
-            ImGui::Checkbox("Random segment", const_cast<bool*>(&playlist->options.randomSegment));
+            
+            if (ImGui::Checkbox("Random segment", const_cast<bool*>(&playlist->options.randomSegment))) {
+                optionsChanged = true;
+            }
             ImGui::SameLine();
-            ImGui::Checkbox("Loop playlist", const_cast<bool*>(&playlist->options.loopPlaylist));
-            ImGui::SliderFloat("Segment duration", const_cast<float*>(&playlist->options.segmentDuration), 10.0f, 300.0f, "%.1fs");
+            
+            if (ImGui::Checkbox("Loop playlist", const_cast<bool*>(&playlist->options.loopPlaylist))) {
+                optionsChanged = true;
+            }
+            
+            if (ImGui::SliderFloat("Segment duration", const_cast<float*>(&playlist->options.segmentDuration), 10.0f, 1800.0f, "%.1fs")) {
+                optionsChanged = true;
+            }
+            
+            // AJOUT : Contrôle du crossfade
+            if (ImGui::SliderFloat("Crossfade duration", const_cast<float*>(&playlist->crossfadeDuration), 0.0f, 10.0f, "%.1fs")) {
+                optionsChanged = true;
+                // Appliquer immédiatement si la playlist est en cours de lecture
+                if (PlaylistManager::GetInstance().IsPlaylistPlaying(selectedPlaylist)) {
+                    PlaylistManager::GetInstance().SetCrossfadeDuration(playlist->crossfadeDuration);
+                }
+            }
+            
+            ImGui::PopStyleColor();
+            
+            // Indicateur visuel si des changements ont été faits
+            if (optionsChanged) {
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "(Settings updated)");
+            }
+            
+            // Bouton pour appliquer les changements à une playlist en cours
+            if (PlaylistManager::GetInstance().IsPlaylistPlaying(selectedPlaylist)) {
+                ImGui::Separator();
+                ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "This playlist is currently playing");
+                
+                if (ImGui::Button("Apply settings to current playback", ImVec2(300, 30))) {
+                    // Redémarrer la playlist avec les nouveaux paramètres
+                    PlaylistManager::GetInstance().Stop(selectedPlaylist);
+                    PlaylistManager::GetInstance().Play(selectedPlaylist, playlist->options);
+                    PlaylistManager::GetInstance().SetCrossfadeDuration(playlist->crossfadeDuration);
+                    
+                    spdlog::info("Applied new settings to playlist '{}'", selectedPlaylist);
+                }
+                
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Restart to apply changes");
+            }
 
+            ImGui::Separator();
             ImGui::Text("Tracks in playlist:");
 
             if (ImGui::BeginTable("TracksTable", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
@@ -837,6 +894,9 @@ void UIManager::RenderPlaylistManagerTab()
 
                     if (ImGui::Button("Play", ImVec2(50, 25)))
                     {
+                        // CORRECTION : Utiliser les options de la playlist pour PlayFromIndex aussi
+                        PlaylistManager::GetInstance().Stop(selectedPlaylist);
+                        PlaylistManager::GetInstance().SetCrossfadeDuration(playlist->crossfadeDuration);
                         PlaylistManager::GetInstance().PlayFromIndex(selectedPlaylist, static_cast<int>(i));
                     }
 
@@ -883,6 +943,7 @@ void UIManager::RenderPlaylistManagerTab()
                 ImGui::EndTable();
             }
 
+            // Reste du code pour l'ajout de tracks...
             static int selectedTrackToAdd = -1;
             static std::vector<std::pair<std::string, std::string>> availableTracks;
 
