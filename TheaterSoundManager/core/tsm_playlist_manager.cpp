@@ -806,9 +806,30 @@ void PlaylistManager::Update(float deltaTime)
                         float lengthSec = lengthMs / 1000.0f;
                         float effectiveSegmentDuration = std::min(plist.segmentMaxDuration, lengthSec);
                         
+                        unsigned int positionMs = 0;
+                        bool trackFinished = false;
+                        if (plist.currentChannel->getPosition(&positionMs, FMOD_TIMEUNIT_MS) == FMOD_OK) {
+                         
+                            if (lengthMs > 0 && (lengthMs - positionMs) < 500) { // 500ms threshold
+                                trackFinished = true;
+                            }
+                        }
+                        
                         plist.segmentTimer += deltaTime;
-                        if (plist.segmentTimer >= effectiveSegmentDuration)
-                        {
+                        if (trackFinished || !isPlaying) {
+                            // If track finished naturally, move to next one
+                            if (plist.tracks.size() == 1)
+                            {
+                                StartTrackAtIndex(plist, plist.currentIndex);
+                            }
+                            else
+                            {
+                                StartNextTrack(plist);
+                            }
+                            continue;
+                        }
+                        else if (plist.segmentTimer >= effectiveSegmentDuration && lengthSec > effectiveSegmentDuration) {
+                            // Only switch based on segment timer if the track is actually longer than segment duration
                             if (plist.tracks.size() == 1)
                             {
                                 StartTrackAtIndex(plist, plist.currentIndex);
