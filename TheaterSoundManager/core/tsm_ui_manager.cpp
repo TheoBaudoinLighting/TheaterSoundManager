@@ -543,6 +543,12 @@ void UIManager::PreRender()
 
 void UIManager::Render()
 {
+    if (!m_isInitialized) return;
+
+    if (SDL_GetWindowFlags(m_window) & SDL_WINDOW_MINIMIZED) {
+        return;
+    }
+
     ImGui::SetNextWindowSize(ImVec2(700, 500), ImGuiCond_FirstUseEver);
     ImGui::Begin("Theater Sound Manager", nullptr, ImGuiWindowFlags_MenuBar);
 
@@ -580,6 +586,12 @@ void UIManager::Render()
 void UIManager::PostRender()
 {
     if (!m_isInitialized) return;
+
+    // Add check for minimized window to prevent rendering when minimized
+    if (SDL_GetWindowFlags(m_window) & SDL_WINDOW_MINIMIZED) {
+        SDL_Delay(10);
+        return;
+    }
 
     ImGui::Render();
     ImGuiIO& io = ImGui::GetIO();
