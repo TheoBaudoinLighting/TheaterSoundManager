@@ -126,14 +126,19 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)external\imgui;$(ProjectDir)external\imgui\backends;$(ProjectDir)external\sdl\include;$(ProjectDir)external\sdl_mixer\include;$(ProjectDir)external\fmod\inc;$(ProjectDir)core;$(ProjectDir)core\imgui;$(ProjectDir)core\math;$(ProjectDir)core\sdl;$(ProjectDir)core\sound;$(ProjectDir)external\spdlog\include\;$(ProjectDir)external\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>$(ProjectDir)external\sdl\lib\x64\;$(ProjectDir)external\sdl_mixer\lib\x64\;$(ProjectDir)external\fmod\lib\x64\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>SDL2.lib;SDL2main.lib;SDL2_mixer.lib;opengl32.lib;fmod_vc.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -155,6 +160,12 @@
   <ItemGroup>
     <Library Include="external\sdl\lib\x64\SDL2.lib" />
     <Library Include="external\sdl\lib\x64\SDL2main.lib" />
+  </ItemGroup>
+  <ItemGroup>
+    <RuntimeDll Include="$(ProjectDir)external\sdl\lib\x64\SDL2.dll" />
+    <RuntimeDll Include="$(ProjectDir)external\sdl_mixer\lib\x64\SDL2_mixer.dll" />
+    <RuntimeDll Include="$(ProjectDir)external\sdl_mixer\lib\x64\optional\*.dll" />
+    <RuntimeDll Include="$(ProjectDir)external\fmod\lib\x64\fmod.dll" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="core\tsm_announcement_manager.h" />
@@ -275,6 +286,17 @@
     <ClInclude Include="external\sdl_mixer\include\SDL_mixer.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ItemGroup>
+    <AssetFile Include="$(ProjectDir)assets\**\*" />
+  </ItemGroup>
+  <Target Name="CopyRuntimeDlls" AfterTargets="Build" Condition="'$(Platform)'=='x64'">
+    <Copy SourceFiles="@(RuntimeDll)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
+  <Target Name="CopyAssets" AfterTargets="Build" Condition="Exists('$(ProjectDir)assets')">
+    <Copy SourceFiles="@(AssetFile)"
+          DestinationFiles="@(AssetFile->'$(OutDir)assets\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
 </Project>

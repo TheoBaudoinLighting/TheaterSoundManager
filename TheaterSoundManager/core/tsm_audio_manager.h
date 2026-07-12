@@ -36,6 +36,8 @@ public:
     FMOD::Channel* PlaySoundWithFadeIn(const std::string& soundName, bool loop = false, float volume = 1.0f, float pitch = 1.0f);
     void StopSound(const std::string& soundName);
     void StopSoundWithFadeOut(const std::string& soundName);
+    void StopChannelWithFadeOut(FMOD::Channel* channel);
+    bool IsChannelFading(FMOD::Channel* channel) const;
     void StopAllSounds();
     void StopAllSoundsWithFadeOut();
     FMOD::Sound* GetSound(const std::string& soundName);
@@ -47,13 +49,25 @@ public:
     void Update(float deltaTime);
     FMOD::Channel* GetLastChannelOfSound(const std::string& soundName);
 private:
+    struct ChannelFade
+    {
+        FMOD::Channel* channel = nullptr;
+        FMOD::Sound* expectedSound = nullptr;
+        float timer = 0.0f;
+        float duration = 1.5f;
+        float startVolume = 0.0f;
+        float targetVolume = 0.0f;
+        bool stopWhenComplete = false;
+    };
+
     std::map<std::string, SoundData> m_sounds;
-    bool m_isFadingIn = false;
-    bool m_isFadingOut = false;
-    float m_fadeTimer = 0.0f;
+    std::vector<ChannelFade> m_channelFades;
     float m_fadeDuration = 1.5f;
-    std::string m_fadingSoundName;
-    float m_fadeTargetVolume = 1.0f;
+
+    void StartChannelFade(FMOD::Channel* channel, float targetVolume, bool stopWhenComplete);
+    void CancelChannelFade(FMOD::Channel* channel);
+    void PruneStoppedChannels(SoundData& data);
+    static bool ApplyPitch(FMOD::Channel* channel, float pitch);
 public:
     AudioManager() = default;
     ~AudioManager() = default;

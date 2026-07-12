@@ -14,9 +14,8 @@ namespace TSM
 
 void AnnouncementManager::ScheduleAnnouncement(int hour, int minute, const std::string& announcementId)
 {
-    FMOD::Sound* sound = AudioManager::GetInstance().GetSound(announcementId);
-    if (!sound) {
-        spdlog::error("Impossible to schedule announcement '{}' because it is not loaded or not found.", announcementId);
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || announcementId.empty()) {
+        spdlog::error("Invalid scheduled announcement '{}': {:02d}:{:02d}", announcementId, hour, minute);
         return;
     }
     
@@ -283,9 +282,8 @@ FMOD::Channel* AnnouncementManager::PlayAnnouncement(const std::string& announce
 
 void AnnouncementManager::AddScheduledAnnouncement(int hour, int minute, const std::string& annID)
 {
-    FMOD::Sound* sound = AudioManager::GetInstance().GetSound(annID);
-    if (!sound) {
-        spdlog::error("Impossible to schedule announcement '{}' because it is not loaded or not found.", annID);
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || annID.empty()) {
+        spdlog::error("Invalid scheduled announcement '{}': {:02d}:{:02d}", annID, hour, minute);
         return;
     }
     

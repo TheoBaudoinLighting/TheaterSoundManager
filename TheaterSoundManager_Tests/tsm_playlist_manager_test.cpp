@@ -92,5 +92,24 @@ namespace TSM {
             ASSERT_EQ(playlist->tracks[2], "track1");
         }
 
+        TEST_F(PlaylistManagerTests, MissingSegmentAssetsStopCleanly) {
+            auto& manager = PlaylistManager::GetInstance();
+
+            manager.CreatePlaylist(m_playlistName);
+            manager.AddToPlaylist(m_playlistName, "missing_track");
+
+            PlaylistOptions options;
+            options.randomOrder = true;
+            options.randomSegment = true;
+            options.segmentDuration = 150.0f;
+            options.loopPlaylist = true;
+
+            manager.Play(m_playlistName, options);
+
+            EXPECT_FALSE(manager.IsPlaylistPlaying(m_playlistName));
+            EXPECT_EQ(manager.GetCurrentChannel(), nullptr);
+            EXPECT_TRUE(manager.GetCurrentTrackName().empty());
+        }
+
     }
 }

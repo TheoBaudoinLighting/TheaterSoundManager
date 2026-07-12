@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 #include <optional>
+#include <algorithm>
 
 #include "tsm_playlist_manager.h"
 
@@ -46,14 +47,14 @@ public:
     float GetAnnouncementVolume() const  { return m_announcementVolume; }
     float GetSFXVolume() const           { return m_sfxVolume; }
 
-    void SetMasterVolume(float volume)        { m_masterVolume = volume; }
-    void SetMusicVolume(float volume)         { m_musicVolume = volume; }
-    void SetAnnouncementVolume(float volume)  { m_announcementVolume = volume; }
-    void SetSFXVolume(float volume)           { m_sfxVolume = volume; }
+    void SetMasterVolume(float volume)        { m_masterVolume = std::clamp(volume, 0.0f, 1.0f); }
+    void SetMusicVolume(float volume)         { m_musicVolume = std::clamp(volume, 0.0f, 1.0f); }
+    void SetAnnouncementVolume(float volume)  { m_announcementVolume = std::clamp(volume, 0.0f, 3.0f); }
+    void SetSFXVolume(float volume)            { m_sfxVolume = std::clamp(volume, 0.0f, 3.0f); }
 
     void ForceUpdateAllVolumes() { UpdateAllVolumes(); }
 
-    void SetDuckFactor(float factor)   { m_duckFactor = factor; }
+    void SetDuckFactor(float factor)   { m_duckFactor = std::clamp(factor, 0.0f, 1.0f); }
     float GetDuckFactor() const        { return m_duckFactor; }
 
     void UpdateWeddingMode(float deltaTime);
@@ -133,10 +134,6 @@ private:
     bool m_autoTransitionToPhase2 = false;
     bool m_transitionToNormalMusicAfterWedding = false;
     
-    bool m_musicFadeInActive = false;
-    float m_musicFadeInTimer = 0.0f;
-    float m_musicFadeInDuration = 5.0f;
-    
     std::string m_weddingEntranceFilePath;
     std::string m_weddingCeremonyFilePath;
     std::string m_weddingExitFilePath;
@@ -159,6 +156,8 @@ private:
     float m_phasesTransitionDuration = 10.0f;  
     FMOD::Channel* m_phase1SfxChannel = nullptr;
     FMOD::Channel* m_phase1EntranceChannel = nullptr;
+    FMOD::Channel* m_weddingCeremonyChannel = nullptr;
+    FMOD::Channel* m_weddingExitChannel = nullptr;
     std::string m_phase1SfxName = "sfx_shine";
 };
 

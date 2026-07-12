@@ -40,5 +40,21 @@ namespace TSM {
             manager.SetDuckFactor(originalFactor);
         }
 
+        TEST_F(UIManagerTests, VolumeAndDuckingSettersClampUnsafeValues) {
+            auto& manager = UIManager::GetInstance();
+
+            manager.SetMasterVolume(-1.0f);
+            manager.SetMusicVolume(2.0f);
+            manager.SetAnnouncementVolume(4.0f);
+            manager.SetSFXVolume(-0.5f);
+            manager.SetDuckFactor(2.0f);
+
+            ASSERT_FLOAT_EQ(manager.GetMasterVolume(), 0.0f);
+            ASSERT_FLOAT_EQ(manager.GetMusicVolume(), 1.0f);
+            ASSERT_FLOAT_EQ(manager.GetAnnouncementVolume(), 3.0f);
+            ASSERT_FLOAT_EQ(manager.GetSFXVolume(), 0.0f);
+            ASSERT_FLOAT_EQ(manager.GetDuckFactor(), 1.0f);
+        }
+
     }
 }

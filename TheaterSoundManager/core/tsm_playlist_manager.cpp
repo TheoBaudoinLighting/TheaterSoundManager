@@ -30,7 +30,7 @@ void PlaylistManager::CreatePlaylist(const std::string& playlistName)
         newPlaylist.options.randomOrder = true;
         newPlaylist.options.randomSegment = true;
         newPlaylist.options.loopPlaylist = true;
-        newPlaylist.options.segmentDuration = 900.0f;
+        newPlaylist.options.segmentDuration = PlaylistOptions::DefaultSegmentDuration;
         
         m_playlists.push_back(newPlaylist);
         spdlog::info("Playlist '{}' created.", playlistName);
@@ -161,6 +161,11 @@ void PlaylistManager::RemoveFromPlaylist(const std::string& playlistName, const 
 
     if (it != m_playlists.end())
     {
+        if (it->isPlaying)
+        {
+            Stop(playlistName);
+        }
+
         auto& tracks = it->tracks;
         auto trackIt = std::find(tracks.begin(), tracks.end(), soundName);
         
@@ -190,7 +195,10 @@ void PlaylistManager::RemoveFromPlaylistAtIndex(const std::string& playlistName,
     {
         if (index < it->tracks.size())
         {
-            std::string trackName = it->tracks[index];
+            if (it->isPlaying)
+            {
+                Stop(playlistName);
+            }
             it->tracks.erase(it->tracks.begin() + index);
             spdlog::info("Removed track at index {} from playlist '{}'.", index, playlistName);
             NotifyPlaylistChanged();
@@ -309,6 +317,10 @@ bool PlaylistManager::ImportPlaylist(const std::string& filePath, const std::str
         if (existingIt != m_playlists.end())
         {
             spdlog::warn("Playlist '{}' already exists. It will be overwritten.", importedName);
+            if (existingIt->isPlaying)
+            {
+                Stop(importedName);
+            }
             existingIt->tracks.clear();
         }
         else
@@ -324,7 +336,7 @@ bool PlaylistManager::ImportPlaylist(const std::string& filePath, const std::str
             existingIt->options.randomOrder = true;
             existingIt->options.randomSegment = true;
             existingIt->options.loopPlaylist = true;
-            existingIt->options.segmentDuration = 900.0f;
+            existingIt->options.segmentDuration = PlaylistOptions::DefaultSegmentDuration;
             
             // Remplacer par les options du fichier si elles existent
             if (j.contains("options"))
@@ -437,15 +449,15 @@ void PlaylistManager::MoveTrackToPosition(const std::string& playlistName, int s
     {
         return;
     }
+
+    if (it->isPlaying)
+    {
+        Stop(playlistName);
+    }
     
     std::string trackToMove = tracks[sourceIndex];
     
     tracks.erase(tracks.begin() + sourceIndex);
-    
-    if (targetIndex > sourceIndex)
-    {
-        targetIndex--;
-    }
     
     tracks.insert(tracks.begin() + targetIndex, trackToMove);
     
@@ -538,7 +550,7 @@ bool PlaylistManager::LoadPlaylistsFromFile(const std::string& filePath)
             playlist.options.randomOrder = true;
             playlist.options.randomSegment = true;
             playlist.options.loopPlaylist = true;
-            playlist.options.segmentDuration = 900.0f;
+            playlist.options.segmentDuration = PlaylistOptions::DefaultSegmentDuration;
             
             // Remplacer par les options du fichier si elles existent
             if (playlistJson.contains("options"))
@@ -578,7 +590,8 @@ bool PlaylistManager::LoadPlaylistsFromFile(const std::string& filePath)
             newPlaylists.push_back(playlist);
         }
         
-        m_playlists = newPlaylists;
+        Stop("");
+        m_playlists = std::move(newPlaylists);
         m_activePlaylistName = "";
         
         spdlog::info("Loaded {} playlists from '{}'.", m_playlists.size(), filePath);
@@ -625,30 +638,41 @@ void PlaylistManager::Play(const std::string& playlistName, const PlaylistOption
 
     Stop(m_activePlaylistName);
     
-    m_activePlaylistName = playlistName;
     plist.options = options;
-    plist.isPlaying = true;
+    plist.segmentModeActive = options.randomSegment;
+    plist.segmentMaxDuration = std::max(options.segmentDuration, 0.0f);
+    plist.segmentTimer = 0.0f;
+    plist.chosenStartTime = 0.0f;
 
     if (options.randomOrder)
     {
         PrepareRandomOrder(plist);
+        if (plist.randomIndices.empty())
+        {
+            spdlog::warn("Playlist '{}' has no loaded playable track.", playlistName);
+            FinishPlaylist(plist);
+            return;
+        }
         plist.randomIndexPos = 0;
         plist.currentIndex = plist.randomIndices[0];
     }
     else
     {
-        plist.currentIndex = 0;
+        plist.currentIndex = FindNextEligibleIndex(plist, -1, false);
+        if (plist.currentIndex < 0)
+        {
+            spdlog::warn("Playlist '{}' has no loaded playable track.", playlistName);
+            FinishPlaylist(plist);
+            return;
+        }
     }
 
+    m_activePlaylistName = playlistName;
+    plist.isPlaying = true;
     plist.currentChannel = nullptr;
     plist.nextChannel = nullptr;
     plist.isCrossfading = false;
     plist.crossfadeTimer = 0.0f;
-
-    plist.segmentModeActive = options.randomSegment;
-    plist.segmentMaxDuration = options.segmentDuration;
-    plist.segmentTimer = 0.0f;
-    plist.chosenStartTime = 0.0f;
 
     StartTrackAtIndex(plist, plist.currentIndex);
 
@@ -657,83 +681,53 @@ void PlaylistManager::Play(const std::string& playlistName, const PlaylistOption
 
 void PlaylistManager::Stop(const std::string& playlistName)
 {
+    auto stopPlaylist = [](Playlist& plist)
+    {
+        auto& audioManager = AudioManager::GetInstance();
+        audioManager.StopChannelWithFadeOut(plist.currentChannel);
+        audioManager.StopChannelWithFadeOut(plist.nextChannel);
+
+        plist.isPlaying = false;
+        plist.isCrossfading = false;
+        plist.currentChannel = nullptr;
+        plist.nextChannel = nullptr;
+        plist.currentIndex = -1;
+        plist.randomIndexPos = 0;
+        plist.segmentTimer = 0.0f;
+    };
+
     if (playlistName.empty())
     {
         for (auto& plist : m_playlists)
         {
             if (plist.isPlaying)
             {
-                if (plist.currentChannel)
-                {
-                    bool isPlaying = false;
-                    plist.currentChannel->isPlaying(&isPlaying);
-                    if (isPlaying)
-                    {
-                        std::string currentTrack = plist.tracks[plist.currentIndex];
-                        AudioManager::GetInstance().StopSoundWithFadeOut(currentTrack);
-                    }
-                }
-                
-                if (plist.nextChannel)
-                {
-                    bool isPlaying = false;
-                    plist.nextChannel->isPlaying(&isPlaying);
-                    if (isPlaying)
-                    {
-                        int nextIndex = (plist.currentIndex + 1) % plist.tracks.size();
-                        std::string nextTrack = plist.tracks[nextIndex];
-                        AudioManager::GetInstance().StopSoundWithFadeOut(nextTrack);
-                    }
-                }
-                
-                plist.isPlaying = false;
-                plist.isCrossfading = false;
-                plist.currentChannel = nullptr;
-                plist.nextChannel = nullptr;
+                stopPlaylist(plist);
             }
         }
-        
+
+        m_activePlaylistName.clear();
         spdlog::info("All playlists stopped with fade-out");
+        return;
     }
-    else
+
+    auto it = std::find_if(m_playlists.begin(), m_playlists.end(),
+        [&playlistName](const Playlist& playlist) { return playlist.name == playlistName; });
+    if (it == m_playlists.end())
     {
-        for (auto& plist : m_playlists)
-        {
-            if (plist.name == playlistName && plist.isPlaying)
-            {
-                if (plist.currentChannel)
-                {
-                    bool isPlaying = false;
-                    plist.currentChannel->isPlaying(&isPlaying);
-                    if (isPlaying)
-                    {
-                        std::string currentTrack = plist.tracks[plist.currentIndex];
-                        AudioManager::GetInstance().StopSoundWithFadeOut(currentTrack);
-                    }
-                }
-                
-                if (plist.nextChannel)
-                {
-                    bool isPlaying = false;
-                    plist.nextChannel->isPlaying(&isPlaying);
-                    if (isPlaying)
-                    {
-                        int nextIndex = (plist.currentIndex + 1) % plist.tracks.size();
-                        std::string nextTrack = plist.tracks[nextIndex];
-                        AudioManager::GetInstance().StopSoundWithFadeOut(nextTrack);
-                    }
-                }
-                
-                plist.isPlaying = false;
-                plist.isCrossfading = false;
-                plist.currentChannel = nullptr;
-                plist.nextChannel = nullptr;
-                
-                spdlog::info("Playlist '{}' stopped with fade-out", playlistName);
-                break;
-            }
-        }
+        spdlog::warn("Playlist '{}' not found while stopping.", playlistName);
+        return;
     }
+
+    if (it->isPlaying)
+    {
+        stopPlaylist(*it);
+    }
+    if (m_activePlaylistName == playlistName)
+    {
+        m_activePlaylistName.clear();
+    }
+    spdlog::info("Playlist '{}' stopped with fade-out", playlistName);
 }
 
 void PlaylistManager::Update(float deltaTime)
@@ -749,7 +743,9 @@ void PlaylistManager::Update(float deltaTime)
         if (plist.isCrossfading)
         {
             plist.crossfadeTimer += deltaTime;
-            float t = plist.crossfadeTimer / plist.crossfadeDuration;
+            float t = plist.crossfadeDuration <= 0.0f
+                ? 1.0f
+                : plist.crossfadeTimer / plist.crossfadeDuration;
             if (t > 1.0f) t = 1.0f;
 
             bool currentChannelValid = false;
@@ -819,7 +815,8 @@ void PlaylistManager::Update(float deltaTime)
                         bool trackFinished = false;
                         if (plist.currentChannel->getPosition(&positionMs, FMOD_TIMEUNIT_MS) == FMOD_OK) {
                          
-                            if (lengthMs > 0 && (lengthMs - positionMs) < 500) { // 500ms threshold
+                            if (lengthMs > 0 &&
+                                (positionMs >= lengthMs || (lengthMs - positionMs) < 500)) { // 500ms threshold
                                 trackFinished = true;
                             }
                         }
@@ -831,8 +828,7 @@ void PlaylistManager::Update(float deltaTime)
                             StartNextTrack(plist);
                             continue;
                         }
-                        else if (plist.segmentTimer >= effectiveSegmentDuration && lengthSec > effectiveSegmentDuration) {
-                            // Only switch based on segment timer if the track is actually longer than segment duration
+                        else if (plist.segmentTimer >= effectiveSegmentDuration) {
                             StartNextTrack(plist);
                             continue;
                         }
@@ -885,13 +881,27 @@ float PlaylistManager::GetSegmentProgress() const
     auto* activePlaylist = GetActivePlaylist();
     if (!activePlaylist || !activePlaylist->segmentModeActive) return 0.0f;
     if (activePlaylist->segmentMaxDuration <= 0.0f) return 0.0f;
-    return activePlaylist->segmentTimer / activePlaylist->segmentMaxDuration;
+    return std::clamp(activePlaylist->segmentTimer / activePlaylist->segmentMaxDuration, 0.0f, 1.0f);
+}
+
+float PlaylistManager::GetSegmentDuration() const
+{
+    const auto* activePlaylist = GetActivePlaylist();
+    if (!activePlaylist || !activePlaylist->segmentModeActive) return 0.0f;
+    return std::max(activePlaylist->segmentMaxDuration, 0.0f);
+}
+
+float PlaylistManager::GetSegmentRemainingTime() const
+{
+    const auto* activePlaylist = GetActivePlaylist();
+    if (!activePlaylist || !activePlaylist->segmentModeActive) return 0.0f;
+    return std::max(activePlaylist->segmentMaxDuration - activePlaylist->segmentTimer, 0.0f);
 }
 
 void PlaylistManager::SetCrossfadeDuration(float duration)
 {
-    if (m_currentPlaylist) {
-        m_currentPlaylist->crossfadeDuration = duration;
+    if (Playlist* activePlaylist = GetActivePlaylist()) {
+        activePlaylist->crossfadeDuration = std::max(duration, 0.0f);
     }
 }
 
@@ -911,7 +921,8 @@ float PlaylistManager::GetCrossfadeProgress() const
 {
     auto* activePlaylist = GetActivePlaylist();
     if (!activePlaylist || !activePlaylist->isCrossfading) return 0.0f;
-    return activePlaylist->crossfadeTimer / activePlaylist->crossfadeDuration;
+    if (activePlaylist->crossfadeDuration <= 0.0f) return 1.0f;
+    return std::clamp(activePlaylist->crossfadeTimer / activePlaylist->crossfadeDuration, 0.0f, 1.0f);
 }
 
 FMOD::Channel* PlaylistManager::GetNextChannel() const
@@ -938,16 +949,22 @@ PlaylistManager::Playlist* PlaylistManager::GetActivePlaylist()
 
 void PlaylistManager::StartNextTrack(Playlist& plist)
 {
-    int nextIndex = 0;
+    int nextIndex = -1;
     if (plist.options.randomOrder)
     {
+        if (plist.randomIndices.empty())
+        {
+            FinishPlaylist(plist);
+            return;
+        }
+
         plist.randomIndexPos++;
         if (plist.randomIndexPos >= (int)plist.randomIndices.size())
         {
             if (plist.options.loopPlaylist) {
                 plist.randomIndexPos = 0;
             } else {
-                plist.isPlaying = false;
+                FinishPlaylist(plist);
                 return;
             }
         }
@@ -955,15 +972,11 @@ void PlaylistManager::StartNextTrack(Playlist& plist)
     }
     else
     {
-        nextIndex = plist.currentIndex + 1;
-        if (nextIndex >= (int)plist.tracks.size())
+        nextIndex = FindNextEligibleIndex(plist, plist.currentIndex, plist.options.loopPlaylist);
+        if (nextIndex < 0)
         {
-            if (plist.options.loopPlaylist) {
-                nextIndex = 0;
-            } else {
-                plist.isPlaying = false;
-                return;
-            }
+            FinishPlaylist(plist);
+            return;
         }
     }
 
@@ -984,6 +997,12 @@ void PlaylistManager::StartNextTrack(Playlist& plist)
 
     std::string nextTrack = plist.tracks[nextIndex];
     FMOD::Channel* ch = AudioManager::GetInstance().PlaySound(nextTrack, false, 0.0f);
+    if (!ch)
+    {
+        spdlog::error("Failed to start next track '{}' in playlist '{}'.", nextTrack, plist.name);
+        FinishPlaylist(plist);
+        return;
+    }
     plist.nextChannel = ch;
 
     plist.currentIndex = nextIndex;
@@ -1021,9 +1040,10 @@ void PlaylistManager::StartTrackAtIndex(Playlist& plist, int index)
 
     // A track must finish naturally so StartNextTrack can apply the playlist's
     // loop policy. Looping the FMOD sound bypasses playlist progression.
-    FMOD::Channel* ch = AudioManager::GetInstance().PlaySound(track, false, userVolume);
+    FMOD::Channel* ch = AudioManager::GetInstance().PlaySoundWithFadeIn(track, false, userVolume);
     if (!ch) {
         spdlog::error("Failed to start track at index {}", index);
+        FinishPlaylist(plist);
         return;
     }
 
@@ -1031,7 +1051,7 @@ void PlaylistManager::StartTrackAtIndex(Playlist& plist, int index)
         bool isPlaying = false;
         FMOD_RESULT result = plist.currentChannel->isPlaying(&isPlaying);
         if (result == FMOD_OK && isPlaying) {
-            plist.currentChannel->stop();
+            AudioManager::GetInstance().StopChannelWithFadeOut(plist.currentChannel);
         }
     }
 
@@ -1108,12 +1128,72 @@ void PlaylistManager::FinishCrossfade(Playlist& plist)
 
 void PlaylistManager::PrepareRandomOrder(Playlist& plist)
 {
-    int size = (int)plist.tracks.size();
-    plist.randomIndices.resize(size);
-    for (int i = 0; i < size; i++)
-        plist.randomIndices[i] = i;
+    plist.randomIndices.clear();
+    for (int i = 0; i < static_cast<int>(plist.tracks.size()); ++i)
+    {
+        if (IsTrackEligibleForPlayback(plist, i))
+        {
+            plist.randomIndices.push_back(i);
+        }
+    }
 
     std::shuffle(plist.randomIndices.begin(), plist.randomIndices.end(), m_rng);
+}
+
+bool PlaylistManager::IsTrackEligibleForPlayback(const Playlist& plist, int index, float* lengthSeconds) const
+{
+    if (index < 0 || index >= static_cast<int>(plist.tracks.size())) return false;
+
+    FMOD::Sound* sound = AudioManager::GetInstance().GetSound(plist.tracks[index]);
+    if (!sound) return false;
+
+    unsigned int lengthMs = 0;
+    if (sound->getLength(&lengthMs, FMOD_TIMEUNIT_MS) != FMOD_OK) return false;
+
+    const float duration = lengthMs / 1000.0f;
+    if (lengthSeconds) *lengthSeconds = duration;
+
+    return duration > 0.0f;
+}
+
+int PlaylistManager::FindNextEligibleIndex(const Playlist& plist, int currentIndex, bool allowWrap) const
+{
+    const int trackCount = static_cast<int>(plist.tracks.size());
+    if (trackCount == 0) return -1;
+
+    for (int index = currentIndex + 1; index < trackCount; ++index)
+    {
+        if (IsTrackEligibleForPlayback(plist, index)) return index;
+    }
+
+    if (allowWrap)
+    {
+        const int lastWrappedIndex = std::min(currentIndex, trackCount - 1);
+        for (int index = 0; index <= lastWrappedIndex; ++index)
+        {
+            if (IsTrackEligibleForPlayback(plist, index)) return index;
+        }
+    }
+
+    return -1;
+}
+
+void PlaylistManager::FinishPlaylist(Playlist& plist)
+{
+    auto& audioManager = AudioManager::GetInstance();
+    audioManager.StopChannelWithFadeOut(plist.currentChannel);
+    audioManager.StopChannelWithFadeOut(plist.nextChannel);
+    plist.currentChannel = nullptr;
+    plist.nextChannel = nullptr;
+    plist.currentIndex = -1;
+    plist.isPlaying = false;
+    plist.isCrossfading = false;
+    plist.segmentTimer = 0.0f;
+
+    if (m_activePlaylistName == plist.name)
+    {
+        m_activePlaylistName.clear();
+    }
 }
 
 const PlaylistManager::Playlist* PlaylistManager::GetPlaylistByName(const std::string& name) const
@@ -1134,7 +1214,10 @@ void PlaylistManager::MoveTrackUp(const std::string& playlistName, int index)
     auto& plist = *it;
     if (index <= 0 || index >= (int)plist.tracks.size()) return;
 
+    if (plist.isPlaying) Stop(playlistName);
+
     std::swap(plist.tracks[index], plist.tracks[index-1]);
+    NotifyPlaylistChanged();
 }
 
 void PlaylistManager::MoveTrackDown(const std::string& playlistName, int index)
@@ -1145,12 +1228,18 @@ void PlaylistManager::MoveTrackDown(const std::string& playlistName, int index)
     auto& plist = *it;
     if (index < 0 || index >= (int)plist.tracks.size() - 1) return;
 
+    if (plist.isPlaying) Stop(playlistName);
+
     std::swap(plist.tracks[index], plist.tracks[index+1]);
+    NotifyPlaylistChanged();
 }
 
 void PlaylistManager::PlayFromIndex(const std::string& playlistName, int index)
 {
-    Stop(playlistName);
+    if (!m_activePlaylistName.empty())
+    {
+        Stop(m_activePlaylistName);
+    }
 
     auto it = std::find_if(m_playlists.begin(), m_playlists.end(),
         [&playlistName](const Playlist& p){ return p.name == playlistName; });
@@ -1159,22 +1248,47 @@ void PlaylistManager::PlayFromIndex(const std::string& playlistName, int index)
     Playlist& plist = *it;
     if (index < 0 || index >= (int)plist.tracks.size()) return;
 
-    if (!plist.isPlaying) {
-        PlaylistOptions opts;
-        plist.options = opts;
+    if (plist.isPlaying)
+    {
+        Stop(playlistName);
     }
-    
+
+    plist.segmentModeActive = plist.options.randomSegment;
+    plist.segmentMaxDuration = std::max(plist.options.segmentDuration, 0.0f);
+    plist.segmentTimer = 0.0f;
+
+    int selectedIndex = index;
+    if (!IsTrackEligibleForPlayback(plist, selectedIndex))
+    {
+        selectedIndex = FindNextEligibleIndex(plist, selectedIndex, plist.options.loopPlaylist);
+    }
+    if (selectedIndex < 0)
+    {
+        spdlog::warn("Playlist '{}' has no playable track from index {}.", playlistName, index);
+        FinishPlaylist(plist);
+        return;
+    }
+
+    m_activePlaylistName = playlistName;
     plist.isPlaying = true;
-    plist.currentIndex = index;
+    plist.currentIndex = selectedIndex;
     plist.currentChannel = nullptr;
     plist.nextChannel = nullptr;
     plist.isCrossfading = false;
     plist.crossfadeTimer = 0.0f;
 
-    plist.segmentModeActive = plist.options.randomSegment;
-    plist.segmentTimer = 0.0f;
+    if (plist.options.randomOrder)
+    {
+        PrepareRandomOrder(plist);
+        auto selected = std::find(plist.randomIndices.begin(), plist.randomIndices.end(), selectedIndex);
+        if (selected != plist.randomIndices.end())
+        {
+            std::iter_swap(plist.randomIndices.begin(), selected);
+        }
+        plist.randomIndexPos = 0;
+    }
 
-    StartTrackAtIndex(plist, index);
+    StartTrackAtIndex(plist, selectedIndex);
 }
 
 std::string PlaylistManager::GetTrackName(int index) const

@@ -4,6 +4,7 @@
 #include "tsm_fmod_wrapper.h"
 
 #include <spdlog/spdlog.h>
+#include <algorithm>
 
 namespace TSM 
 {
@@ -22,8 +23,15 @@ bool AudioManager::LoadSound(const std::string& soundName, const std::string& fi
         mode |= FMOD_CREATESTREAM;
     }
 
+    FMOD::System* system = FModWrapper::GetInstance().GetSystem();
+    if (!system)
+    {
+        spdlog::error("Cannot load sound '{}': FMOD system is not initialized.", soundName);
+        return false;
+    }
+
     FMOD::Sound* newSound = nullptr;
-    FMOD_RESULT result = FModWrapper::GetInstance().GetSystem()->createSound(filePath.c_str(), mode, nullptr, &newSound);
+    FMOD_RESULT result = system->createSound(filePath.c_str(), mode, nullptr, &newSound);
     if (result != FMOD_OK)
     {
         spdlog::error("FMOD createSound failed: {} for file: {}", FMOD_ErrorString(result), filePath);
@@ -48,6 +56,21 @@ bool AudioManager::UnloadSound(const std::string& soundName)
     auto it = m_sounds.find(soundName);
     if (it != m_sounds.end())
     {
+        for (auto* channel : it->second.channels)
+        {
+            if (channel)
+            {
+                CancelChannelFade(channel);
+                bool isPlaying = false;
+                FMOD_RESULT stateResult = channel->isPlaying(&isPlaying);
+                if (stateResult == FMOD_OK && isPlaying)
+                {
+                    channel->stop();
+                }
+            }
+        }
+        it->second.channels.clear();
+
         if (it->second.sound)
         {
             FMOD_RESULT result = it->second.sound->release();
@@ -56,19 +79,7 @@ bool AudioManager::UnloadSound(const std::string& soundName)
                 spdlog::error("Failed to release sound {}: {}", soundName, FMOD_ErrorString(result));
                 return false;
             }
-        }
-
-        for (auto channel : it->second.channels)
-        {
-            if (channel)
-            {
-                bool isPlaying = false;
-                channel->isPlaying(&isPlaying);
-                if (isPlaying)
-                {
-                    channel->stop();
-                }
-            }
+            it->second.sound = nullptr;
         }
 
         m_sounds.erase(it);
@@ -96,17 +107,29 @@ FMOD::Channel* AudioManager::PlaySound(const std::string& soundName, bool loop, 
         return nullptr;
     }
     
-    FMOD_MODE currentMode;
-    data.sound->getMode(&currentMode);
+    FMOD_MODE currentMode = FMOD_DEFAULT;
+    FMOD_RESULT modeResult = data.sound->getMode(&currentMode);
+    if (modeResult != FMOD_OK)
+    {
+        spdlog::error("FMOD getMode failed for '{}': {}", soundName, FMOD_ErrorString(modeResult));
+        return nullptr;
+    }
     if (loop)
         currentMode |= FMOD_LOOP_NORMAL;
     else
         currentMode &= ~FMOD_LOOP_NORMAL;
     data.sound->setMode(currentMode);
 
+    FMOD::System* system = FModWrapper::GetInstance().GetSystem();
+    if (!system)
+    {
+        spdlog::error("Cannot play sound '{}': FMOD system is not initialized.", soundName);
+        return nullptr;
+    }
+
     FMOD::Channel* channel = nullptr;
-    FMOD_RESULT result = FModWrapper::GetInstance().GetSystem()->playSound(data.sound, nullptr, true, &channel);
-    if (result != FMOD_OK)
+    FMOD_RESULT result = system->playSound(data.sound, nullptr, true, &channel);
+    if (result != FMOD_OK || !channel)
     {
         spdlog::error("FMOD playSound failed: {}", FMOD_ErrorString(result));
         return nullptr;
@@ -117,14 +140,14 @@ FMOD::Channel* AudioManager::PlaySound(const std::string& soundName, bool loop, 
     }
     
     channel->setVolume(volume);
-    float defaultFrequency;
-    channel->getFrequency(&defaultFrequency);
-    channel->setFrequency(defaultFrequency * pitch);
+    ApplyPitch(channel, pitch);
     channel->setPaused(false);
 
-    float volumeTemp;
-    channel->getVolume(&volumeTemp);
-    spdlog::info("Volume of {} after configuration: {}", soundName, volumeTemp);
+    float volumeTemp = 0.0f;
+    if (channel->getVolume(&volumeTemp) == FMOD_OK)
+    {
+        spdlog::info("Volume of {} after configuration: {}", soundName, volumeTemp);
+    }
 
     data.channels.push_back(channel);
 
@@ -141,9 +164,10 @@ void AudioManager::StopSound(const std::string& soundName)
     {
         if (channel)
         {
+            CancelChannelFade(channel);
             bool isPlaying = false;
-            channel->isPlaying(&isPlaying);
-            if (isPlaying)
+            FMOD_RESULT result = channel->isPlaying(&isPlaying);
+            if (result == FMOD_OK && isPlaying)
             {
                 channel->stop();
             }
@@ -162,9 +186,10 @@ void AudioManager::StopAllSounds()
         {
             if (channel)
             {
+                CancelChannelFade(channel);
                 bool isPlaying = false;
-                channel->isPlaying(&isPlaying);
-                if (isPlaying)
+                FMOD_RESULT result = channel->isPlaying(&isPlaying);
+                if (result == FMOD_OK && isPlaying)
                 {
                     channel->stop();
                 }
@@ -184,7 +209,11 @@ void AudioManager::SetVolume(const std::string& soundName, float volume)
     {
         if (channel)
         {
-            channel->setVolume(volume);
+            bool isPlaying = false;
+            if (channel->isPlaying(&isPlaying) == FMOD_OK && isPlaying)
+            {
+                channel->setVolume(volume);
+            }
         }
     }
 }
@@ -197,12 +226,7 @@ void AudioManager::SetPitch(const std::string& soundName, float pitch)
 
     for (auto* channel : it->second.channels)
     {
-        if (channel)
-        {
-            float defaultFrequency;
-            channel->getFrequency(&defaultFrequency);
-            channel->setFrequency(defaultFrequency * pitch);
-        }
+        ApplyPitch(channel, pitch);
     }
 }
 
@@ -216,126 +240,70 @@ void AudioManager::SetChannelVolume(FMOD::Channel* channel, float volume)
 
 void AudioManager::SetChannelPitch(FMOD::Channel* channel, float pitch)
 {
-    if (channel)
-    {
-        float defaultFrequency;
-        channel->getFrequency(&defaultFrequency);
-        channel->setFrequency(defaultFrequency * pitch);
-    }
+    ApplyPitch(channel, pitch);
 }
 void AudioManager::Update(float deltaTime)
 {
-    FModWrapper::GetInstance().GetSystem()->update();
-    
-    if (m_isFadingIn)
+    FMOD::System* system = FModWrapper::GetInstance().GetSystem();
+    if (system)
     {
-        m_fadeTimer += deltaTime;
-        float progress = m_fadeTimer / m_fadeDuration;
-        
+        system->update();
+    }
+
+    for (auto fadeIt = m_channelFades.begin(); fadeIt != m_channelFades.end();)
+    {
+        ChannelFade& fade = *fadeIt;
+        bool isPlaying = false;
+        FMOD::Sound* currentSound = nullptr;
+        const bool valid = fade.channel &&
+            fade.channel->isPlaying(&isPlaying) == FMOD_OK && isPlaying &&
+            fade.channel->getCurrentSound(&currentSound) == FMOD_OK &&
+            currentSound == fade.expectedSound;
+
+        if (!valid)
+        {
+            fadeIt = m_channelFades.erase(fadeIt);
+            continue;
+        }
+
+        fade.timer += deltaTime;
+        const float progress = fade.duration <= 0.0f
+            ? 1.0f
+            : std::min(fade.timer / fade.duration, 1.0f);
+        const float volume = fade.startVolume + (fade.targetVolume - fade.startVolume) * progress;
+        fade.channel->setVolume(volume);
+
         if (progress >= 1.0f)
         {
-            auto it = m_sounds.find(m_fadingSoundName);
-            if (it != m_sounds.end())
+            if (fade.stopWhenComplete)
             {
-                for (auto* channel : it->second.channels)
-                {
-                    if (channel)
-                    {
-                        bool isPlaying = false;
-                        channel->isPlaying(&isPlaying);
-                        if (isPlaying)
-                        {
-                            channel->setVolume(m_fadeTargetVolume);
-                        }
-                    }
-                }
+                fade.channel->stop();
             }
-            
-            m_isFadingIn = false;
-            spdlog::info("Fade-in completed for sound: {}", m_fadingSoundName);
+            fadeIt = m_channelFades.erase(fadeIt);
         }
         else
         {
-            float currentVolume = progress * m_fadeTargetVolume;
-            
-            auto it = m_sounds.find(m_fadingSoundName);
-            if (it != m_sounds.end())
-            {
-                for (auto* channel : it->second.channels)
-                {
-                    if (channel)
-                    {
-                        bool isPlaying = false;
-                        channel->isPlaying(&isPlaying);
-                        if (isPlaying)
-                        {
-                            channel->setVolume(currentVolume);
-                        }
-                    }
-                }
-            }
+            ++fadeIt;
         }
     }
-    
-    if (m_isFadingOut)
+
+    for (auto& [soundName, data] : m_sounds)
     {
-        m_fadeTimer += deltaTime;
-        float progress = m_fadeTimer / m_fadeDuration;
-        
-        if (progress >= 1.0f)
-        {
-            auto it = m_sounds.find(m_fadingSoundName);
-            if (it != m_sounds.end())
-            {
-                for (auto* channel : it->second.channels)
-                {
-                    if (channel)
-                    {
-                        bool isPlaying = false;
-                        channel->isPlaying(&isPlaying);
-                        if (isPlaying)
-                        {
-                            channel->stop();
-                        }
-                    }
-                }
-                
-                it->second.channels.clear();
-            }
-            
-            m_isFadingOut = false;
-            spdlog::info("Fade-out completed for sound: {}", m_fadingSoundName);
-        }
-        else
-        {
-            float currentVolume = (1.0f - progress) * m_fadeTargetVolume;
-            
-            auto it = m_sounds.find(m_fadingSoundName);
-            if (it != m_sounds.end())
-            {
-                for (auto* channel : it->second.channels)
-                {
-                    if (channel)
-                    {
-                        bool isPlaying = false;
-                        channel->isPlaying(&isPlaying);
-                        if (isPlaying)
-                        {
-                            channel->setVolume(currentVolume);
-                        }
-                    }
-                }
-            }
-        }
+        (void)soundName;
+        PruneStoppedChannels(data);
     }
 }
 
 FMOD::Channel* AudioManager::GetLastChannelOfSound(const std::string& soundName)
 {
     auto it = m_sounds.find(soundName);
-    if (it == m_sounds.end() || it->second.channels.empty())
+    if (it == m_sounds.end())
         return nullptr;
-    
+
+    PruneStoppedChannels(it->second);
+    if (it->second.channels.empty())
+        return nullptr;
+
     return it->second.channels.back();
 }
 
@@ -403,57 +371,12 @@ FMOD::Sound* AudioManager::GetSound(const std::string& soundName)
 
 FMOD::Channel* AudioManager::PlaySoundWithFadeIn(const std::string& soundName, bool loop, float volume, float pitch)
 {
-    auto it = m_sounds.find(soundName);
-    if (it == m_sounds.end())
-    {
-        spdlog::error("Sound not found: {}", soundName);
+    FMOD::Channel* channel = PlaySound(soundName, loop, 0.0f, pitch);
+    if (!channel)
         return nullptr;
-    }
-    
-    SoundData& data = it->second;
-    if (!data.sound)
-    {
-        spdlog::error("Sound not valid: {}", soundName);
-        return nullptr;
-    }
-    
-    FMOD_MODE currentMode;
-    data.sound->getMode(&currentMode);
-    if (loop)
-        currentMode |= FMOD_LOOP_NORMAL;
-    else
-        currentMode &= ~FMOD_LOOP_NORMAL;
-    data.sound->setMode(currentMode);
 
-    FMOD::Channel* channel = nullptr;
-    FMOD_RESULT result = FModWrapper::GetInstance().GetSystem()->playSound(data.sound, nullptr, true, &channel);
-    if (result != FMOD_OK)
-    {
-        spdlog::error("FMOD playSound failed: {}", FMOD_ErrorString(result));
-        return nullptr;
-    }
-    else
-    {
-        spdlog::info("FMOD playSound success with fade-in: {}", soundName);
-    }
-    
-    channel->setVolume(0.0f);
-    float defaultFrequency;
-    channel->getFrequency(&defaultFrequency);
-    channel->setFrequency(defaultFrequency * pitch);
-    channel->setPaused(false);
-
-    data.channels.push_back(channel);
-    
-    m_isFadingIn = true;
-    m_isFadingOut = false;
-    m_fadeTimer = 0.0f;
-    m_fadeDuration = 1.5f;
-    m_fadingSoundName = soundName;
-    m_fadeTargetVolume = volume;
-    
+    StartChannelFade(channel, volume, false);
     spdlog::info("Starting fade-in for sound: {} (target volume: {})", soundName, volume);
-
     return channel;
 }
 
@@ -472,68 +395,111 @@ void AudioManager::StopSoundWithFadeOut(const std::string& soundName)
         return;
     }
     
-    m_isFadingOut = true;
-    m_isFadingIn = false;
-    m_fadeTimer = 0.0f;
-    m_fadeDuration = 1.5f;
-    m_fadingSoundName = soundName;
-    
-    float currentVolume = 0.0f;
     for (auto* channel : it->second.channels)
     {
-        if (channel)
-        {
-            bool isPlaying = false;
-            channel->isPlaying(&isPlaying);
-            if (isPlaying)
-            {
-                channel->getVolume(&currentVolume);
-                break;
-            }
-        }
+        StopChannelWithFadeOut(channel);
     }
-    
-    m_fadeTargetVolume = currentVolume;
-    
-    spdlog::info("Starting fade-out for sound: {} (from volume: {})", soundName, currentVolume);
+
+    spdlog::info("Starting fade-out for sound: {}", soundName);
 }
 
 void AudioManager::StopAllSoundsWithFadeOut()
 {
     for (auto& pair : m_sounds)
     {
-        const std::string& soundName = pair.first;
-        
-        if (soundName.find("sfx") != std::string::npos || 
-            soundName.find("announce") != std::string::npos)
+        for (auto* channel : pair.second.channels)
         {
-            continue;
-        }
-        
-        if (!pair.second.channels.empty())
-        {
-            bool hasActiveChannel = false;
-            for (auto* channel : pair.second.channels)
-            {
-                if (channel)
-                {
-                    bool isPlaying = false;
-                    channel->isPlaying(&isPlaying);
-                    if (isPlaying)
-                    {
-                        hasActiveChannel = true;
-                        break;
-                    }
-                }
-            }
-            
-            if (hasActiveChannel)
-            {
-                StopSoundWithFadeOut(soundName);
-                break;
-            }
+            StopChannelWithFadeOut(channel);
         }
     }
+}
+
+void AudioManager::StopChannelWithFadeOut(FMOD::Channel* channel)
+{
+    if (!channel)
+        return;
+
+    bool isPlaying = false;
+    if (channel->isPlaying(&isPlaying) != FMOD_OK || !isPlaying)
+        return;
+
+    StartChannelFade(channel, 0.0f, true);
+}
+
+bool AudioManager::IsChannelFading(FMOD::Channel* channel) const
+{
+    return std::any_of(m_channelFades.begin(), m_channelFades.end(),
+        [channel](const ChannelFade& fade) { return fade.channel == channel; });
+}
+
+void AudioManager::StartChannelFade(FMOD::Channel* channel, float targetVolume, bool stopWhenComplete)
+{
+    if (!channel)
+        return;
+
+    bool isPlaying = false;
+    FMOD::Sound* sound = nullptr;
+    float currentVolume = 0.0f;
+    if (channel->isPlaying(&isPlaying) != FMOD_OK || !isPlaying ||
+        channel->getCurrentSound(&sound) != FMOD_OK || !sound ||
+        channel->getVolume(&currentVolume) != FMOD_OK)
+    {
+        return;
+    }
+
+    CancelChannelFade(channel);
+    m_channelFades.push_back(ChannelFade{
+        channel,
+        sound,
+        0.0f,
+        m_fadeDuration,
+        currentVolume,
+        targetVolume,
+        stopWhenComplete
+    });
+}
+
+void AudioManager::CancelChannelFade(FMOD::Channel* channel)
+{
+    m_channelFades.erase(
+        std::remove_if(m_channelFades.begin(), m_channelFades.end(),
+            [channel](const ChannelFade& fade) { return fade.channel == channel; }),
+        m_channelFades.end());
+}
+
+void AudioManager::PruneStoppedChannels(SoundData& data)
+{
+    data.channels.erase(
+        std::remove_if(data.channels.begin(), data.channels.end(),
+            [&data](FMOD::Channel* channel)
+            {
+                if (!channel)
+                    return true;
+
+                bool isPlaying = false;
+                FMOD::Sound* currentSound = nullptr;
+                return channel->isPlaying(&isPlaying) != FMOD_OK || !isPlaying ||
+                    channel->getCurrentSound(&currentSound) != FMOD_OK ||
+                    currentSound != data.sound;
+            }),
+        data.channels.end());
+}
+
+bool AudioManager::ApplyPitch(FMOD::Channel* channel, float pitch)
+{
+    if (!channel)
+        return false;
+
+    FMOD::Sound* sound = nullptr;
+    if (channel->getCurrentSound(&sound) != FMOD_OK || !sound)
+        return false;
+
+    float defaultFrequency = 0.0f;
+    int priority = 0;
+    if (sound->getDefaults(&defaultFrequency, &priority) != FMOD_OK || defaultFrequency <= 0.0f)
+        return false;
+
+    return channel->setFrequency(defaultFrequency * pitch) == FMOD_OK;
 }
 
 } // namespace TSM

@@ -12,9 +12,11 @@ namespace TSM
 
 struct PlaylistOptions
 {
+    static constexpr float DefaultSegmentDuration = 150.0f;
+
     bool randomOrder = false;   
     bool randomSegment = false;  
-    float segmentDuration = 30.0f; 
+    float segmentDuration = DefaultSegmentDuration;
     bool loopPlaylist = false;  
 };
 
@@ -56,6 +58,8 @@ public:
 
     float GetTrackProgress() const;   
     float GetSegmentProgress() const; 
+    float GetSegmentDuration() const;
+    float GetSegmentRemainingTime() const;
 
     void SetCrossfadeDuration(float duration);
 
@@ -100,7 +104,6 @@ private:
         float chosenStartTime = 0.0f;
     };
 
-    Playlist* m_currentPlaylist = nullptr;
     std::string m_activePlaylistName;
 
 
@@ -108,6 +111,9 @@ private:
     void StartTrackAtIndex(Playlist& plist, int index);
     void PrepareRandomOrder(Playlist& plist);
     void FinishCrossfade(Playlist& plist);
+    bool IsTrackEligibleForPlayback(const Playlist& plist, int index, float* lengthSeconds = nullptr) const;
+    int FindNextEligibleIndex(const Playlist& plist, int currentIndex, bool allowWrap) const;
+    void FinishPlaylist(Playlist& plist);
 
     std::vector<Playlist> m_playlists;
     std::mt19937 m_rng;

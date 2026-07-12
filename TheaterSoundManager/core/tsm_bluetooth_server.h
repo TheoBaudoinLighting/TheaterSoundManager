@@ -6,3 +6,5 @@
 #include <string>
 
 void StartBluetoothServer();
+void ProcessPendingBluetoothCommands();
+void StopBluetoothServer();

@@ -182,6 +182,7 @@ int main()
         float dt = std::chrono::duration<float>(currentTime - lastTime).count();
         lastTime = currentTime;
 
+        ProcessPendingBluetoothCommands();
         TSM::AudioManager::GetInstance().Update(dt);
         TSM::AnnouncementManager::GetInstance().Update(dt);
         TSM::PlaylistManager::GetInstance().Update(dt);
@@ -198,6 +199,7 @@ int main()
         }
     }
 
+    StopBluetoothServer();
     TSM::AudioManager::GetInstance().StopAllSounds();
     TSM::UIManager::GetInstance().Shutdown();
     TSM::FModWrapper::GetInstance().Shutdown();
