@@ -1843,10 +1843,28 @@ void UIManager::RenderDebugInfo()
     float frameRate = ImGui::GetIO().Framerate;
     ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / frameRate, frameRate);
 
+    auto& audioManager = AudioManager::GetInstance();
+    const auto& allSounds = audioManager.GetAllSounds();
+    const auto soundDisplayName = [&](const std::string& soundId)
+    {
+        const auto soundIt = allSounds.find(soundId);
+        return soundIt != allSounds.end() && !soundIt->second.filePath.empty()
+            ? GetDisplayName(soundIt->second.filePath)
+            : soundId;
+    };
+
     auto& playlistManager = PlaylistManager::GetInstance();
     ImGui::SeparatorText("Audio transition");
-    ImGui::Text("Current: %s", playlistManager.GetCurrentTrackName().c_str());
-    ImGui::Text("Next: %s", playlistManager.GetNextTrackName().c_str());
+    const std::string currentTrackId = playlistManager.GetCurrentTrackName();
+    const std::string nextTrackId = playlistManager.GetNextTrackName();
+    const std::string currentTrackName = soundDisplayName(currentTrackId);
+    const std::string nextTrackName = soundDisplayName(nextTrackId);
+    ImGui::Text("Current: %s", currentTrackName.empty() ? "-" : currentTrackName.c_str());
+    ImGui::Text("Next: %s", nextTrackName.empty() ? "-" : nextTrackName.c_str());
+    if (ImGui::IsItemHovered() && !nextTrackId.empty())
+    {
+        ImGui::SetTooltip("Sound ID: %s", nextTrackId.c_str());
+    }
     const float transitionSeconds = playlistManager.GetSecondsUntilTransition();
     if (transitionSeconds >= 0.0f)
     {
@@ -1858,7 +1876,6 @@ void UIManager::RenderDebugInfo()
         playlistManager.GetCrossfadeProgress() * 100.0f);
     ImGui::TextUnformatted("Curve: equal-power | limiter: -1 dB");
 
-    auto& audioManager = AudioManager::GetInstance();
     float targetLufs = audioManager.GetLoudnessTarget();
     if (ImGui::SliderFloat("Loudness target", &targetLufs, -24.0f, -10.0f, "%.1f LUFS"))
     {
@@ -1867,6 +1884,50 @@ void UIManager::RenderDebugInfo()
 
     ImGui::SeparatorText("Music loudness analysis");
     const auto diagnostics = audioManager.GetLoudnessDiagnostics();
+    const AudioManager::LoudnessDiagnostic* activeAnalysis = nullptr;
+    const AudioManager::LoudnessDiagnostic* nextAnalysis = nullptr;
+    int readyCount = 0;
+    int failedCount = 0;
+    int queuedCount = 0;
+    for (const auto& diagnostic : diagnostics)
+    {
+        switch (diagnostic.status)
+        {
+            case AudioManager::LoudnessStatus::Analyzing:
+                activeAnalysis = &diagnostic;
+                break;
+            case AudioManager::LoudnessStatus::Queued:
+                ++queuedCount;
+                if (!nextAnalysis || diagnostic.queuePosition < nextAnalysis->queuePosition)
+                    nextAnalysis = &diagnostic;
+                break;
+            case AudioManager::LoudnessStatus::Ready:
+                ++readyCount;
+                break;
+            case AudioManager::LoudnessStatus::Failed:
+                ++failedCount;
+                break;
+            case AudioManager::LoudnessStatus::NotQueued:
+                break;
+        }
+    }
+
+    const std::string activeAnalysisName = activeAnalysis
+        ? GetDisplayName(activeAnalysis->filePath)
+        : "-";
+    const std::string nextAnalysisName = nextAnalysis
+        ? GetDisplayName(nextAnalysis->filePath)
+        : "-";
+    ImGui::Text("Analyzing now: %s", activeAnalysisName.c_str());
+    ImGui::Text("Next analysis: %s", nextAnalysisName.c_str());
+    const int processedCount = readyCount + failedCount;
+    ImGui::Text("Progress: %d/%d processed | %d queued | %d failed",
+        processedCount, static_cast<int>(diagnostics.size()), queuedCount, failedCount);
+    const float analysisProgress = diagnostics.empty()
+        ? 0.0f
+        : static_cast<float>(processedCount) / static_cast<float>(diagnostics.size());
+    ImGui::ProgressBar(analysisProgress, ImVec2(-1.0f, 0.0f));
+
     if (ImGui::BeginTable("LoudnessDiagnostics", 5,
         ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY,
         ImVec2(0.0f, 220.0f)))
@@ -1881,9 +1942,27 @@ void UIManager::RenderDebugInfo()
         {
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
-            ImGui::TextUnformatted(diagnostic.soundName.c_str());
+            const std::string displayName = GetDisplayName(diagnostic.filePath);
+            ImGui::TextUnformatted(displayName.c_str());
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("ID: %s\nPath: %s",
+                    diagnostic.soundName.c_str(), diagnostic.filePath.c_str());
+            }
             ImGui::TableNextColumn();
-            ImGui::TextUnformatted(AudioManager::LoudnessStatusToString(diagnostic.status));
+            if (diagnostic.status == AudioManager::LoudnessStatus::Queued &&
+                diagnostic.queuePosition > 0)
+            {
+                ImGui::Text("queued #%d", diagnostic.queuePosition);
+            }
+            else if (diagnostic.status == AudioManager::LoudnessStatus::Analyzing)
+            {
+                ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.2f, 1.0f), "analyzing now");
+            }
+            else
+            {
+                ImGui::TextUnformatted(AudioManager::LoudnessStatusToString(diagnostic.status));
+            }
             ImGui::TableNextColumn();
             if (diagnostic.status == AudioManager::LoudnessStatus::Ready)
                 ImGui::Text("%.2f", diagnostic.integratedLufs);

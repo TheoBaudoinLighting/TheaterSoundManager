@@ -726,9 +726,15 @@ float AudioManager::GetNormalizationGainForChannel(FMOD::Channel* channel) const
 std::vector<AudioManager::LoudnessDiagnostic> AudioManager::GetLoudnessDiagnostics() const
 {
     std::string activeSound;
+    std::map<std::string, int> queuePositions;
     {
         std::lock_guard<std::mutex> lock(m_loudnessMutex);
         activeSound = m_activeLoudnessSound;
+        int position = 1;
+        for (const LoudnessTask& task : m_loudnessTasks)
+        {
+            queuePositions.emplace(task.soundName, position++);
+        }
     }
 
     std::vector<LoudnessDiagnostic> diagnostics;
@@ -737,11 +743,37 @@ std::vector<AudioManager::LoudnessDiagnostic> AudioManager::GetLoudnessDiagnosti
         if (!data.isMusic) continue;
         LoudnessStatus status = data.loudnessStatus;
         if (soundName == activeSound) status = LoudnessStatus::Analyzing;
+        const auto queueIt = queuePositions.find(soundName);
+        const int queuePosition = queueIt != queuePositions.end() ? queueIt->second : -1;
         diagnostics.push_back({
             soundName, data.filePath, status, data.integratedLufs,
-            data.truePeakDb, data.normalizationGainDb
+            data.truePeakDb, data.normalizationGainDb, queuePosition
         });
     }
+    const auto statusRank = [](LoudnessStatus status)
+    {
+        switch (status)
+        {
+            case LoudnessStatus::Analyzing: return 0;
+            case LoudnessStatus::Queued: return 1;
+            case LoudnessStatus::Ready: return 2;
+            case LoudnessStatus::Failed: return 3;
+            case LoudnessStatus::NotQueued: return 4;
+        }
+        return 5;
+    };
+    std::sort(diagnostics.begin(), diagnostics.end(), [&](const auto& left, const auto& right)
+    {
+        const int leftRank = statusRank(left.status);
+        const int rightRank = statusRank(right.status);
+        if (leftRank != rightRank) return leftRank < rightRank;
+        if (left.status == LoudnessStatus::Queued &&
+            left.queuePosition != right.queuePosition)
+        {
+            return left.queuePosition < right.queuePosition;
+        }
+        return left.filePath < right.filePath;
+    });
     return diagnostics;
 }
 

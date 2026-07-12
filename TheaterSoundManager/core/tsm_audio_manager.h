@@ -47,6 +47,7 @@ public:
         float integratedLufs = 0.0f;
         float truePeakDb = 0.0f;
         float gainDb = 0.0f;
+        int queuePosition = -1;
     };
 
     static AudioManager& GetInstance() 
