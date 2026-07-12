@@ -200,7 +200,7 @@ int main()
     }
 
     StopBluetoothServer();
-    TSM::AudioManager::GetInstance().StopAllSounds();
+    TSM::AudioManager::GetInstance().Shutdown();
     TSM::UIManager::GetInstance().Shutdown();
     TSM::FModWrapper::GetInstance().Shutdown();
 

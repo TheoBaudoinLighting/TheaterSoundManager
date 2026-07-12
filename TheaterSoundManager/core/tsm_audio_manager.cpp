@@ -2,6 +2,7 @@
 
 #include "tsm_audio_manager.h"
 #include "tsm_fmod_wrapper.h"
+#include <fmod_dsp_effects.h>
 
 #include <spdlog/spdlog.h>
 #include <algorithm>
@@ -93,6 +94,17 @@ bool AudioManager::UnloadSound(const std::string& soundName)
 
 FMOD::Channel* AudioManager::PlaySound(const std::string& soundName, bool loop, float volume, float pitch)
 {
+    return PlaySoundInternal(soundName, loop, volume, pitch, false);
+}
+
+FMOD::Channel* AudioManager::PlayMusic(const std::string& soundName, bool loop, float volume, float pitch)
+{
+    return PlaySoundInternal(soundName, loop, volume, pitch, true);
+}
+
+FMOD::Channel* AudioManager::PlaySoundInternal(
+    const std::string& soundName, bool loop, float volume, float pitch, bool normalizeMusic)
+{
     auto it = m_sounds.find(soundName);
     if (it == m_sounds.end())
     {
@@ -127,8 +139,14 @@ FMOD::Channel* AudioManager::PlaySound(const std::string& soundName, bool loop, 
         return nullptr;
     }
 
+    FMOD::ChannelGroup* targetGroup = nullptr;
+    if (normalizeMusic && EnsureMusicProcessing())
+    {
+        targetGroup = m_musicChannelGroup;
+    }
+
     FMOD::Channel* channel = nullptr;
-    FMOD_RESULT result = system->playSound(data.sound, nullptr, true, &channel);
+    FMOD_RESULT result = system->playSound(data.sound, targetGroup, true, &channel);
     if (result != FMOD_OK || !channel)
     {
         spdlog::error("FMOD playSound failed: {}", FMOD_ErrorString(result));
@@ -371,13 +389,89 @@ FMOD::Sound* AudioManager::GetSound(const std::string& soundName)
 
 FMOD::Channel* AudioManager::PlaySoundWithFadeIn(const std::string& soundName, bool loop, float volume, float pitch)
 {
-    FMOD::Channel* channel = PlaySound(soundName, loop, 0.0f, pitch);
+    FMOD::Channel* channel = PlaySoundInternal(soundName, loop, 0.0f, pitch, false);
     if (!channel)
         return nullptr;
 
     StartChannelFade(channel, volume, false);
     spdlog::info("Starting fade-in for sound: {} (target volume: {})", soundName, volume);
     return channel;
+}
+
+FMOD::Channel* AudioManager::PlayMusicWithFadeIn(const std::string& soundName, bool loop, float volume, float pitch)
+{
+    FMOD::Channel* channel = PlaySoundInternal(soundName, loop, 0.0f, pitch, true);
+    if (!channel) return nullptr;
+
+    StartChannelFade(channel, volume, false);
+    spdlog::info("Starting normalized music fade-in: {} (target volume: {})", soundName, volume);
+    return channel;
+}
+
+void AudioManager::Shutdown()
+{
+    StopAllSounds();
+
+    if (m_musicChannelGroup && m_musicNormalizer)
+    {
+        m_musicChannelGroup->removeDSP(m_musicNormalizer);
+    }
+    if (m_musicNormalizer)
+    {
+        m_musicNormalizer->release();
+        m_musicNormalizer = nullptr;
+    }
+    if (m_musicChannelGroup)
+    {
+        m_musicChannelGroup->release();
+        m_musicChannelGroup = nullptr;
+    }
+}
+
+bool AudioManager::EnsureMusicProcessing()
+{
+    if (m_musicChannelGroup && m_musicNormalizer) return true;
+
+    FMOD::System* system = FModWrapper::GetInstance().GetSystem();
+    if (!system) return false;
+
+    FMOD_RESULT result = system->createChannelGroup("TSM Music", &m_musicChannelGroup);
+    if (result != FMOD_OK || !m_musicChannelGroup)
+    {
+        spdlog::error("Failed to create the music channel group: {}", FMOD_ErrorString(result));
+        m_musicChannelGroup = nullptr;
+        return false;
+    }
+
+    result = system->createDSPByType(FMOD_DSP_TYPE_NORMALIZE, &m_musicNormalizer);
+    if (result != FMOD_OK || !m_musicNormalizer)
+    {
+        spdlog::error("Failed to create the music normalizer: {}", FMOD_ErrorString(result));
+        m_musicChannelGroup->release();
+        m_musicChannelGroup = nullptr;
+        m_musicNormalizer = nullptr;
+        return false;
+    }
+
+    // Smooth peak normalization with a conservative +12 dB amplification cap.
+    m_musicNormalizer->setParameterFloat(FMOD_DSP_NORMALIZE_FADETIME, 4000.0f);
+    m_musicNormalizer->setParameterFloat(FMOD_DSP_NORMALIZE_THRESHOLD, 0.1f);
+    m_musicNormalizer->setParameterFloat(FMOD_DSP_NORMALIZE_MAXAMP, 4.0f);
+
+    result = m_musicChannelGroup->addDSP(0, m_musicNormalizer);
+    if (result != FMOD_OK)
+    {
+        spdlog::error("Failed to attach the music normalizer: {}", FMOD_ErrorString(result));
+        m_musicNormalizer->release();
+        m_musicChannelGroup->release();
+        m_musicNormalizer = nullptr;
+        m_musicChannelGroup = nullptr;
+        return false;
+    }
+
+    m_musicNormalizer->setActive(true);
+    spdlog::info("Automatic music volume normalization enabled");
+    return true;
 }
 
 void AudioManager::StopSoundWithFadeOut(const std::string& soundName)

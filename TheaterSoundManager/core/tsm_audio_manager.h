@@ -34,6 +34,8 @@ public:
     bool LoadAnnouncement(const std::string& announcementId, const std::string& filePath);
     FMOD::Channel* PlaySound(const std::string& soundName, bool loop = false, float volume = 1.0f, float pitch = 1.0f);
     FMOD::Channel* PlaySoundWithFadeIn(const std::string& soundName, bool loop = false, float volume = 1.0f, float pitch = 1.0f);
+    FMOD::Channel* PlayMusic(const std::string& soundName, bool loop = false, float volume = 1.0f, float pitch = 1.0f);
+    FMOD::Channel* PlayMusicWithFadeIn(const std::string& soundName, bool loop = false, float volume = 1.0f, float pitch = 1.0f);
     void StopSound(const std::string& soundName);
     void StopSoundWithFadeOut(const std::string& soundName);
     void StopChannelWithFadeOut(FMOD::Channel* channel);
@@ -48,6 +50,7 @@ public:
     void SetChannelPitch(FMOD::Channel* channel, float pitch);
     void Update(float deltaTime);
     FMOD::Channel* GetLastChannelOfSound(const std::string& soundName);
+    void Shutdown();
 private:
     struct ChannelFade
     {
@@ -63,7 +66,11 @@ private:
     std::map<std::string, SoundData> m_sounds;
     std::vector<ChannelFade> m_channelFades;
     float m_fadeDuration = 1.5f;
+    FMOD::ChannelGroup* m_musicChannelGroup = nullptr;
+    FMOD::DSP* m_musicNormalizer = nullptr;
 
+    FMOD::Channel* PlaySoundInternal(const std::string& soundName, bool loop, float volume, float pitch, bool normalizeMusic);
+    bool EnsureMusicProcessing();
     void StartChannelFade(FMOD::Channel* channel, float targetVolume, bool stopWhenComplete);
     void CancelChannelFade(FMOD::Channel* channel);
     void PruneStoppedChannels(SoundData& data);

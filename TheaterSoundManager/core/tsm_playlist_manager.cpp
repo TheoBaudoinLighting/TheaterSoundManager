@@ -11,6 +11,7 @@
 #include <random>
 #include <ctime>
 #include <cmath>
+#include <limits>
 
 namespace TSM
 {
@@ -743,10 +744,14 @@ void PlaylistManager::Update(float deltaTime)
         if (plist.isCrossfading)
         {
             plist.crossfadeTimer += deltaTime;
-            float t = plist.crossfadeDuration <= 0.0f
+            float t = plist.activeCrossfadeDuration <= 0.0f
                 ? 1.0f
-                : plist.crossfadeTimer / plist.crossfadeDuration;
+                : plist.crossfadeTimer / plist.activeCrossfadeDuration;
             if (t > 1.0f) t = 1.0f;
+
+            constexpr float HalfPi = 1.57079632679f;
+            const float oldGain = std::cos(t * HalfPi);
+            const float nextGain = std::sin(t * HalfPi);
 
             bool currentChannelValid = false;
             bool nextChannelValid    = false;
@@ -756,9 +761,9 @@ void PlaylistManager::Update(float deltaTime)
                 bool isPlaying = false;
                 FMOD_RESULT result = plist.currentChannel->isPlaying(&isPlaying);
                 currentChannelValid = (result == FMOD_OK && isPlaying);
-                
+
                 if (currentChannelValid) {
-                    float volOld = (1.0f - t) * baseMusicVol;
+                    float volOld = oldGain * baseMusicVol;
                     plist.currentChannel->setVolume(volOld);
                 }
             }
@@ -770,8 +775,7 @@ void PlaylistManager::Update(float deltaTime)
                 nextChannelValid = (result == FMOD_OK && isPlaying);
                 
                 if (nextChannelValid) {
-                    
-                    float volNext = t * baseMusicVol;
+                    float volNext = nextGain * baseMusicVol;
                     plist.nextChannel->setVolume(volNext);
                 }
             }
@@ -793,47 +797,52 @@ void PlaylistManager::Update(float deltaTime)
                 continue;
             }
 
-            if (!isPlaying && !plist.segmentModeActive)
+            if (!isPlaying)
             {
-                StartNextTrack(plist);
+                StartNextTrack(plist, 0.0f);
                 continue;
+            }
+
+            float secondsUntilTransition = std::numeric_limits<float>::max();
+
+            FMOD::Sound* sound = nullptr;
+            result = plist.currentChannel->getCurrentSound(&sound);
+            if (result == FMOD_OK && sound)
+            {
+                unsigned int lengthMs = 0;
+                unsigned int positionMs = 0;
+                if (sound->getLength(&lengthMs, FMOD_TIMEUNIT_MS) == FMOD_OK &&
+                    plist.currentChannel->getPosition(&positionMs, FMOD_TIMEUNIT_MS) == FMOD_OK &&
+                    lengthMs > 0)
+                {
+                    const unsigned int remainingMs = positionMs < lengthMs
+                        ? lengthMs - positionMs
+                        : 0;
+                    secondsUntilTransition = remainingMs / 1000.0f;
+                }
             }
 
             if (plist.segmentModeActive)
             {
-                FMOD::Sound* sound = nullptr;
-                result = plist.currentChannel->getCurrentSound(&sound);
-                if (result == FMOD_OK && sound)
-                {
-                    unsigned int lengthMs = 0;
-                    if (sound->getLength(&lengthMs, FMOD_TIMEUNIT_MS) == FMOD_OK)
-                    {
-                        float lengthSec = lengthMs / 1000.0f;
-                        float effectiveSegmentDuration = std::min(plist.segmentMaxDuration, lengthSec);
-                        
-                        unsigned int positionMs = 0;
-                        bool trackFinished = false;
-                        if (plist.currentChannel->getPosition(&positionMs, FMOD_TIMEUNIT_MS) == FMOD_OK) {
-                         
-                            if (lengthMs > 0 &&
-                                (positionMs >= lengthMs || (lengthMs - positionMs) < 500)) { // 500ms threshold
-                                trackFinished = true;
-                            }
-                        }
-                        
-                        plist.segmentTimer += deltaTime;
-                        if (trackFinished || !isPlaying) {
-                            // StartNextTrack also decides whether the playlist
-                            // should stop or wrap back to its first track.
-                            StartNextTrack(plist);
-                            continue;
-                        }
-                        else if (plist.segmentTimer >= effectiveSegmentDuration) {
-                            StartNextTrack(plist);
-                            continue;
-                        }
-                    }
-                }
+                plist.segmentTimer += deltaTime;
+                const float segmentRemaining = std::max(
+                    plist.segmentMaxDuration - plist.segmentTimer, 0.0f);
+                secondsUntilTransition = std::min(secondsUntilTransition, segmentRemaining);
+            }
+
+            const float configuredCrossfade = std::max(plist.crossfadeDuration, 0.0f);
+            if (configuredCrossfade > 0.0f &&
+                secondsUntilTransition <= configuredCrossfade &&
+                HasNextTrack(plist))
+            {
+                StartNextTrack(plist, std::max(secondsUntilTransition, 0.0f));
+                continue;
+            }
+
+            if (secondsUntilTransition <= 0.0f)
+            {
+                StartNextTrack(plist, 0.0f);
+                continue;
             }
         }
         else
@@ -921,8 +930,10 @@ float PlaylistManager::GetCrossfadeProgress() const
 {
     auto* activePlaylist = GetActivePlaylist();
     if (!activePlaylist || !activePlaylist->isCrossfading) return 0.0f;
-    if (activePlaylist->crossfadeDuration <= 0.0f) return 1.0f;
-    return std::clamp(activePlaylist->crossfadeTimer / activePlaylist->crossfadeDuration, 0.0f, 1.0f);
+    if (activePlaylist->activeCrossfadeDuration <= 0.0f) return 1.0f;
+    return std::clamp(
+        activePlaylist->crossfadeTimer / activePlaylist->activeCrossfadeDuration,
+        0.0f, 1.0f);
 }
 
 FMOD::Channel* PlaylistManager::GetNextChannel() const
@@ -947,7 +958,7 @@ PlaylistManager::Playlist* PlaylistManager::GetActivePlaylist()
     return (it != m_playlists.end()) ? &(*it) : nullptr;
 }
 
-void PlaylistManager::StartNextTrack(Playlist& plist)
+void PlaylistManager::StartNextTrack(Playlist& plist, float transitionDuration)
 {
     int nextIndex = -1;
     if (plist.options.randomOrder)
@@ -982,6 +993,9 @@ void PlaylistManager::StartNextTrack(Playlist& plist)
 
     plist.isCrossfading   = true;
     plist.crossfadeTimer  = 0.0f;
+    plist.activeCrossfadeDuration = transitionDuration >= 0.0f
+        ? std::min(transitionDuration, std::max(plist.crossfadeDuration, 0.0f))
+        : std::max(plist.crossfadeDuration, 0.0f);
 
     plist.oldChannelVolume = 1.0f;
     if (plist.currentChannel)
@@ -996,7 +1010,7 @@ void PlaylistManager::StartNextTrack(Playlist& plist)
     plist.nextTargetVolume = userVolume;
 
     std::string nextTrack = plist.tracks[nextIndex];
-    FMOD::Channel* ch = AudioManager::GetInstance().PlaySound(nextTrack, false, 0.0f);
+    FMOD::Channel* ch = AudioManager::GetInstance().PlayMusic(nextTrack, false, 0.0f);
     if (!ch)
     {
         spdlog::error("Failed to start next track '{}' in playlist '{}'.", nextTrack, plist.name);
@@ -1040,7 +1054,7 @@ void PlaylistManager::StartTrackAtIndex(Playlist& plist, int index)
 
     // A track must finish naturally so StartNextTrack can apply the playlist's
     // loop policy. Looping the FMOD sound bypasses playlist progression.
-    FMOD::Channel* ch = AudioManager::GetInstance().PlaySoundWithFadeIn(track, false, userVolume);
+    FMOD::Channel* ch = AudioManager::GetInstance().PlayMusicWithFadeIn(track, false, userVolume);
     if (!ch) {
         spdlog::error("Failed to start track at index {}", index);
         FinishPlaylist(plist);
@@ -1176,6 +1190,18 @@ int PlaylistManager::FindNextEligibleIndex(const Playlist& plist, int currentInd
     }
 
     return -1;
+}
+
+bool PlaylistManager::HasNextTrack(const Playlist& plist) const
+{
+    if (plist.options.randomOrder)
+    {
+        if (plist.randomIndices.empty()) return false;
+        return plist.randomIndexPos + 1 < static_cast<int>(plist.randomIndices.size()) ||
+               plist.options.loopPlaylist;
+    }
+
+    return FindNextEligibleIndex(plist, plist.currentIndex, plist.options.loopPlaylist) >= 0;
 }
 
 void PlaylistManager::FinishPlaylist(Playlist& plist)

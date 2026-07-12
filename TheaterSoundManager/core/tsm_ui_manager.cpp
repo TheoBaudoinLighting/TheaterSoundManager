@@ -1298,7 +1298,7 @@ void UIManager::RenderMusicPlaylistTab()
             
             ImGui::TableNextColumn();
             if (ImGui::Button("Play")) {
-                AudioManager::GetInstance().PlaySound(soundId, false, m_musicVolume * m_masterVolume);
+                AudioManager::GetInstance().PlayMusic(soundId, false, m_musicVolume * m_masterVolume);
             }
             
             ImGui::SameLine();
@@ -1958,7 +1958,7 @@ void UIManager::UpdateWeddingMode(float deltaTime)
 
                     SetDuckFactor(0.0f);
                     float musicVolume = GetMusicVolume() * GetMasterVolume();
-                    m_phase1EntranceChannel = AudioManager::GetInstance().PlaySound(
+                    m_phase1EntranceChannel = AudioManager::GetInstance().PlayMusic(
                         m_weddingEntranceSoundId, false, musicVolume);
 
                     if (!m_phase1EntranceChannel) {
@@ -2435,7 +2435,7 @@ void UIManager::RenderWeddingModeTab()
                         SetDuckFactor(0.0f);
 
                         float musicVolume = GetMusicVolume() * GetMasterVolume();
-                        m_phase1EntranceChannel = AudioManager::GetInstance().PlaySound(
+                        m_phase1EntranceChannel = AudioManager::GetInstance().PlayMusic(
                             m_weddingEntranceSoundId, false, musicVolume);
                         UpdateAllVolumes();
 
@@ -2681,7 +2681,7 @@ void UIManager::StartWeddingPhase2(bool transitionToNormalMusicAfter) {
     m_weddingExitChannel = nullptr;
 
     const bool loopCeremony = !transitionToNormalMusicAfter;
-    m_weddingCeremonyChannel = AudioManager::GetInstance().PlaySound(
+    m_weddingCeremonyChannel = AudioManager::GetInstance().PlayMusic(
         m_weddingCeremonySoundId, loopCeremony, m_musicVolume * m_masterVolume);
 
     if (!m_weddingCeremonyChannel) {
@@ -2721,7 +2721,7 @@ void UIManager::StartWeddingPhase3(bool transitionToNormalMusicAfter, const std:
     m_phase1EntranceChannel = nullptr;
     m_weddingCeremonyChannel = nullptr;
 
-    m_weddingExitChannel = AudioManager::GetInstance().PlaySound(
+    m_weddingExitChannel = AudioManager::GetInstance().PlayMusic(
         m_weddingExitSoundId, false, m_musicVolume * m_masterVolume);
 
     if (!m_weddingExitChannel) {

@@ -92,6 +92,7 @@ private:
         FMOD::Channel* nextChannel = nullptr;
 
         float crossfadeDuration = 10.0f;
+        float activeCrossfadeDuration = 10.0f;
         float crossfadeTimer = 0.0f;
         bool isCrossfading = false;
 
@@ -107,12 +108,13 @@ private:
     std::string m_activePlaylistName;
 
 
-    void StartNextTrack(Playlist& plist);
+    void StartNextTrack(Playlist& plist, float transitionDuration = -1.0f);
     void StartTrackAtIndex(Playlist& plist, int index);
     void PrepareRandomOrder(Playlist& plist);
     void FinishCrossfade(Playlist& plist);
     bool IsTrackEligibleForPlayback(const Playlist& plist, int index, float* lengthSeconds = nullptr) const;
     int FindNextEligibleIndex(const Playlist& plist, int currentIndex, bool allowWrap) const;
+    bool HasNextTrack(const Playlist& plist) const;
     void FinishPlaylist(Playlist& plist);
 
     std::vector<Playlist> m_playlists;
