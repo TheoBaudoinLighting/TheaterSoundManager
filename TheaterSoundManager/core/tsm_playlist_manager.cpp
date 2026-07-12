@@ -799,19 +799,7 @@ void PlaylistManager::Update(float deltaTime)
 
             if (!isPlaying && !plist.segmentModeActive)
             {
-                if (plist.options.loopPlaylist && plist.tracks.size() == 1)
-                {
-                    StartTrackAtIndex(plist, plist.currentIndex);
-                }
-                else if (plist.options.loopPlaylist || plist.tracks.size() > 1)
-                {
-                    StartNextTrack(plist);
-                }
-                else
-                {
-                    plist.isPlaying = false;
-                    spdlog::info("Playlist '{}' finished playing (no loop option).", plist.name);
-                }
+                StartNextTrack(plist);
                 continue;
             }
 
@@ -838,27 +826,14 @@ void PlaylistManager::Update(float deltaTime)
                         
                         plist.segmentTimer += deltaTime;
                         if (trackFinished || !isPlaying) {
-                            // If track finished naturally, move to next one
-                            if (plist.tracks.size() == 1)
-                            {
-                                StartTrackAtIndex(plist, plist.currentIndex);
-                            }
-                            else
-                            {
-                                StartNextTrack(plist);
-                            }
+                            // StartNextTrack also decides whether the playlist
+                            // should stop or wrap back to its first track.
+                            StartNextTrack(plist);
                             continue;
                         }
                         else if (plist.segmentTimer >= effectiveSegmentDuration && lengthSec > effectiveSegmentDuration) {
                             // Only switch based on segment timer if the track is actually longer than segment duration
-                            if (plist.tracks.size() == 1)
-                            {
-                                StartTrackAtIndex(plist, plist.currentIndex);
-                            }
-                            else
-                            {
-                                StartNextTrack(plist);
-                            }
+                            StartNextTrack(plist);
                             continue;
                         }
                     }
@@ -1044,9 +1019,9 @@ void PlaylistManager::StartTrackAtIndex(Playlist& plist, int index)
     float userVolume = UIManager::GetInstance().GetMasterVolume() 
                      * UIManager::GetInstance().GetMusicVolume();
 
-    bool doLoop = (!plist.options.randomSegment && plist.options.loopPlaylist && plist.tracks.size() == 1);
-    
-    FMOD::Channel* ch = AudioManager::GetInstance().PlaySound(track, doLoop, userVolume);
+    // A track must finish naturally so StartNextTrack can apply the playlist's
+    // loop policy. Looping the FMOD sound bypasses playlist progression.
+    FMOD::Channel* ch = AudioManager::GetInstance().PlaySound(track, false, userVolume);
     if (!ch) {
         spdlog::error("Failed to start track at index {}", index);
         return;
@@ -1124,8 +1099,9 @@ void PlaylistManager::FinishCrossfade(Playlist& plist)
         FMOD_RESULT result = plist.currentChannel->isPlaying(&isPlaying);
         if (result != FMOD_OK || !isPlaying)
         {
-            spdlog::warn("New current channel invalid after crossfade, restarting track");
-            StartTrackAtIndex(plist, plist.currentIndex);
+            spdlog::warn("New current channel ended during crossfade, advancing playlist");
+            plist.currentChannel = nullptr;
+            StartNextTrack(plist);
         }
     }
 }
