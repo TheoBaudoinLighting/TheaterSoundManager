@@ -6,11 +6,14 @@
 #include <SDL_opengl.h>
 
 #include <cmath>
+#include <cctype>
 #include <cstdio>
+#include <cstring>
 #include <ctime>        
 #include <algorithm>    
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <vector>
 #include <spdlog/spdlog.h>
 
@@ -37,6 +40,14 @@ std::string FormatDuration(float seconds)
     std::snprintf(buffer, sizeof(buffer), "%d:%05.2f", minutes, remainingSeconds);
     return buffer;
 }
+
+template <std::size_t Size>
+void CopyToBuffer(char (&destination)[Size], std::string_view source)
+{
+    const std::size_t count = std::min(source.size(), Size - 1);
+    std::memcpy(destination, source.data(), count);
+    destination[count] = '\0';
+}
 }
 
 static char g_newMusicPath[256]       = "";
@@ -55,6 +66,17 @@ static char g_plannedAnnounceName[128]= "";
 #ifdef _WIN32
 #include <windows.h>
 #include <shobjidl.h> 
+
+std::string WideToUtf8(const wchar_t* text)
+{
+    if (!text || *text == L'\0') return "";
+    const int size = WideCharToMultiByte(CP_UTF8, 0, text, -1, nullptr, 0, nullptr, nullptr);
+    if (size <= 1) return "";
+    std::string result(static_cast<std::size_t>(size), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, text, -1, result.data(), size, nullptr, nullptr);
+    result.resize(static_cast<std::size_t>(size - 1));
+    return result;
+}
 
 std::vector<std::string> OpenFileDialogMultiSelect() {
     std::vector<std::string> filePaths;
@@ -95,9 +117,7 @@ std::vector<std::string> OpenFileDialogMultiSelect() {
                         PWSTR filePath;
                         hr = pItem->GetDisplayName(SIGDN_FILESYSPATH, &filePath);
                         if (SUCCEEDED(hr)) {
-                            std::wstring ws(filePath);
-                            std::string path(ws.begin(), ws.end());
-                            filePaths.push_back(path);
+                            filePaths.push_back(WideToUtf8(filePath));
                             CoTaskMemFree(filePath);
                         }
                         pItem->Release();
@@ -153,9 +173,7 @@ std::vector<std::string> OpenAnnouncementFileDialog() {
                         PWSTR filePath;
                         hr = pItem->GetDisplayName(SIGDN_FILESYSPATH, &filePath);
                         if (SUCCEEDED(hr)) {
-                            std::wstring ws(filePath);
-                            std::string path(ws.begin(), ws.end());
-                            filePaths.push_back(path);
+                            filePaths.push_back(WideToUtf8(filePath));
                             CoTaskMemFree(filePath);
                         }
                         pItem->Release();
@@ -218,7 +236,8 @@ void ImportAudioFiles() {
         bool isMusic = false;
         
         std::string lowerPath = path;
-        std::transform(lowerPath.begin(), lowerPath.end(), lowerPath.begin(), ::tolower);
+        std::transform(lowerPath.begin(), lowerPath.end(), lowerPath.begin(),
+            [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
         
         if(lowerPath.find("music") != std::string::npos || 
            lowerPath.find("song") != std::string::npos) {
@@ -711,8 +730,7 @@ void UIManager::RenderPlaylistManagerTab()
                 selectedPlaylistIndex = i;
                 if (!renameMode)
                 {
-                    strncpy(renameBuffer, playlistName.c_str(), IM_ARRAYSIZE(renameBuffer) - 1);
-                    renameBuffer[IM_ARRAYSIZE(renameBuffer) - 1] = '\0';
+                    CopyToBuffer(renameBuffer, playlistName);
                 }
             }
 
@@ -765,8 +783,7 @@ void UIManager::RenderPlaylistManagerTab()
             {
                 renameMode = true;
                 selectedPlaylistIndex = i;
-                strncpy(renameBuffer, playlistName.c_str(), IM_ARRAYSIZE(renameBuffer) - 1);
-                renameBuffer[IM_ARRAYSIZE(renameBuffer) - 1] = '\0';
+                CopyToBuffer(renameBuffer, playlistName);
             }
 
             ImGui::SameLine();
@@ -1228,7 +1245,7 @@ void UIManager::RenderMusicPlaylistTab()
 
             ImGui::TableNextColumn();
             if (ImGui::Button("Play")) {
-                PlaylistManager::GetInstance().PlayFromIndex(g_playlistName, i);
+                PlaylistManager::GetInstance().PlayFromIndex(g_playlistName, static_cast<int>(i));
                 // Mettre à jour le nom de playlist actuel dans l'UIManager
                 m_playlistName = g_playlistName;
             }
@@ -1236,7 +1253,7 @@ void UIManager::RenderMusicPlaylistTab()
             
             if (i > 0) {
                 if (ImGui::Button("Up")) {
-                    PlaylistManager::GetInstance().MoveTrackUp(g_playlistName, i);
+                    PlaylistManager::GetInstance().MoveTrackUp(g_playlistName, static_cast<int>(i));
                     if (g_selectedMusicIndex == static_cast<int>(i)) {
                         g_selectedMusicIndex--;
                     }
@@ -1246,7 +1263,7 @@ void UIManager::RenderMusicPlaylistTab()
             
             if (i < playlist->tracks.size() - 1) {
                 if (ImGui::Button("Down")) {
-                    PlaylistManager::GetInstance().MoveTrackDown(g_playlistName, i);
+                    PlaylistManager::GetInstance().MoveTrackDown(g_playlistName, static_cast<int>(i));
                     if (g_selectedMusicIndex == static_cast<int>(i)) {
                         g_selectedMusicIndex++;
                     }
@@ -1357,8 +1374,7 @@ void UIManager::RenderAnnouncementsTab() {
             bool selected = (g_selectedAnnouncement == static_cast<int>(i));
             if (ImGui::RadioButton("##sel", selected)) {
                 g_selectedAnnouncement = static_cast<int>(i);
-                strncpy(g_plannedAnnounceName, soundId.c_str(), sizeof(g_plannedAnnounceName) - 1);
-                g_plannedAnnounceName[sizeof(g_plannedAnnounceName) - 1] = '\0';
+                CopyToBuffer(g_plannedAnnounceName, soundId);
             }
 
             ImGui::TableNextColumn();
@@ -1624,8 +1640,7 @@ void UIManager::RenderAnnouncementControls()
             
             if (ImGui::Selectable(displayName.c_str(), isSelected)) {
                 selectedAnnouncement = i;
-                strncpy(selectedAnnounceName, announcements[i].c_str(), sizeof(selectedAnnounceName) - 1);
-                selectedAnnounceName[sizeof(selectedAnnounceName) - 1] = '\0';
+                CopyToBuffer(selectedAnnounceName, announcements[i]);
             }
             
             if (isSelected) {
@@ -1667,8 +1682,7 @@ void UIManager::RenderAnnouncementControls()
     static char plannedAnnounceName[256] = "";
     
     if (selectedAnnouncement >= 0) {
-        strncpy(plannedAnnounceName, selectedAnnounceName, sizeof(plannedAnnounceName) - 1);
-        plannedAnnounceName[sizeof(plannedAnnounceName) - 1] = '\0';
+        CopyToBuffer(plannedAnnounceName, selectedAnnounceName);
     }
     
     ImGui::InputInt("Hour##plan", &plannedHour);
@@ -1728,8 +1742,7 @@ void UIManager::RenderAnnouncementControls()
                 editMode = true;
                 editHour = ann.hour;
                 editMinute = ann.minute;
-                strncpy(editAnnounceName, ann.announcementId.c_str(), sizeof(editAnnounceName) - 1);
-                editAnnounceName[sizeof(editAnnounceName) - 1] = '\0';
+                CopyToBuffer(editAnnounceName, ann.announcementId);
             }
             
             ImGui::SameLine();
@@ -1829,6 +1842,66 @@ void UIManager::RenderDebugInfo()
 
     float frameRate = ImGui::GetIO().Framerate;
     ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / frameRate, frameRate);
+
+    auto& playlistManager = PlaylistManager::GetInstance();
+    ImGui::SeparatorText("Audio transition");
+    ImGui::Text("Current: %s", playlistManager.GetCurrentTrackName().c_str());
+    ImGui::Text("Next: %s", playlistManager.GetNextTrackName().c_str());
+    const float transitionSeconds = playlistManager.GetSecondsUntilTransition();
+    if (transitionSeconds >= 0.0f)
+    {
+        ImGui::Text("Transition in: %s", FormatDuration(transitionSeconds).c_str());
+    }
+    ImGui::Text("Last reason: %s", playlistManager.GetLastTransitionReason());
+    ImGui::Text("Crossfade: %s (%.1f%%)",
+        playlistManager.IsInCrossfade() ? "active" : "idle",
+        playlistManager.GetCrossfadeProgress() * 100.0f);
+    ImGui::TextUnformatted("Curve: equal-power | limiter: -1 dB");
+
+    auto& audioManager = AudioManager::GetInstance();
+    float targetLufs = audioManager.GetLoudnessTarget();
+    if (ImGui::SliderFloat("Loudness target", &targetLufs, -24.0f, -10.0f, "%.1f LUFS"))
+    {
+        audioManager.SetLoudnessTarget(targetLufs);
+    }
+
+    ImGui::SeparatorText("Music loudness analysis");
+    const auto diagnostics = audioManager.GetLoudnessDiagnostics();
+    if (ImGui::BeginTable("LoudnessDiagnostics", 5,
+        ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY,
+        ImVec2(0.0f, 220.0f)))
+    {
+        ImGui::TableSetupColumn("Track");
+        ImGui::TableSetupColumn("Status");
+        ImGui::TableSetupColumn("LUFS");
+        ImGui::TableSetupColumn("True peak");
+        ImGui::TableSetupColumn("Gain");
+        ImGui::TableHeadersRow();
+        for (const auto& diagnostic : diagnostics)
+        {
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted(diagnostic.soundName.c_str());
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted(AudioManager::LoudnessStatusToString(diagnostic.status));
+            ImGui::TableNextColumn();
+            if (diagnostic.status == AudioManager::LoudnessStatus::Ready)
+                ImGui::Text("%.2f", diagnostic.integratedLufs);
+            else
+                ImGui::TextUnformatted("-");
+            ImGui::TableNextColumn();
+            if (diagnostic.status == AudioManager::LoudnessStatus::Ready)
+                ImGui::Text("%.2f dB", diagnostic.truePeakDb);
+            else
+                ImGui::TextUnformatted("-");
+            ImGui::TableNextColumn();
+            if (diagnostic.status == AudioManager::LoudnessStatus::Ready)
+                ImGui::Text("%+.2f dB", diagnostic.gainDb);
+            else
+                ImGui::TextUnformatted("-");
+        }
+        ImGui::EndTable();
+    }
 }
 
 void UIManager::UpdateAllVolumes()
@@ -1857,6 +1930,10 @@ void UIManager::UpdateAllVolumes()
         }
 
         float finalVolume = m_masterVolume * baseVolume;
+        if (soundData.isMusic)
+        {
+            finalVolume *= soundData.normalizationGainLinear;
+        }
         
         if (finalVolume < 0.0f) finalVolume = 0.0f;
 
@@ -2362,8 +2439,7 @@ void UIManager::RenderWeddingModeTab()
 
                 for (const auto& playlist : PlaylistManager::GetInstance().GetAllPlaylists()) {
                     if (ImGui::Selectable(playlist.name.c_str())) {
-                        strncpy(normalPlaylistName, playlist.name.c_str(), sizeof(normalPlaylistName) - 1);
-                        normalPlaylistName[sizeof(normalPlaylistName) - 1] = '\0';
+                        CopyToBuffer(normalPlaylistName, playlist.name);
                         m_normalPlaylistAfterWedding = normalPlaylistName;
                     }
                 }

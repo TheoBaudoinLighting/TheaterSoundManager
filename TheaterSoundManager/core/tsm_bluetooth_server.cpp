@@ -9,6 +9,7 @@
 #include <atomic>
 #include <deque>
 #include <mutex>
+#include <string>
 
 #include "tsm_playlist_manager.h"
 #include "tsm_ui_manager.h"
@@ -149,9 +150,17 @@ int RegisterBluetoothService(SOCKET sock, SOCKADDR_BTH* localBthAddr)
         return err;
     }
     
-    char serviceNameNarrow[32];
-    wcstombs(serviceNameNarrow, serviceName, sizeof(serviceNameNarrow));
-    spdlog::info("Service registered with name '{}'.", serviceNameNarrow);
+    const int utf8Size = WideCharToMultiByte(
+        CP_UTF8, 0, serviceName, -1, nullptr, 0, nullptr, nullptr);
+    std::string serviceNameUtf8(
+        utf8Size > 0 ? static_cast<std::size_t>(utf8Size) : 1, '\0');
+    if (utf8Size > 0)
+    {
+        WideCharToMultiByte(
+            CP_UTF8, 0, serviceName, -1, serviceNameUtf8.data(), utf8Size, nullptr, nullptr);
+        serviceNameUtf8.resize(static_cast<std::size_t>(utf8Size - 1));
+    }
+    spdlog::info("Service registered with name '{}'.", serviceNameUtf8);
     return 0;
 }
 
@@ -202,7 +211,7 @@ void processCommand(SOCKET clientSocket, char* buffer)
     else if (strncmp(buffer, "SET_VOLUME", 10) == 0)
     {
         float volume = 0.5f;
-        if (sscanf(buffer, "SET_VOLUME %f", &volume) == 1)
+        if (sscanf_s(buffer, "SET_VOLUME %f", &volume) == 1)
         {
             QueueCommand(BluetoothCommandType::SetVolume, volume);
             SendResponse(clientSocket, "Volume change queued");

@@ -40,6 +40,8 @@
 
 TheaterSoundManager/external*
 TheaterSoundManager/out*
+TheaterSoundManager/x64/*
+TheaterSoundManager/TheaterS.*
 
 TheaterSoundManager_Tests/x64/*
 x64/*
@@ -48,4 +50,4 @@ packages/*
 *.ini
 
 *.json
-*.log
+!TheaterSoundManager/config/tsm_config.json

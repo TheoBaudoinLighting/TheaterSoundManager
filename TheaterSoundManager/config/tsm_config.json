@@ -1,0 +1,76 @@
+{
+  "loudnessTargetLufs": -16.0,
+  "playlists": [
+    {
+      "name": "playlist_PreShow",
+      "options": {
+        "randomOrder": true,
+        "randomSegment": true,
+        "loopPlaylist": true,
+        "segmentDuration": 150.0
+      },
+      "tracks": [
+        { "id": "temps_amour", "path": "assets/musics/PreShowMariage/01_Bon_Entendeur_Le_temps_de_l_amour.mp3" },
+        { "id": "fio_maravilha", "path": "assets/musics/PreShowMariage/Nicoletta_FioMaravilha.mp3" },
+        { "id": "helwa_ya_baladi", "path": "assets/musics/PreShowMariage/DalidaHelwaYaBaladi_LinaSleibiCover.mp3" },
+        { "id": "laisse_moi_taimer", "path": "assets/musics/PreShowMariage/LaisseMoiTaimer_MikeBrant.mp3" },
+        { "id": "yeux_emilie", "path": "assets/musics/PreShowMariage/JoeDassin_LesYeuxEmilie.mp3" },
+        { "id": "bonnie_clyde", "path": "assets/musics/PreShowMariage/SergeGainsbourg_BonnieClyde.mp3" },
+        { "id": "perche_ti_amo", "path": "assets/musics/PreShowMariage/SaraPercheTiAmo_NextGenRemix.mp3" },
+        { "id": "emmenez_moi", "path": "assets/musics/PreShowMariage/CharlesAznavour_EmmenezMoi.mp3" },
+        { "id": "boheme", "path": "assets/musics/PreShowMariage/CharlesAznavour_LaBohemeBoubouRemix.mp3" },
+        { "id": "amour", "path": "assets/musics/PreShowMariage/Mouloudji_Lamour.mp3" },
+        { "id": "foule", "path": "assets/musics/PreShowMariage/EdithPiaf_LaFoule.mp3" }
+      ]
+    },
+    {
+      "name": "playlist_PostShow",
+      "options": {
+        "randomOrder": true,
+        "randomSegment": true,
+        "loopPlaylist": true,
+        "segmentDuration": 150.0
+      },
+      "tracks": [
+        { "id": "bon_voyage", "path": "assets/musics/PostShow/BonVoyage.mp3" },
+        { "id": "buddha_bar", "path": "assets/musics/PostShow/BuddhaBarIII.mp3" },
+        { "id": "jazz_port_orleans", "path": "assets/musics/PostShow/JazzPortOrleans.mp3" },
+        { "id": "coffee_portofino", "path": "assets/musics/PostShow/CoffeePortofino.mp3" },
+        { "id": "country_bear", "path": "assets/musics/PostShow/CountryBear.mp3" },
+        { "id": "fantasy_spring", "path": "assets/musics/PostShow/FantasySpring.mp3" },
+        { "id": "forest_caffee", "path": "assets/musics/PostShow/ForestCaffee.mp3" },
+        { "id": "grand_avenue", "path": "assets/musics/PostShow/GrandAvenue.mp3" },
+        { "id": "hth", "path": "assets/musics/PostShow/HTH.mp3" },
+        { "id": "jazz_01", "path": "assets/musics/PostShow/Jazz01.mp3" },
+        { "id": "mmrr_exit_music", "path": "assets/musics/PostShow/MMRR_ExitMusic.mp3" },
+        { "id": "mmrr_lobby", "path": "assets/musics/PostShow/MMRR_Lobby.mp3" },
+        { "id": "bella_note", "path": "assets/musics/PostShow/BellaNote.mp3" },
+        { "id": "secret_love", "path": "assets/musics/PostShow/SecretLove.mp3" },
+        { "id": "agrabah_cafe_restaurant", "path": "assets/musics/PostShow/AgrabahCafeRestaurant.mp3" },
+        { "id": "tiana_palace", "path": "assets/musics/PostShow/TianaPalace.mp3" },
+        { "id": "town_center", "path": "assets/musics/PostShow/TownCenter.mp3" }
+      ]
+    }
+  ],
+  "wedding": {
+    "entrance": "assets/wedding/Entree_RunrigHeartsOfOldenGlory.mp3",
+    "ceremony": "assets/wedding/Loop_PortOrleanAmbience.mp3",
+    "exit": "assets/musics/PreShowMariage/MariagedAmour_PauldeSennevilleJacobsPiano.mp3",
+    "transitionSfx": {
+      "id": "sfx_shine",
+      "path": "assets/sfx/DisneyShine_SFX.mp3"
+    }
+  },
+  "announcements": [
+    { "id": "announce_bienvenue_01", "path": "assets/annonces/Both/bienvenue_01.mp3", "hour": 12, "minute": 0 },
+    { "id": "announce_15min_cl", "path": "assets/annonces/Both/15min_cl.mp3", "hour": 12, "minute": 15 },
+    { "id": "announce_10min_cl", "path": "assets/annonces/Both/10min_cl.mp3", "hour": 12, "minute": 20 },
+    { "id": "announce_5min_cl", "path": "assets/annonces/Both/5min_cl.mp3", "hour": 12, "minute": 25 },
+    { "id": "announce_15min_buffet", "path": "assets/annonces/Both/15min_buffet.mp3", "hour": 14, "minute": 15 },
+    { "id": "announce_10min_buffet", "path": "assets/annonces/Both/10min_buffet.mp3", "hour": 14, "minute": 20 },
+    { "id": "announce_5min_buffet", "path": "assets/annonces/Both/5min_buffet.mp3", "hour": 14, "minute": 25 },
+    { "id": "announce_machine_photo", "path": "assets/annonces/Both/machine_photo_02.mp3", "hour": 15, "minute": 0 },
+    { "id": "announce_jeux_de_societer", "path": "assets/annonces/Both/jeux_societer_01.mp3", "hour": 15, "minute": 15 },
+    { "id": "announce_remerciements", "path": "assets/annonces/Both/merci_01.mp3", "hour": 16, "minute": 0 }
+  ]
+}

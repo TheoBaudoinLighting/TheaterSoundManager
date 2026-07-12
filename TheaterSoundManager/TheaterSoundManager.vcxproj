@@ -107,7 +107,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NOMINMAX;_CRT_SECURE_NO_WARNINGS;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalIncludeDirectories>$(ProjectDir)external\imgui;$(ProjectDir)external\imgui\backends;$(ProjectDir)external\sdl\include;$(ProjectDir)external\sdl_mixer\include;$(ProjectDir)external\fmod\inc;$(ProjectDir)core;$(ProjectDir)core\imgui;$(ProjectDir)core\math;$(ProjectDir)core\sdl;$(ProjectDir)core\sound;$(ProjectDir)external\spdlog\include\;$(ProjectDir)external\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -126,7 +126,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NOMINMAX;_CRT_SECURE_NO_WARNINGS;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalIncludeDirectories>$(ProjectDir)external\imgui;$(ProjectDir)external\imgui\backends;$(ProjectDir)external\sdl\include;$(ProjectDir)external\sdl_mixer\include;$(ProjectDir)external\fmod\inc;$(ProjectDir)core;$(ProjectDir)core\imgui;$(ProjectDir)core\math;$(ProjectDir)core\sdl;$(ProjectDir)core\sound;$(ProjectDir)external\spdlog\include\;$(ProjectDir)external\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -145,6 +145,7 @@
     <ClCompile Include="core\tsm_announcement_manager.cpp" />
     <ClCompile Include="core\tsm_audio_manager.cpp" />
     <ClCompile Include="core\tsm_bluetooth_server.cpp" />
+    <ClCompile Include="core\tsm_config.cpp" />
     <ClCompile Include="core\tsm_fmod_wrapper.cpp" />
     <ClCompile Include="core\tsm_main.cpp" />
     <ClCompile Include="core\tsm_playlist_manager.cpp" />
@@ -171,9 +172,11 @@
     <ClInclude Include="core\tsm_announcement_manager.h" />
     <ClInclude Include="core\tsm_audio_manager.h" />
     <ClInclude Include="core\tsm_bluetooth_server.h" />
+    <ClInclude Include="core\tsm_config.h" />
     <ClInclude Include="core\tsm_fmod_wrapper.h" />
     <ClInclude Include="core\tsm_logger.h" />
     <ClInclude Include="core\tsm_playlist_manager.h" />
+    <ClInclude Include="core\tsm_transition_logic.h" />
     <ClInclude Include="core\tsm_ui_manager.h" />
     <ClInclude Include="external\fmod\inc\fmod.h" />
     <ClInclude Include="external\fmod\inc\fmod.hpp" />
@@ -288,6 +291,7 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ItemGroup>
     <AssetFile Include="$(ProjectDir)assets\**\*" />
+    <ConfigFile Include="$(ProjectDir)config\**\*" />
   </ItemGroup>
   <Target Name="CopyRuntimeDlls" AfterTargets="Build" Condition="'$(Platform)'=='x64'">
     <Copy SourceFiles="@(RuntimeDll)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
@@ -295,6 +299,11 @@
   <Target Name="CopyAssets" AfterTargets="Build" Condition="Exists('$(ProjectDir)assets')">
     <Copy SourceFiles="@(AssetFile)"
           DestinationFiles="@(AssetFile->'$(OutDir)assets\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
+  <Target Name="CopyConfig" AfterTargets="Build" Condition="Exists('$(ProjectDir)config')">
+    <Copy SourceFiles="@(ConfigFile)"
+          DestinationFiles="@(ConfigFile->'$(OutDir)config\%(RecursiveDir)%(Filename)%(Extension)')"
           SkipUnchangedFiles="true" />
   </Target>
   <ImportGroup Label="ExtensionTargets">

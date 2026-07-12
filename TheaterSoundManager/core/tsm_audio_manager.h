@@ -5,6 +5,11 @@
 #include <string>
 #include <map>
 #include <vector>
+#include <atomic>
+#include <condition_variable>
+#include <deque>
+#include <mutex>
+#include <thread>
 
 namespace TSM 
 {
@@ -12,11 +17,36 @@ namespace TSM
 class AudioManager 
 {
 public:
+    enum class LoudnessStatus
+    {
+        NotQueued,
+        Queued,
+        Analyzing,
+        Ready,
+        Failed
+    };
+
     struct SoundData
     {
         FMOD::Sound* sound = nullptr;
         std::vector<FMOD::Channel*> channels;
         std::string filePath;
+        bool isMusic = false;
+        LoudnessStatus loudnessStatus = LoudnessStatus::NotQueued;
+        float integratedLufs = 0.0f;
+        float truePeakDb = 0.0f;
+        float normalizationGainDb = 0.0f;
+        float normalizationGainLinear = 1.0f;
+    };
+
+    struct LoudnessDiagnostic
+    {
+        std::string soundName;
+        std::string filePath;
+        LoudnessStatus status = LoudnessStatus::NotQueued;
+        float integratedLufs = 0.0f;
+        float truePeakDb = 0.0f;
+        float gainDb = 0.0f;
     };
 
     static AudioManager& GetInstance() 
@@ -50,6 +80,12 @@ public:
     void SetChannelPitch(FMOD::Channel* channel, float pitch);
     void Update(float deltaTime);
     FMOD::Channel* GetLastChannelOfSound(const std::string& soundName);
+    void QueueLoudnessAnalysis(const std::string& soundName);
+    float GetNormalizationGainForChannel(FMOD::Channel* channel) const;
+    std::vector<LoudnessDiagnostic> GetLoudnessDiagnostics() const;
+    static const char* LoudnessStatusToString(LoudnessStatus status);
+    void SetLoudnessTarget(float targetLufs);
+    float GetLoudnessTarget() const { return m_loudnessTargetLufs; }
     void Shutdown();
 private:
     struct ChannelFade
@@ -67,10 +103,39 @@ private:
     std::vector<ChannelFade> m_channelFades;
     float m_fadeDuration = 1.5f;
     FMOD::ChannelGroup* m_musicChannelGroup = nullptr;
-    FMOD::DSP* m_musicNormalizer = nullptr;
+    FMOD::DSP* m_musicLimiter = nullptr;
+
+    struct LoudnessTask
+    {
+        std::string soundName;
+        std::string filePath;
+    };
+
+    struct LoudnessResult
+    {
+        std::string soundName;
+        std::string filePath;
+        bool success = false;
+        float integratedLufs = 0.0f;
+        float truePeakDb = 0.0f;
+    };
+
+    std::thread m_loudnessThread;
+    mutable std::mutex m_loudnessMutex;
+    std::condition_variable m_loudnessCondition;
+    std::deque<LoudnessTask> m_loudnessTasks;
+    std::deque<LoudnessResult> m_loudnessResults;
+    std::string m_activeLoudnessSound;
+    std::atomic<bool> m_stopLoudnessThread{false};
+    bool m_loudnessThreadStarted = false;
+    float m_loudnessTargetLufs = -16.0f;
+    std::string m_loudnessCachePath = "loudness_cache.json";
 
     FMOD::Channel* PlaySoundInternal(const std::string& soundName, bool loop, float volume, float pitch, bool normalizeMusic);
     bool EnsureMusicProcessing();
+    void StartLoudnessWorker();
+    void LoudnessWorkerMain();
+    void ApplyLoudnessResults();
     void StartChannelFade(FMOD::Channel* channel, float targetVolume, bool stopWhenComplete);
     void CancelChannelFade(FMOD::Channel* channel);
     void PruneStoppedChannels(SoundData& data);

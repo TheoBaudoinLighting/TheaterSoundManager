@@ -5,10 +5,115 @@
 #include <fmod_dsp_effects.h>
 
 #include <spdlog/spdlog.h>
+#include <json/json.hpp>
 #include <algorithm>
+#include <cmath>
+#include <filesystem>
+#include <fstream>
 
 namespace TSM 
 {
+
+namespace
+{
+std::filesystem::path PathFromUtf8(const std::string& filePath)
+{
+    const auto* begin = reinterpret_cast<const char8_t*>(filePath.data());
+    return std::filesystem::path(std::u8string(begin, begin + filePath.size()));
+}
+
+std::string NormalizeCacheKey(const std::string& filePath)
+{
+    std::error_code error;
+    std::filesystem::path path = std::filesystem::absolute(PathFromUtf8(filePath), error);
+    if (error) path = PathFromUtf8(filePath);
+    return path.lexically_normal().generic_string();
+}
+
+std::uintmax_t GetFileSize(const std::string& filePath)
+{
+    std::error_code error;
+    const auto size = std::filesystem::file_size(PathFromUtf8(filePath), error);
+    return error ? 0 : size;
+}
+
+std::int64_t GetFileWriteTime(const std::string& filePath)
+{
+    std::error_code error;
+    const auto time = std::filesystem::last_write_time(PathFromUtf8(filePath), error);
+    return error ? 0 : static_cast<std::int64_t>(time.time_since_epoch().count());
+}
+
+bool AnalyzeLoudness(FMOD::System* system, const std::string& filePath,
+                     const std::atomic<bool>& stopRequested,
+                     float& integratedLufs, float& truePeakDb)
+{
+    FMOD::Sound* sound = nullptr;
+    FMOD_RESULT result = system->createSound(
+        filePath.c_str(), FMOD_2D | FMOD_CREATESTREAM, nullptr, &sound);
+    if (result != FMOD_OK || !sound) return false;
+
+    FMOD::DSP* meter = nullptr;
+    FMOD::Channel* channel = nullptr;
+    result = system->createDSPByType(FMOD_DSP_TYPE_LOUDNESS_METER, &meter);
+    if (result == FMOD_OK && meter)
+    {
+        result = system->playSound(sound, nullptr, true, &channel);
+    }
+    if (result == FMOD_OK && channel)
+    {
+        result = channel->addDSP(0, meter);
+    }
+    if (result == FMOD_OK)
+    {
+        meter->setActive(true);
+        channel->setPaused(false);
+    }
+
+    unsigned int lengthMs = 0;
+    sound->getLength(&lengthMs, FMOD_TIMEUNIT_MS);
+    const std::uint64_t maxUpdates = std::max<std::uint64_t>(
+        1000, static_cast<std::uint64_t>(lengthMs / 1000 + 1) * 200);
+
+    bool isPlaying = result == FMOD_OK;
+    std::uint64_t updates = 0;
+    while (isPlaying && !stopRequested.load() && updates++ < maxUpdates)
+    {
+        if (system->update() != FMOD_OK || channel->isPlaying(&isPlaying) != FMOD_OK)
+        {
+            isPlaying = false;
+            result = FMOD_ERR_INTERNAL;
+        }
+    }
+
+    bool success = false;
+    if (!stopRequested.load() && result == FMOD_OK && updates < maxUpdates)
+    {
+        void* data = nullptr;
+        unsigned int dataLength = 0;
+        if (meter->getParameterData(
+                FMOD_DSP_LOUDNESS_METER_INFO, &data, &dataLength, nullptr, 0) == FMOD_OK &&
+            data && dataLength >= sizeof(FMOD_DSP_LOUDNESS_METER_INFO_TYPE))
+        {
+            const auto* info = static_cast<const FMOD_DSP_LOUDNESS_METER_INFO_TYPE*>(data);
+            integratedLufs = info->integratedloudness;
+            truePeakDb = info->maxtruepeak;
+            success = std::isfinite(integratedLufs) && integratedLufs > -80.0f &&
+                      std::isfinite(truePeakDb);
+        }
+    }
+
+    if (channel)
+    {
+        channel->stop();
+        if (meter) channel->removeDSP(meter);
+    }
+    if (meter) meter->release();
+    sound->release();
+    system->update();
+    return success;
+}
+}
 
 bool AudioManager::LoadSound(const std::string& soundName, const std::string& filePath, bool isStream)
 {
@@ -126,6 +231,12 @@ FMOD::Channel* AudioManager::PlaySoundInternal(
         spdlog::error("FMOD getMode failed for '{}': {}", soundName, FMOD_ErrorString(modeResult));
         return nullptr;
     }
+
+    if (normalizeMusic)
+    {
+        data.isMusic = true;
+        QueueLoudnessAnalysis(soundName);
+    }
     if (loop)
         currentMode |= FMOD_LOOP_NORMAL;
     else
@@ -157,7 +268,10 @@ FMOD::Channel* AudioManager::PlaySoundInternal(
         spdlog::info("FMOD playSound success: {}", soundName);
     }
     
-    channel->setVolume(volume);
+    const float normalizedVolume = normalizeMusic
+        ? volume * data.normalizationGainLinear
+        : volume;
+    channel->setVolume(normalizedVolume);
     ApplyPitch(channel, pitch);
     channel->setPaused(false);
 
@@ -262,6 +376,8 @@ void AudioManager::SetChannelPitch(FMOD::Channel* channel, float pitch)
 }
 void AudioManager::Update(float deltaTime)
 {
+    ApplyLoudnessResults();
+
     FMOD::System* system = FModWrapper::GetInstance().GetSystem();
     if (system)
     {
@@ -352,6 +468,7 @@ bool AudioManager::LoadWeddingPhaseSound(int phase, const std::string& filePath)
     bool success = LoadSound(soundId, filePath, true);
     
     if (success) {
+        QueueLoudnessAnalysis(soundId);
         spdlog::info("Wedding phase {} sound loaded successfully: {}", phase, filePath);
     } else {
         spdlog::error("Failed to load wedding phase {} sound: {}", phase, filePath);
@@ -403,23 +520,291 @@ FMOD::Channel* AudioManager::PlayMusicWithFadeIn(const std::string& soundName, b
     FMOD::Channel* channel = PlaySoundInternal(soundName, loop, 0.0f, pitch, true);
     if (!channel) return nullptr;
 
-    StartChannelFade(channel, volume, false);
+    float normalizationGain = 1.0f;
+    const auto soundIt = m_sounds.find(soundName);
+    if (soundIt != m_sounds.end()) normalizationGain = soundIt->second.normalizationGainLinear;
+    StartChannelFade(channel, volume * normalizationGain, false);
     spdlog::info("Starting normalized music fade-in: {} (target volume: {})", soundName, volume);
     return channel;
+}
+
+void AudioManager::QueueLoudnessAnalysis(const std::string& soundName)
+{
+    auto soundIt = m_sounds.find(soundName);
+    if (soundIt == m_sounds.end() || soundIt->second.filePath.empty()) return;
+
+    SoundData& data = soundIt->second;
+    data.isMusic = true;
+    if (data.loudnessStatus == LoudnessStatus::Queued ||
+        data.loudnessStatus == LoudnessStatus::Analyzing ||
+        data.loudnessStatus == LoudnessStatus::Ready)
+    {
+        return;
+    }
+
+    data.loudnessStatus = LoudnessStatus::Queued;
+    {
+        std::lock_guard<std::mutex> lock(m_loudnessMutex);
+        m_loudnessTasks.push_back({soundName, data.filePath});
+    }
+    StartLoudnessWorker();
+    m_loudnessCondition.notify_one();
+}
+
+void AudioManager::StartLoudnessWorker()
+{
+    if (m_loudnessThreadStarted) return;
+    m_loudnessThreadStarted = true;
+    m_stopLoudnessThread.store(false);
+    m_loudnessThread = std::thread(&AudioManager::LoudnessWorkerMain, this);
+}
+
+void AudioManager::LoudnessWorkerMain()
+{
+    nlohmann::json cache = nlohmann::json::object();
+    try
+    {
+        std::ifstream cacheFile(m_loudnessCachePath);
+        if (cacheFile.is_open()) cacheFile >> cache;
+    }
+    catch (const std::exception& error)
+    {
+        spdlog::warn("Ignoring invalid loudness cache '{}': {}", m_loudnessCachePath, error.what());
+        cache = nlohmann::json::object();
+    }
+
+    FMOD::System* analysisSystem = nullptr;
+    FMOD_RESULT result = FMOD::System_Create(&analysisSystem);
+    if (result == FMOD_OK && analysisSystem)
+    {
+        result = analysisSystem->setOutput(FMOD_OUTPUTTYPE_NOSOUND_NRT);
+    }
+    if (result == FMOD_OK)
+    {
+        result = analysisSystem->init(8, FMOD_INIT_STREAM_FROM_UPDATE, nullptr);
+    }
+    if (result != FMOD_OK || !analysisSystem)
+    {
+        spdlog::error("Unable to initialize LUFS analysis engine: {}", FMOD_ErrorString(result));
+        if (analysisSystem) analysisSystem->release();
+        return;
+    }
+
+    while (!m_stopLoudnessThread.load())
+    {
+        LoudnessTask task;
+        {
+            std::unique_lock<std::mutex> lock(m_loudnessMutex);
+            m_loudnessCondition.wait(lock, [this]
+            {
+                return m_stopLoudnessThread.load() || !m_loudnessTasks.empty();
+            });
+            if (m_stopLoudnessThread.load()) break;
+            task = std::move(m_loudnessTasks.front());
+            m_loudnessTasks.pop_front();
+            m_activeLoudnessSound = task.soundName;
+        }
+
+        LoudnessResult loudnessResult;
+        loudnessResult.soundName = task.soundName;
+        loudnessResult.filePath = task.filePath;
+
+        const std::string cacheKey = NormalizeCacheKey(task.filePath);
+        const std::uintmax_t fileSize = GetFileSize(task.filePath);
+        const std::int64_t writeTime = GetFileWriteTime(task.filePath);
+        const auto cacheIt = cache.find(cacheKey);
+        if (cacheIt != cache.end() &&
+            cacheIt->value("size", std::uintmax_t{0}) == fileSize &&
+            cacheIt->value("writeTime", std::int64_t{0}) == writeTime)
+        {
+            loudnessResult.integratedLufs = cacheIt->value("integratedLufs", 0.0f);
+            loudnessResult.truePeakDb = cacheIt->value("truePeakDb", 0.0f);
+            loudnessResult.success = std::isfinite(loudnessResult.integratedLufs) &&
+                                     loudnessResult.integratedLufs > -80.0f;
+        }
+        else
+        {
+            loudnessResult.success = AnalyzeLoudness(
+                analysisSystem, task.filePath, m_stopLoudnessThread,
+                loudnessResult.integratedLufs, loudnessResult.truePeakDb);
+            if (loudnessResult.success)
+            {
+                cache[cacheKey] = {
+                    {"size", fileSize},
+                    {"writeTime", writeTime},
+                    {"integratedLufs", loudnessResult.integratedLufs},
+                    {"truePeakDb", loudnessResult.truePeakDb}
+                };
+                try
+                {
+                    std::ofstream cacheFile(m_loudnessCachePath);
+                    if (cacheFile.is_open()) cacheFile << cache.dump(2);
+                }
+                catch (const std::exception& error)
+                {
+                    spdlog::warn("Unable to save loudness cache: {}", error.what());
+                }
+            }
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(m_loudnessMutex);
+            m_activeLoudnessSound.clear();
+            m_loudnessResults.push_back(std::move(loudnessResult));
+        }
+    }
+
+    analysisSystem->close();
+    analysisSystem->release();
+}
+
+void AudioManager::ApplyLoudnessResults()
+{
+    std::deque<LoudnessResult> results;
+    {
+        std::lock_guard<std::mutex> lock(m_loudnessMutex);
+        results.swap(m_loudnessResults);
+    }
+
+    for (const LoudnessResult& result : results)
+    {
+        auto soundIt = m_sounds.find(result.soundName);
+        if (soundIt == m_sounds.end() || soundIt->second.filePath != result.filePath) continue;
+
+        SoundData& data = soundIt->second;
+        if (!result.success)
+        {
+            data.loudnessStatus = LoudnessStatus::Failed;
+            spdlog::warn("LUFS analysis failed for '{}'", result.soundName);
+            continue;
+        }
+
+        const float oldGain = data.normalizationGainLinear;
+        float gainDb = std::clamp(m_loudnessTargetLufs - result.integratedLufs, -12.0f, 12.0f);
+        if (result.truePeakDb + gainDb > -1.0f)
+        {
+            gainDb = -1.0f - result.truePeakDb;
+        }
+
+        data.integratedLufs = result.integratedLufs;
+        data.truePeakDb = result.truePeakDb;
+        data.normalizationGainDb = gainDb;
+        data.normalizationGainLinear = std::pow(10.0f, gainDb / 20.0f);
+        data.loudnessStatus = LoudnessStatus::Ready;
+
+        const float gainRatio = oldGain > 0.0f ? data.normalizationGainLinear / oldGain : 1.0f;
+        for (FMOD::Channel* channel : data.channels)
+        {
+            bool isPlaying = false;
+            float currentVolume = 0.0f;
+            if (channel && channel->isPlaying(&isPlaying) == FMOD_OK && isPlaying &&
+                channel->getVolume(&currentVolume) == FMOD_OK)
+            {
+                StartChannelFade(channel, currentVolume * gainRatio, false);
+            }
+        }
+
+        spdlog::info("LUFS '{}' = {:.2f}, true peak {:.2f} dB, gain {:+.2f} dB",
+                     result.soundName, result.integratedLufs, result.truePeakDb, gainDb);
+    }
+}
+
+float AudioManager::GetNormalizationGainForChannel(FMOD::Channel* channel) const
+{
+    if (!channel) return 1.0f;
+    FMOD::Sound* sound = nullptr;
+    if (channel->getCurrentSound(&sound) != FMOD_OK || !sound) return 1.0f;
+
+    for (const auto& [name, data] : m_sounds)
+    {
+        (void)name;
+        if (data.sound == sound && data.isMusic) return data.normalizationGainLinear;
+    }
+    return 1.0f;
+}
+
+std::vector<AudioManager::LoudnessDiagnostic> AudioManager::GetLoudnessDiagnostics() const
+{
+    std::string activeSound;
+    {
+        std::lock_guard<std::mutex> lock(m_loudnessMutex);
+        activeSound = m_activeLoudnessSound;
+    }
+
+    std::vector<LoudnessDiagnostic> diagnostics;
+    for (const auto& [soundName, data] : m_sounds)
+    {
+        if (!data.isMusic) continue;
+        LoudnessStatus status = data.loudnessStatus;
+        if (soundName == activeSound) status = LoudnessStatus::Analyzing;
+        diagnostics.push_back({
+            soundName, data.filePath, status, data.integratedLufs,
+            data.truePeakDb, data.normalizationGainDb
+        });
+    }
+    return diagnostics;
+}
+
+const char* AudioManager::LoudnessStatusToString(LoudnessStatus status)
+{
+    switch (status)
+    {
+        case LoudnessStatus::NotQueued: return "not queued";
+        case LoudnessStatus::Queued: return "queued";
+        case LoudnessStatus::Analyzing: return "analyzing";
+        case LoudnessStatus::Ready: return "ready";
+        case LoudnessStatus::Failed: return "failed";
+    }
+    return "unknown";
+}
+
+void AudioManager::SetLoudnessTarget(float targetLufs)
+{
+    m_loudnessTargetLufs = std::clamp(targetLufs, -30.0f, -8.0f);
+    for (auto& [soundName, data] : m_sounds)
+    {
+        (void)soundName;
+        if (!data.isMusic || data.loudnessStatus != LoudnessStatus::Ready) continue;
+
+        const float oldGain = data.normalizationGainLinear;
+        float gainDb = std::clamp(m_loudnessTargetLufs - data.integratedLufs, -12.0f, 12.0f);
+        if (data.truePeakDb + gainDb > -1.0f) gainDb = -1.0f - data.truePeakDb;
+        data.normalizationGainDb = gainDb;
+        data.normalizationGainLinear = std::pow(10.0f, gainDb / 20.0f);
+
+        const float ratio = oldGain > 0.0f ? data.normalizationGainLinear / oldGain : 1.0f;
+        for (FMOD::Channel* channel : data.channels)
+        {
+            bool isPlaying = false;
+            float volume = 0.0f;
+            if (channel && channel->isPlaying(&isPlaying) == FMOD_OK && isPlaying &&
+                channel->getVolume(&volume) == FMOD_OK)
+            {
+                StartChannelFade(channel, volume * ratio, false);
+            }
+        }
+    }
 }
 
 void AudioManager::Shutdown()
 {
     StopAllSounds();
 
-    if (m_musicChannelGroup && m_musicNormalizer)
+    m_stopLoudnessThread.store(true);
+    m_loudnessCondition.notify_all();
+    if (m_loudnessThread.joinable())
     {
-        m_musicChannelGroup->removeDSP(m_musicNormalizer);
+        m_loudnessThread.join();
     }
-    if (m_musicNormalizer)
+
+    if (m_musicChannelGroup && m_musicLimiter)
     {
-        m_musicNormalizer->release();
-        m_musicNormalizer = nullptr;
+        m_musicChannelGroup->removeDSP(m_musicLimiter);
+    }
+    if (m_musicLimiter)
+    {
+        m_musicLimiter->release();
+        m_musicLimiter = nullptr;
     }
     if (m_musicChannelGroup)
     {
@@ -430,7 +815,7 @@ void AudioManager::Shutdown()
 
 bool AudioManager::EnsureMusicProcessing()
 {
-    if (m_musicChannelGroup && m_musicNormalizer) return true;
+    if (m_musicChannelGroup && m_musicLimiter) return true;
 
     FMOD::System* system = FModWrapper::GetInstance().GetSystem();
     if (!system) return false;
@@ -443,34 +828,34 @@ bool AudioManager::EnsureMusicProcessing()
         return false;
     }
 
-    result = system->createDSPByType(FMOD_DSP_TYPE_NORMALIZE, &m_musicNormalizer);
-    if (result != FMOD_OK || !m_musicNormalizer)
+    result = system->createDSPByType(FMOD_DSP_TYPE_LIMITER, &m_musicLimiter);
+    if (result != FMOD_OK || !m_musicLimiter)
     {
-        spdlog::error("Failed to create the music normalizer: {}", FMOD_ErrorString(result));
+        spdlog::error("Failed to create the music limiter: {}", FMOD_ErrorString(result));
         m_musicChannelGroup->release();
         m_musicChannelGroup = nullptr;
-        m_musicNormalizer = nullptr;
+        m_musicLimiter = nullptr;
         return false;
     }
 
-    // Smooth peak normalization with a conservative +12 dB amplification cap.
-    m_musicNormalizer->setParameterFloat(FMOD_DSP_NORMALIZE_FADETIME, 4000.0f);
-    m_musicNormalizer->setParameterFloat(FMOD_DSP_NORMALIZE_THRESHOLD, 0.1f);
-    m_musicNormalizer->setParameterFloat(FMOD_DSP_NORMALIZE_MAXAMP, 4.0f);
+    m_musicLimiter->setParameterFloat(FMOD_DSP_LIMITER_RELEASETIME, 50.0f);
+    m_musicLimiter->setParameterFloat(FMOD_DSP_LIMITER_CEILING, -1.0f);
+    m_musicLimiter->setParameterFloat(FMOD_DSP_LIMITER_MAXIMIZERGAIN, 0.0f);
+    m_musicLimiter->setParameterBool(FMOD_DSP_LIMITER_MODE, true);
 
-    result = m_musicChannelGroup->addDSP(0, m_musicNormalizer);
+    result = m_musicChannelGroup->addDSP(0, m_musicLimiter);
     if (result != FMOD_OK)
     {
-        spdlog::error("Failed to attach the music normalizer: {}", FMOD_ErrorString(result));
-        m_musicNormalizer->release();
+        spdlog::error("Failed to attach the music limiter: {}", FMOD_ErrorString(result));
+        m_musicLimiter->release();
         m_musicChannelGroup->release();
-        m_musicNormalizer = nullptr;
+        m_musicLimiter = nullptr;
         m_musicChannelGroup = nullptr;
         return false;
     }
 
-    m_musicNormalizer->setActive(true);
-    spdlog::info("Automatic music volume normalization enabled");
+    m_musicLimiter->setActive(true);
+    spdlog::info("Music true-peak limiter enabled at -1 dB");
     return true;
 }
 

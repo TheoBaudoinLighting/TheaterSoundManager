@@ -130,6 +130,7 @@ void PlaylistManager::DuplicatePlaylist(const std::string& sourceName, const std
     newPlaylist.isPlaying = false;
     newPlaylist.currentChannel = nullptr;
     newPlaylist.nextChannel = nullptr;
+    newPlaylist.nextIndex = -1;
     newPlaylist.isCrossfading = false;
     
     m_playlists.push_back(newPlaylist);
@@ -146,6 +147,7 @@ void PlaylistManager::AddToPlaylist(const std::string& playlistName, const std::
     if (it != m_playlists.end())
     {
         it->tracks.push_back(soundName);
+        AudioManager::GetInstance().QueueLoudnessAnalysis(soundName);
         spdlog::info("Added '{}' to playlist '{}'.", soundName, playlistName);
         NotifyPlaylistChanged();
     }
@@ -368,6 +370,7 @@ bool PlaylistManager::ImportPlaylist(const std::string& filePath, const std::str
                 if (audioManager.GetSound(trackId))
                 {
                     existingIt->tracks.push_back(trackId);
+                    audioManager.QueueLoudnessAnalysis(trackId);
                 }
                 else
                 {
@@ -580,6 +583,7 @@ bool PlaylistManager::LoadPlaylistsFromFile(const std::string& filePath)
                 if (audioManager.GetSound(trackId))
                 {
                     playlist.tracks.push_back(trackId);
+                    audioManager.QueueLoudnessAnalysis(trackId);
                 }
                 else
                 {
@@ -672,6 +676,7 @@ void PlaylistManager::Play(const std::string& playlistName, const PlaylistOption
     plist.isPlaying = true;
     plist.currentChannel = nullptr;
     plist.nextChannel = nullptr;
+    plist.nextIndex = -1;
     plist.isCrossfading = false;
     plist.crossfadeTimer = 0.0f;
 
@@ -693,6 +698,7 @@ void PlaylistManager::Stop(const std::string& playlistName)
         plist.currentChannel = nullptr;
         plist.nextChannel = nullptr;
         plist.currentIndex = -1;
+        plist.nextIndex = -1;
         plist.randomIndexPos = 0;
         plist.segmentTimer = 0.0f;
     };
@@ -749,9 +755,8 @@ void PlaylistManager::Update(float deltaTime)
                 : plist.crossfadeTimer / plist.activeCrossfadeDuration;
             if (t > 1.0f) t = 1.0f;
 
-            constexpr float HalfPi = 1.57079632679f;
-            const float oldGain = std::cos(t * HalfPi);
-            const float nextGain = std::sin(t * HalfPi);
+            const TransitionLogic::EqualPowerGains gains =
+                TransitionLogic::CalculateEqualPowerGains(t);
 
             bool currentChannelValid = false;
             bool nextChannelValid    = false;
@@ -763,7 +768,9 @@ void PlaylistManager::Update(float deltaTime)
                 currentChannelValid = (result == FMOD_OK && isPlaying);
 
                 if (currentChannelValid) {
-                    float volOld = oldGain * baseMusicVol;
+                    const float normalizationGain = AudioManager::GetInstance()
+                        .GetNormalizationGainForChannel(plist.currentChannel);
+                    float volOld = gains.outgoing * baseMusicVol * normalizationGain;
                     plist.currentChannel->setVolume(volOld);
                 }
             }
@@ -775,7 +782,9 @@ void PlaylistManager::Update(float deltaTime)
                 nextChannelValid = (result == FMOD_OK && isPlaying);
                 
                 if (nextChannelValid) {
-                    float volNext = nextGain * baseMusicVol;
+                    const float normalizationGain = AudioManager::GetInstance()
+                        .GetNormalizationGainForChannel(plist.nextChannel);
+                    float volNext = gains.incoming * baseMusicVol * normalizationGain;
                     plist.nextChannel->setVolume(volNext);
                 }
             }
@@ -797,13 +806,7 @@ void PlaylistManager::Update(float deltaTime)
                 continue;
             }
 
-            if (!isPlaying)
-            {
-                StartNextTrack(plist, 0.0f);
-                continue;
-            }
-
-            float secondsUntilTransition = std::numeric_limits<float>::max();
+            float trackRemaining = std::numeric_limits<float>::max();
 
             FMOD::Sound* sound = nullptr;
             result = plist.currentChannel->getCurrentSound(&sound);
@@ -818,30 +821,25 @@ void PlaylistManager::Update(float deltaTime)
                     const unsigned int remainingMs = positionMs < lengthMs
                         ? lengthMs - positionMs
                         : 0;
-                    secondsUntilTransition = remainingMs / 1000.0f;
+                    trackRemaining = remainingMs / 1000.0f;
                 }
             }
 
+            float segmentRemaining = std::numeric_limits<float>::max();
             if (plist.segmentModeActive)
             {
                 plist.segmentTimer += deltaTime;
-                const float segmentRemaining = std::max(
+                segmentRemaining = std::max(
                     plist.segmentMaxDuration - plist.segmentTimer, 0.0f);
-                secondsUntilTransition = std::min(secondsUntilTransition, segmentRemaining);
             }
 
-            const float configuredCrossfade = std::max(plist.crossfadeDuration, 0.0f);
-            if (configuredCrossfade > 0.0f &&
-                secondsUntilTransition <= configuredCrossfade &&
-                HasNextTrack(plist))
+            const TransitionLogic::Decision decision = TransitionLogic::Evaluate(
+                trackRemaining, segmentRemaining, plist.segmentModeActive,
+                plist.crossfadeDuration, HasNextTrack(plist), isPlaying);
+            plist.secondsUntilTransition = decision.secondsUntilBoundary;
+            if (decision.shouldTransition)
             {
-                StartNextTrack(plist, std::max(secondsUntilTransition, 0.0f));
-                continue;
-            }
-
-            if (secondsUntilTransition <= 0.0f)
-            {
-                StartNextTrack(plist, 0.0f);
+                StartNextTrack(plist, decision.crossfadeDuration, decision.reason);
                 continue;
             }
         }
@@ -942,6 +940,55 @@ FMOD::Channel* PlaylistManager::GetNextChannel() const
     return activePlaylist ? activePlaylist->nextChannel : nullptr;
 }
 
+std::string PlaylistManager::GetNextTrackName() const
+{
+    const Playlist* playlist = GetActivePlaylist();
+    if (!playlist || !playlist->isPlaying) return "";
+    if (playlist->isCrossfading &&
+        playlist->nextIndex >= 0 &&
+        playlist->nextIndex < static_cast<int>(playlist->tracks.size()))
+    {
+        return playlist->tracks[playlist->nextIndex];
+    }
+
+    int nextIndex = -1;
+    if (playlist->options.randomOrder)
+    {
+        int nextPosition = playlist->randomIndexPos + 1;
+        if (nextPosition >= static_cast<int>(playlist->randomIndices.size()))
+        {
+            if (!playlist->options.loopPlaylist || playlist->randomIndices.empty()) return "";
+            nextPosition = 0;
+        }
+        nextIndex = playlist->randomIndices[nextPosition];
+    }
+    else
+    {
+        nextIndex = FindNextEligibleIndex(
+            *playlist, playlist->currentIndex, playlist->options.loopPlaylist);
+    }
+
+    return nextIndex >= 0 && nextIndex < static_cast<int>(playlist->tracks.size())
+        ? playlist->tracks[nextIndex]
+        : "";
+}
+
+float PlaylistManager::GetSecondsUntilTransition() const
+{
+    const Playlist* playlist = GetActivePlaylist();
+    if (!playlist || !playlist->isPlaying ||
+        !std::isfinite(playlist->secondsUntilTransition)) return -1.0f;
+    return std::max(playlist->secondsUntilTransition, 0.0f);
+}
+
+const char* PlaylistManager::GetLastTransitionReason() const
+{
+    const Playlist* playlist = GetActivePlaylist();
+    return playlist
+        ? TransitionLogic::ToString(playlist->lastTransitionReason)
+        : TransitionLogic::ToString(TransitionLogic::Reason::None);
+}
+
 const PlaylistManager::Playlist* PlaylistManager::GetActivePlaylist() const
 {
     if (m_activePlaylistName.empty()) return nullptr;
@@ -958,7 +1005,8 @@ PlaylistManager::Playlist* PlaylistManager::GetActivePlaylist()
     return (it != m_playlists.end()) ? &(*it) : nullptr;
 }
 
-void PlaylistManager::StartNextTrack(Playlist& plist, float transitionDuration)
+void PlaylistManager::StartNextTrack(Playlist& plist, float transitionDuration,
+                                     TransitionLogic::Reason reason)
 {
     int nextIndex = -1;
     if (plist.options.randomOrder)
@@ -992,6 +1040,7 @@ void PlaylistManager::StartNextTrack(Playlist& plist, float transitionDuration)
     }
 
     plist.isCrossfading   = true;
+    plist.lastTransitionReason = reason;
     plist.crossfadeTimer  = 0.0f;
     plist.activeCrossfadeDuration = transitionDuration >= 0.0f
         ? std::min(transitionDuration, std::max(plist.crossfadeDuration, 0.0f))
@@ -1019,7 +1068,7 @@ void PlaylistManager::StartNextTrack(Playlist& plist, float transitionDuration)
     }
     plist.nextChannel = ch;
 
-    plist.currentIndex = nextIndex;
+    plist.nextIndex = nextIndex;
 
     plist.segmentTimer = 0.0f;
     if (plist.segmentModeActive && ch)
@@ -1124,6 +1173,8 @@ void PlaylistManager::FinishCrossfade(Playlist& plist)
 
     plist.currentChannel = plist.nextChannel;
     plist.nextChannel    = nullptr;
+    if (plist.nextIndex >= 0) plist.currentIndex = plist.nextIndex;
+    plist.nextIndex = -1;
     plist.isCrossfading  = false;
     plist.crossfadeTimer = 0.0f;
 
@@ -1135,7 +1186,7 @@ void PlaylistManager::FinishCrossfade(Playlist& plist)
         {
             spdlog::warn("New current channel ended during crossfade, advancing playlist");
             plist.currentChannel = nullptr;
-            StartNextTrack(plist);
+            StartNextTrack(plist, 0.0f, TransitionLogic::Reason::PlaybackFailure);
         }
     }
 }
@@ -1211,6 +1262,7 @@ void PlaylistManager::FinishPlaylist(Playlist& plist)
     audioManager.StopChannelWithFadeOut(plist.nextChannel);
     plist.currentChannel = nullptr;
     plist.nextChannel = nullptr;
+    plist.nextIndex = -1;
     plist.currentIndex = -1;
     plist.isPlaying = false;
     plist.isCrossfading = false;
@@ -1298,6 +1350,7 @@ void PlaylistManager::PlayFromIndex(const std::string& playlistName, int index)
     m_activePlaylistName = playlistName;
     plist.isPlaying = true;
     plist.currentIndex = selectedIndex;
+    plist.nextIndex = -1;
     plist.currentChannel = nullptr;
     plist.nextChannel = nullptr;
     plist.isCrossfading = false;
@@ -1349,7 +1402,7 @@ void PlaylistManager::SkipToNextTrack(const std::string& playlistName)
         FinishCrossfade(plist);
     }
     
-    StartNextTrack(plist);
+    StartNextTrack(plist, -1.0f, TransitionLogic::Reason::ManualSkip);
     
     spdlog::info("Passage to next track in playlist '{}'.", playlistName);
 }

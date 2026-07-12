@@ -6,6 +6,8 @@
 #include <fmod.hpp>
 #include <map>
 #include <functional>
+#include <limits>
+#include "tsm_transition_logic.h"
 
 namespace TSM
 {
@@ -67,6 +69,9 @@ public:
     bool IsInCrossfade() const;
     float GetCrossfadeProgress() const;
     FMOD::Channel* GetNextChannel() const;
+    std::string GetNextTrackName() const;
+    float GetSecondsUntilTransition() const;
+    const char* GetLastTransitionReason() const;
     
     void SkipToNextTrack(const std::string& playlistName);
 
@@ -85,6 +90,7 @@ private:
         PlaylistOptions options;
 
         int currentIndex = -1;
+        int nextIndex = -1;
         std::vector<int> randomIndices;
         int randomIndexPos = 0;
 
@@ -103,12 +109,15 @@ private:
         float segmentMaxDuration = 0.0f;
         bool segmentModeActive = false;
         float chosenStartTime = 0.0f;
+        float secondsUntilTransition = (std::numeric_limits<float>::max)();
+        TransitionLogic::Reason lastTransitionReason = TransitionLogic::Reason::None;
     };
 
     std::string m_activePlaylistName;
 
 
-    void StartNextTrack(Playlist& plist, float transitionDuration = -1.0f);
+    void StartNextTrack(Playlist& plist, float transitionDuration = -1.0f,
+                        TransitionLogic::Reason reason = TransitionLogic::Reason::None);
     void StartTrackAtIndex(Playlist& plist, int index);
     void PrepareRandomOrder(Playlist& plist);
     void FinishCrossfade(Playlist& plist);
