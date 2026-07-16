@@ -269,5 +269,80 @@ namespace TSM {
                 "unavailable_track"));
         }
 
+        TEST_F(PlaylistManagerTests, LibraryPlaybackUsesEveryImportedMusicTrackOnce) {
+            ApplicationRuntime runtime;
+            RuntimeOptions runtimeOptions;
+            runtimeOptions.loadConfig = false;
+            runtimeOptions.noSound = true;
+            std::string runtimeError;
+            ASSERT_TRUE(runtime.Initialize(runtimeOptions, runtimeError)) << runtimeError;
+
+            const auto wave = TemporaryPath("_library.wav");
+            WriteSilentWave(wave);
+
+            auto& audio = AudioManager::GetInstance();
+            ASSERT_TRUE(audio.LoadSound(
+                "library_member_music", wave.string(), true,
+                AudioManager::SoundKind::Music));
+            ASSERT_TRUE(audio.LoadSound(
+                "library_orphan_music", wave.string(), true,
+                AudioManager::SoundKind::Music));
+            ASSERT_TRUE(audio.LoadSound(
+                "library_announcement", wave.string(), true,
+                AudioManager::SoundKind::Announcement));
+            ASSERT_TRUE(audio.LoadSound(
+                "library_effect", wave.string(), false,
+                AudioManager::SoundKind::SoundEffect));
+            ASSERT_TRUE(audio.LoadSound(
+                "library_wedding", wave.string(), true,
+                AudioManager::SoundKind::Wedding));
+
+            auto& manager = PlaylistManager::GetInstance();
+            manager.CreatePlaylist(m_playlistName);
+            manager.CreatePlaylist("second_library_reference");
+            manager.AddToPlaylist(m_playlistName, "library_member_music");
+            manager.AddToPlaylist(
+                "second_library_reference", "library_member_music");
+
+            EXPECT_EQ(
+                manager.GetLibraryMusicIds(),
+                (std::vector<std::string>{
+                    "library_member_music", "library_orphan_music"}));
+
+            PlaylistOptions options;
+            options.randomOrder = false;
+            options.randomSegment = false;
+            options.loopPlaylist = true;
+            options.segmentDuration = 42.0f;
+            manager.ConfigureLibraryPlayback(options, 2.5f);
+            EXPECT_FALSE(manager.GetLibraryOptions().randomOrder);
+            EXPECT_FALSE(manager.GetLibraryOptions().randomSegment);
+            EXPECT_TRUE(manager.GetLibraryOptions().loopPlaylist);
+            EXPECT_FLOAT_EQ(manager.GetLibraryOptions().segmentDuration, 42.0f);
+            EXPECT_FLOAT_EQ(manager.GetLibraryCrossfadeDuration(), 2.5f);
+            ASSERT_TRUE(manager.PlayLibrary(options, 2.5f));
+            EXPECT_TRUE(manager.IsLibraryPlaying());
+            EXPECT_FALSE(manager.IsPlaylistPlaying(m_playlistName));
+            ASSERT_NE(manager.GetActivePlaylist(), nullptr);
+            EXPECT_EQ(
+                manager.GetActivePlaylist()->tracks,
+                (std::vector<std::string>{
+                    "library_member_music", "library_orphan_music"}));
+            EXPECT_FLOAT_EQ(manager.GetLibraryCrossfadeDuration(), 2.5f);
+
+            manager.Play(m_playlistName, options);
+            EXPECT_FALSE(manager.IsLibraryPlaying());
+            EXPECT_TRUE(manager.IsPlaylistPlaying(m_playlistName));
+
+            ASSERT_TRUE(manager.PlayLibrary(options, 1.0f));
+            EXPECT_TRUE(manager.IsLibraryPlaying());
+            EXPECT_FALSE(manager.IsPlaylistPlaying(m_playlistName));
+
+            manager.AbortImmediately();
+            EXPECT_FALSE(manager.IsLibraryPlaying());
+            EXPECT_EQ(manager.GetActivePlaylist(), nullptr);
+            EXPECT_EQ(manager.GetCurrentChannel(), nullptr);
+        }
+
     }
 }

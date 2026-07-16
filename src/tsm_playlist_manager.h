@@ -65,7 +65,17 @@ public:
     bool ImportPlaylist(const std::string& filePath, const std::string& playlistName = "");
 
     void Play(const std::string& playlistName, const PlaylistOptions& options);
+    bool PlayLibrary(const PlaylistOptions& options, float crossfadeDuration);
     void Stop(const std::string& playlistName);
+    void StopLibrary();
+    void SkipLibrary();
+    bool IsLibraryPlaying() const;
+    std::vector<std::string> GetLibraryMusicIds() const;
+    const std::vector<std::string>& GetLibraryPlaybackSnapshot() const;
+    void ConfigureLibraryPlayback(
+        const PlaylistOptions& options, float crossfadeDuration);
+    PlaylistOptions GetLibraryOptions() const;
+    float GetLibraryCrossfadeDuration() const;
     PlaybackState CapturePlaybackState() const;
     bool ResumePlaybackState(const PlaybackState& state, std::string& errorMessage);
     void AbortImmediately();
@@ -99,7 +109,7 @@ public:
     void SkipToNextTrack(const std::string& playlistName);
 
 private:
-    PlaylistManager() : m_rng(std::random_device{}()) {}
+    PlaylistManager();
     ~PlaylistManager() = default;
     PlaylistManager(const PlaylistManager&) = delete;
     PlaylistManager& operator=(const PlaylistManager&) = delete;
@@ -139,11 +149,14 @@ private:
     };
 
     std::string m_activePlaylistName;
+    Playlist m_libraryPlayback;
 
 
     void StartNextTrack(Playlist& plist, float transitionDuration = -1.0f,
                         TransitionLogic::Reason reason = TransitionLogic::Reason::None);
+    bool StartPlayback(Playlist& plist, const PlaylistOptions& options);
     void StartTrackAtIndex(Playlist& plist, int index);
+    void UpdatePlayback(Playlist& plist, float deltaTime);
     void PrepareRandomOrder(Playlist& plist);
     void FinishCrossfade(Playlist& plist);
     bool IsTrackEligibleForPlayback(const Playlist& plist, int index, float* lengthSeconds = nullptr) const;

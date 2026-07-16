@@ -12,7 +12,7 @@ endif()
 
 project(
     TheaterSoundManager
-    VERSION 1.1.2
+    VERSION 1.1.3
     DESCRIPTION "Production audio automation and safety integration for cinemas"
     LANGUAGES CXX
 )

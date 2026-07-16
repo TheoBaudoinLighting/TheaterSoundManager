@@ -171,7 +171,8 @@ bool IsKnownCommand(const std::string& command)
 bool RequiresPersistentRuntime(const std::string& command)
 {
     return command == "sound.play" || command == "playlist.play" ||
-           command == "playlist.play-index" || command == "announcement.play" ||
+           command == "playlist.play-index" || command == "library.play" ||
+           command == "announcement.play" ||
            command == "wedding.phase" || command == "wedding.next" ||
            command == "loudness.analyze";
 }
@@ -200,6 +201,7 @@ bool RequiresServer(const std::string& command, const nlohmann::json& parameters
         "playlist.duplicate", "playlist.add", "playlist.remove",
         "playlist.clear", "playlist.move",
         "playlist.import", "playlist.load", "playlist.stop", "playlist.next",
+        "library.stop", "library.next",
         "announcement.load", "announcement.unload", "announcement.stop",
         "schedule.add", "schedule.update", "schedule.remove", "schedule.reset",
         "mixer.set", "wedding.asset", "wedding.next", "wedding.stop"
@@ -579,6 +581,7 @@ Command groups:
   playlist      list, show, create, delete, rename, duplicate, add,
                 remove, clear, move, options, import, export, save,
                 load, play, play-index, stop, next, status
+  library       play, stop, next, status (all imported music)
   announcement  list, load, unload, play, stop, status
   schedule      list, add, update, remove, reset
   mixer         get, set
@@ -590,6 +593,7 @@ Examples:
   TheaterSoundManager.exe --cli sound list --kind music --pretty
   TheaterSoundManager.exe --cli playlist show playlist_PreShow --pretty
   TheaterSoundManager.exe --cli playlist play playlist_PreShow --wait 30
+  TheaterSoundManager.exe --cli library play --random-order --wait 30
 
 Persistent integration protocol:
   Start with '--cli serve'. The first stdout line is a ready event. Then send

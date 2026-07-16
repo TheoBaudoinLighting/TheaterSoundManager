@@ -225,9 +225,9 @@ Consumers must ignore unknown annotations and unknown future commands.
 | `config show [PATH]` | `config.show` | `path` |
 | `config reload [PATH]` | `config.reload` | `path` |
 
-`system.status` returns the runtime, mixer, load report, active playlist,
-announcement sequence, schedules, wedding sequence, cinema calendar, recovery,
-and safety state in one snapshot. The
+`system.status` returns the runtime, mixer, load report, active playlist, global
+music-library playback, announcement sequence, schedules, wedding sequence,
+cinema calendar, recovery, and safety state in one snapshot. The
 runtime object exposes `bluetooth`, `bluetoothState` (`disabled`, `starting`,
 `running`, `failed`, or `stopped`), and a nullable `bluetoothError`; startup is
 never reported as successful before RFCOMM is actually listening.
@@ -299,6 +299,30 @@ should emit the canonical `sfx` value.
 `sound.unload` refuses active or referenced resources with `sound_in_use`.
 Remove playlist/schedule references and stop playback first. Wedding assets are
 replaced with `wedding.asset`, while the sequence is stopped.
+
+### Global music library (`No playlist`)
+
+| CLI | JSON command | Parameters |
+| --- | --- | --- |
+| `library play` | `library.play` | optional playback values below |
+| `library stop` | `library.stop` | none |
+| `library next` | `library.next` | none |
+| `library status` | `library.status` | none |
+
+This is the GUI's `No playlist` mode. At each `library.play`, it takes a
+deterministic snapshot of every loaded sound classified as `music`, including
+tracks that belong to no playlist and without duplicating tracks referenced by
+multiple playlists. Announcements, SFX, wedding assets, and emergency audio are
+excluded. Music loaded after playback starts joins the next snapshot.
+While playback is active, `tracks` and `trackCount` describe that immutable
+snapshot; `availableTrackCount` reports the current number of loaded music
+tracks.
+
+The playback options are `random_order`, `random_segment`, `segment_duration`,
+`loop`, and `crossfade`. `library.play` accepts the persistent host or a positive
+`--wait` duration. `library.stop` and `library.next` must target the persistent
+host because a one-shot process does not own existing playback. All commands
+remain subject to the cinema safety gate.
 
 ### Playlists
 

@@ -664,6 +664,27 @@ void CinemaManager::UpdateSchedule(SystemClock::time_point systemNow)
         return;
     }
 
+    const bool selectedPlaylistIsPlaying =
+        playlists.IsPlaylistPlaying(resolution.selected->playlist);
+    const auto* currentSource = playlists.GetActivePlaylist();
+    const bool currentSourceBelongsToPreviousSchedule =
+        currentSource && m_automationOwnsPlayback && !m_activePlaylist.empty() &&
+        currentSource->name == m_activePlaylist;
+    if (!selectedPlaylistIsPlaying && currentSource &&
+        !currentSourceBelongsToPreviousSchedule)
+    {
+        if (m_automationOwnsPlayback)
+        {
+            spdlog::info(
+                "Cinema calendar yielded to manual programme source '{}'.",
+                currentSource->name);
+        }
+        m_automationOwnsPlayback = false;
+        m_activeScheduleId.clear();
+        m_activePlaylist.clear();
+        return;
+    }
+
     if (m_automationOwnsPlayback && !m_activePlaylist.empty() &&
         m_activePlaylist != resolution.selected->playlist)
         playlists.Stop(m_activePlaylist);

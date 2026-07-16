@@ -187,6 +187,45 @@ TEST_F(CinemaManagerTests, CalendarStartsOnceAndPersistsCleanShutdown)
     EXPECT_EQ(state.document.at("schemaVersion"), 1);
 }
 
+TEST_F(CinemaManagerTests, ManualLibraryPlaybackTemporarilyOverridesCalendar)
+{
+    CreatePlaylist();
+    ASSERT_TRUE(AudioManager::GetInstance().LoadSound(
+        "manual_library_music", musicPath.string(), true,
+        AudioManager::SoundKind::Music));
+
+    CinemaManager manager;
+    ASSERT_TRUE(manager.Initialize(
+        BaseCinemaConfig(), stateDirectory, "fingerprint-manual-library", error,
+        systemEpoch, steadyEpoch)) << error;
+
+    auto& playlists = PlaylistManager::GetInstance();
+    ASSERT_TRUE(playlists.IsPlaylistPlaying("cinema_playlist"));
+    PlaylistOptions options;
+    options.loopPlaylist = true;
+    ASSERT_TRUE(playlists.PlayLibrary(options, 0.0f));
+    ASSERT_TRUE(playlists.IsLibraryPlaying());
+    ASSERT_FALSE(playlists.IsPlaylistPlaying("cinema_playlist"));
+
+    manager.Tick(
+        systemEpoch + std::chrono::seconds(1),
+        steadyEpoch + std::chrono::seconds(1));
+    EXPECT_TRUE(playlists.IsLibraryPlaying());
+    EXPECT_FALSE(playlists.IsPlaylistPlaying("cinema_playlist"));
+    const CinemaStatus overridden = manager.GetStatus(
+        systemEpoch + std::chrono::seconds(1),
+        steadyEpoch + std::chrono::seconds(1));
+    EXPECT_TRUE(overridden.activePlaylist.empty());
+    EXPECT_EQ(overridden.selectedPlaylist, "cinema_playlist");
+
+    playlists.StopLibrary();
+    manager.Tick(
+        systemEpoch + std::chrono::seconds(2),
+        steadyEpoch + std::chrono::seconds(2));
+    EXPECT_FALSE(playlists.IsLibraryPlaying());
+    EXPECT_TRUE(playlists.IsPlaylistPlaying("cinema_playlist"));
+}
+
 TEST_F(CinemaManagerTests, FireAlarmStopsProgrammeAndResetNeverResumesImplicitly)
 {
     CreatePlaylist();

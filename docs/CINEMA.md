@@ -16,6 +16,12 @@ one with the highest numeric `priority`; equal priorities are resolved by the
 lexicographically smallest schedule `id`. IDs must therefore be stable and
 unique.
 
+An operator-started programme source, including the global `No playlist`
+library, temporarily takes precedence over the calendar. The selected schedule
+remains visible in status, but it is not restarted while that manual source is
+active. Calendar playback resumes automatically after the manual source stops.
+The safety gate always retains priority over both.
+
 Supported periods are:
 
 | `period.type` | Required fields | Meaning |

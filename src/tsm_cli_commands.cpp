@@ -424,6 +424,44 @@ nlohmann::json PlaylistToJson(const PlaylistType& playlist)
     };
 }
 
+nlohmann::json MusicLibraryToJson(
+    const PlaylistManager& manager, bool includeTracks = true)
+{
+    const std::vector<std::string> availableTracks = manager.GetLibraryMusicIds();
+    const std::vector<std::string>& tracks = manager.IsLibraryPlaying()
+        ? manager.GetLibraryPlaybackSnapshot()
+        : availableTracks;
+    const PlaylistOptions options = manager.GetLibraryOptions();
+    nlohmann::json result = {
+        {"source", "music_library"},
+        {"playing", manager.IsLibraryPlaying()},
+        {"trackCount", tracks.size()},
+        {"availableTrackCount", availableTracks.size()},
+        {"currentTrack", manager.IsLibraryPlaying()
+            ? nlohmann::json(manager.GetCurrentTrackName()) : nlohmann::json(nullptr)},
+        {"nextTrack", manager.IsLibraryPlaying()
+            ? nlohmann::json(manager.GetNextTrackName()) : nlohmann::json(nullptr)},
+        {"options", {
+            {"randomOrder", options.randomOrder},
+            {"randomSegment", options.randomSegment},
+            {"segmentDuration", JsonFloat(options.segmentDuration)},
+            {"loop", options.loopPlaylist},
+            {"crossfadeDuration", JsonFloat(manager.GetLibraryCrossfadeDuration())}
+        }}
+    };
+    if (includeTracks) result["tracks"] = tracks;
+    if (manager.IsLibraryPlaying())
+    {
+        result["trackProgress"] = JsonFloat(manager.GetTrackProgress());
+        result["segmentProgress"] = JsonFloat(manager.GetSegmentProgress());
+        result["crossfadeProgress"] = JsonFloat(manager.GetCrossfadeProgress());
+        result["secondsUntilTransition"] = JsonFloat(
+            manager.GetSecondsUntilTransition());
+        result["transitionReason"] = manager.GetLastTransitionReason();
+    }
+    return result;
+}
+
 nlohmann::json ScheduleToJson(
     const AnnouncementManager::ScheduledAnnouncement& announcement)
 {
@@ -672,17 +710,20 @@ nlohmann::json StatusToJson(const ApplicationRuntime& runtime)
     auto& uiManager = UIManager::GetInstance();
 
     nlohmann::json activePlaylist = nullptr;
-    if (const auto* playlist = playlistManager.GetActivePlaylist())
+    if (!playlistManager.IsLibraryPlaying())
     {
-        activePlaylist = PlaylistToJson(*playlist);
-        activePlaylist["currentTrack"] = playlistManager.GetCurrentTrackName();
-        activePlaylist["nextTrack"] = playlistManager.GetNextTrackName();
-        activePlaylist["trackProgress"] = JsonFloat(playlistManager.GetTrackProgress());
-        activePlaylist["segmentProgress"] = JsonFloat(playlistManager.GetSegmentProgress());
-        activePlaylist["crossfadeProgress"] = JsonFloat(playlistManager.GetCrossfadeProgress());
-        activePlaylist["transitionReason"] = playlistManager.GetLastTransitionReason();
-        activePlaylist["secondsUntilTransition"] = JsonFloat(
-            playlistManager.GetSecondsUntilTransition());
+        if (const auto* playlist = playlistManager.GetActivePlaylist())
+        {
+            activePlaylist = PlaylistToJson(*playlist);
+            activePlaylist["currentTrack"] = playlistManager.GetCurrentTrackName();
+            activePlaylist["nextTrack"] = playlistManager.GetNextTrackName();
+            activePlaylist["trackProgress"] = JsonFloat(playlistManager.GetTrackProgress());
+            activePlaylist["segmentProgress"] = JsonFloat(playlistManager.GetSegmentProgress());
+            activePlaylist["crossfadeProgress"] = JsonFloat(playlistManager.GetCrossfadeProgress());
+            activePlaylist["transitionReason"] = playlistManager.GetLastTransitionReason();
+            activePlaylist["secondsUntilTransition"] = JsonFloat(
+                playlistManager.GetSecondsUntilTransition());
+        }
     }
 
     nlohmann::json cinema = nullptr;
@@ -707,6 +748,7 @@ nlohmann::json StatusToJson(const ApplicationRuntime& runtime)
         {"sounds", AudioManager::GetInstance().GetAllSounds().size()},
         {"playlists", playlistManager.GetPlaylistNames().size()},
         {"activePlaylist", std::move(activePlaylist)},
+        {"musicLibrary", MusicLibraryToJson(playlistManager, false)},
         {"announcement", {
             {"active", announcementManager.IsAnnouncing()},
             {"id", announcementManager.IsAnnouncing()
@@ -826,6 +868,14 @@ nlohmann::json FindSoundReferences(
     }
     if (!playlists.empty()) references["playlists"] = std::move(playlists);
 
+    const auto& playlistManager = PlaylistManager::GetInstance();
+    if (playlistManager.IsLibraryPlaying())
+    {
+        const auto& snapshot = playlistManager.GetLibraryPlaybackSnapshot();
+        if (std::find(snapshot.begin(), snapshot.end(), id) != snapshot.end())
+            references["activeMusicLibrary"] = true;
+    }
+
     nlohmann::json schedules = nlohmann::json::array();
     for (const auto& schedule :
          AnnouncementManager::GetInstance().GetScheduledAnnouncements())
@@ -884,7 +934,8 @@ CliResult CliCommandProcessor::Execute(
 
         static const std::set<std::string_view> normalPlaybackCommands = {
             "sound.play", "sound.resume", "playlist.play",
-            "playlist.play-index", "playlist.next", "announcement.play",
+            "playlist.play-index", "playlist.next", "library.play", "library.next",
+            "announcement.play",
             "wedding.phase", "wedding.next"};
         if (normalPlaybackCommands.contains(command))
         {
@@ -1824,7 +1875,7 @@ CliResult CliCommandProcessor::Execute(
             const auto& manager = PlaylistManager::GetInstance();
             const auto* playlist = parameters.Has("name")
                 ? manager.GetPlaylistByName(parameters.String("name"))
-                : manager.GetActivePlaylist();
+                : (manager.IsLibraryPlaying() ? nullptr : manager.GetActivePlaylist());
             if (!playlist)
             {
                 if (parameters.Has("name"))
@@ -1857,6 +1908,68 @@ CliResult CliCommandProcessor::Execute(
                 status["transitionReason"] = nullptr;
             }
             return CliResult::Success({{"active", std::move(status)}});
+        }
+
+        if (command == "library.play")
+        {
+            parameters.Allow({
+                "random_order", "random_segment", "segment_duration", "loop", "crossfade"});
+            RequireRuntime(m_runtime);
+            auto& manager = PlaylistManager::GetInstance();
+            PlaylistOptions options = manager.GetLibraryOptions();
+            float crossfade = manager.GetLibraryCrossfadeDuration();
+            if (parameters.Has("random_order"))
+                options.randomOrder = parameters.Boolean("random_order", false);
+            if (parameters.Has("random_segment"))
+                options.randomSegment = parameters.Boolean("random_segment", false);
+            if (parameters.Has("loop"))
+                options.loopPlaylist = parameters.Boolean("loop", false);
+            if (parameters.Has("segment_duration"))
+            {
+                const double duration = parameters.Number("segment_duration");
+                ValidateRange("segment_duration", duration, 0.001, 86400.0);
+                options.segmentDuration = static_cast<float>(duration);
+            }
+            if (parameters.Has("crossfade"))
+            {
+                const double duration = parameters.Number("crossfade");
+                ValidateRange("crossfade", duration, 0.0, 3600.0);
+                crossfade = static_cast<float>(duration);
+            }
+            if (!manager.PlayLibrary(options, crossfade))
+                throw CommandError(
+                    CliExitCode::Conflict,
+                    "music_library_not_playable",
+                    "The music library has no loaded playable music track.");
+            return CliResult::Success({{"library", MusicLibraryToJson(manager)}});
+        }
+        if (command == "library.stop")
+        {
+            parameters.Allow({});
+            RequireRuntime(m_runtime);
+            auto& manager = PlaylistManager::GetInstance();
+            manager.StopLibrary();
+            return CliResult::Success({{"library", MusicLibraryToJson(manager)}});
+        }
+        if (command == "library.next")
+        {
+            parameters.Allow({});
+            RequireRuntime(m_runtime);
+            auto& manager = PlaylistManager::GetInstance();
+            if (!manager.IsLibraryPlaying())
+                throw CommandError(
+                    CliExitCode::Conflict,
+                    "music_library_not_playing",
+                    "Music library playback is not active.");
+            manager.SkipLibrary();
+            return CliResult::Success({{"library", MusicLibraryToJson(manager)}});
+        }
+        if (command == "library.status")
+        {
+            parameters.Allow({});
+            RequireRuntime(m_runtime);
+            return CliResult::Success({
+                {"library", MusicLibraryToJson(PlaylistManager::GetInstance())}});
         }
 
         if (command == "announcement.list")
@@ -2445,6 +2558,13 @@ nlohmann::json CliCommandProcessor::GetSchema()
         {"loop", omitted(flag(), "inheritPlaylist")},
         {"crossfade", omitted(number(0.0, 3600.0), "inheritPlaylist")}
     };
+    const Json libraryPlayProperties = {
+        {"random_order", omitted(flag(), "preserveLibrary")},
+        {"random_segment", omitted(flag(), "preserveLibrary")},
+        {"segment_duration", omitted(number(0.001, 86400.0), "preserveLibrary")},
+        {"loop", omitted(flag(), "preserveLibrary")},
+        {"crossfade", omitted(number(0.0, 3600.0), "preserveLibrary")}
+    };
 
     Json localTime = text();
     localTime["pattern"] = R"(^(?:[01][0-9]|2[0-3]):[0-5][0-9]$)";
@@ -2670,6 +2790,14 @@ nlohmann::json CliCommandProcessor::GetSchema()
                 params({{"name", text()}}, {"name"}), positions({"name"})),
             command("playlist.status", false, "Return playback status.",
                 params({{"name", omitted(text(), "activePlaylist")}}, {}), positions({"name"})),
+            command("library.play", true, "Play every loaded music track.",
+                params(libraryPlayProperties, {}), positions({})),
+            command("library.stop", true, "Stop music-library playback.",
+                emptyParams, positions({})),
+            command("library.next", true, "Advance music-library playback.",
+                emptyParams, positions({})),
+            command("library.status", false, "Return music-library playback status.",
+                emptyParams, positions({})),
             command("announcement.list", false, "List announcements.", emptyParams, positions({})),
             command("announcement.load", true, "Load an announcement.",
                 params({{"id", text()}, {"path", path()}}, {"id", "path"}),

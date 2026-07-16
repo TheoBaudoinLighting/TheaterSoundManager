@@ -82,6 +82,11 @@ independently of the caller's working directory:
 The CMake-generated Visual Studio debugger and the checked-in VS Code launch
 configuration use `build/runtime/` as their disposable working directory.
 
+In the GUI, `No playlist` is the global music-library mode: it plays every
+loaded music track once per sequence snapshot, whether or not that track belongs
+to a named playlist. Announcements, SFX, wedding assets, and emergency audio are
+never included in this pool.
+
 ## CLI and application integration
 
 The executable also exposes a versioned, machine-readable CLI while preserving
@@ -101,8 +106,8 @@ the GUI as its no-argument default:
 Persistent mode keeps FMOD and playback state alive, accepts one JSON request per
 line on stdin, and returns one correlated JSON response per line on stdout. Logs
 are isolated on stderr. Sound, playlists, announcements, daily and seasonal
-schedules, mixer, recovery, safety state, wedding mode, and LUFS diagnostics are
-all controllable through the same API.
+schedules, the global music library, mixer, recovery, safety state, wedding mode,
+and LUFS diagnostics are all controllable through the same API.
 
 See [docs/CLI.md](docs/CLI.md) for the full command contract, exit codes,
 deployment rules, and integration examples. A dependency-free Python client is

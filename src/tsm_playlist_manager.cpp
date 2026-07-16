@@ -278,6 +278,16 @@ bool LoadImportedTracks(
 }
 }
 
+PlaylistManager::PlaylistManager()
+    : m_rng(std::random_device{}())
+{
+    m_libraryPlayback.name = "No playlist";
+    m_libraryPlayback.options.randomOrder = true;
+    m_libraryPlayback.options.randomSegment = true;
+    m_libraryPlayback.options.loopPlaylist = true;
+    m_libraryPlayback.options.segmentDuration = PlaylistOptions::DefaultSegmentDuration;
+}
+
 void PlaylistManager::CreatePlaylist(const std::string& playlistName)
 {
     auto it = std::find_if(m_playlists.begin(), m_playlists.end(),
@@ -661,6 +671,45 @@ std::vector<std::string> PlaylistManager::GetPlaylistNames() const
     return names;
 }
 
+std::vector<std::string> PlaylistManager::GetLibraryMusicIds() const
+{
+    std::vector<std::string> musicIds;
+    for (const auto& [soundId, sound] : AudioManager::GetInstance().GetAllSounds())
+    {
+        if (sound.kind == AudioManager::SoundKind::Music && sound.sound)
+            musicIds.push_back(soundId);
+    }
+    return musicIds;
+}
+
+const std::vector<std::string>& PlaylistManager::GetLibraryPlaybackSnapshot() const
+{
+    return m_libraryPlayback.tracks;
+}
+
+void PlaylistManager::ConfigureLibraryPlayback(
+    const PlaylistOptions& options, float crossfadeDuration)
+{
+    if (m_libraryPlayback.isPlaying) return;
+    m_libraryPlayback.options = options;
+    m_libraryPlayback.crossfadeDuration = std::max(crossfadeDuration, 0.0f);
+}
+
+bool PlaylistManager::IsLibraryPlaying() const
+{
+    return m_libraryPlayback.isPlaying;
+}
+
+PlaylistOptions PlaylistManager::GetLibraryOptions() const
+{
+    return m_libraryPlayback.options;
+}
+
+float PlaylistManager::GetLibraryCrossfadeDuration() const
+{
+    return m_libraryPlayback.crossfadeDuration;
+}
+
 bool PlaylistManager::IsPlaylistPlaying(const std::string& playlistName) const
 {
     auto it = std::find_if(m_playlists.begin(), m_playlists.end(),
@@ -938,6 +987,10 @@ PlaybackState PlaylistManager::CapturePlaybackState() const
     PlaybackState state;
     const Playlist* playlist = GetActivePlaylist();
     if (!playlist || !playlist->isPlaying) return state;
+    // The global library is a manual, non-scheduled source. Cinema recovery
+    // only resumes the named playlist still selected by the active calendar,
+    // so this source must not be written as an automation checkpoint.
+    if (playlist == &m_libraryPlayback) return state;
 
     FMOD::Channel* channel = nullptr;
     FMOD::Sound* expectedSound = nullptr;
@@ -1154,6 +1207,11 @@ bool PlaylistManager::ResumePlaybackState(
             StopOwnedChannelImmediately(existing.nextChannel, existing.expectedNextSound);
         ClearLogicalPlaybackState(existing);
     }
+    StopOwnedChannelImmediately(
+        m_libraryPlayback.currentChannel, m_libraryPlayback.expectedCurrentSound);
+    StopOwnedChannelImmediately(
+        m_libraryPlayback.nextChannel, m_libraryPlayback.expectedNextSound);
+    ClearLogicalPlaybackState(m_libraryPlayback);
 
     playlist->options = state.options;
     playlist->crossfadeDuration = state.crossfadeDuration;
@@ -1185,8 +1243,13 @@ void PlaylistManager::AbortImmediately()
         StopOwnedChannelImmediately(playlist.nextChannel, playlist.expectedNextSound);
         ClearLogicalPlaybackState(playlist);
     }
+    StopOwnedChannelImmediately(
+        m_libraryPlayback.currentChannel, m_libraryPlayback.expectedCurrentSound);
+    StopOwnedChannelImmediately(
+        m_libraryPlayback.nextChannel, m_libraryPlayback.expectedNextSound);
+    ClearLogicalPlaybackState(m_libraryPlayback);
     m_activePlaylistName.clear();
-    spdlog::warn("Playlist playback aborted immediately");
+    spdlog::warn("Programme playback aborted immediately");
 }
 
 void PlaylistManager::Play(const std::string& playlistName, const PlaylistOptions& options)
@@ -1200,14 +1263,34 @@ void PlaylistManager::Play(const std::string& playlistName, const PlaylistOption
         return;
     }
 
-    Playlist& plist = *it;
-    if (plist.tracks.empty())
+    (void)StartPlayback(*it, options);
+}
+
+bool PlaylistManager::PlayLibrary(
+    const PlaylistOptions& options, float crossfadeDuration)
+{
+    std::vector<std::string> musicIds = GetLibraryMusicIds();
+    if (musicIds.empty())
     {
-        spdlog::error("Playlist '{}' is empty.", playlistName);
-        return;
+        spdlog::warn("The music library has no loaded playable track.");
+        return false;
     }
 
-    Stop(m_activePlaylistName);
+    m_libraryPlayback.tracks = std::move(musicIds);
+    m_libraryPlayback.crossfadeDuration = std::max(crossfadeDuration, 0.0f);
+    return StartPlayback(m_libraryPlayback, options);
+}
+
+bool PlaylistManager::StartPlayback(
+    Playlist& plist, const PlaylistOptions& options)
+{
+    if (plist.tracks.empty())
+    {
+        spdlog::error("Playback source '{}' is empty.", plist.name);
+        return false;
+    }
+
+    if (GetActivePlaylist()) Stop(m_activePlaylistName);
     
     plist.options = options;
     plist.segmentModeActive = options.randomSegment;
@@ -1220,9 +1303,9 @@ void PlaylistManager::Play(const std::string& playlistName, const PlaylistOption
         PrepareRandomOrder(plist);
         if (plist.randomIndices.empty())
         {
-            spdlog::warn("Playlist '{}' has no loaded playable track.", playlistName);
+            spdlog::warn("Playback source '{}' has no loaded playable track.", plist.name);
             FinishPlaylist(plist);
-            return;
+            return false;
         }
         plist.randomIndexPos = 0;
         plist.currentIndex = plist.randomIndices[0];
@@ -1232,13 +1315,13 @@ void PlaylistManager::Play(const std::string& playlistName, const PlaylistOption
         plist.currentIndex = FindNextEligibleIndex(plist, -1, false);
         if (plist.currentIndex < 0)
         {
-            spdlog::warn("Playlist '{}' has no loaded playable track.", playlistName);
+            spdlog::warn("Playback source '{}' has no loaded playable track.", plist.name);
             FinishPlaylist(plist);
-            return;
+            return false;
         }
     }
 
-    m_activePlaylistName = playlistName;
+    m_activePlaylistName = &plist == &m_libraryPlayback ? std::string{} : plist.name;
     plist.isPlaying = true;
     plist.currentChannel = nullptr;
     plist.nextChannel = nullptr;
@@ -1250,7 +1333,9 @@ void PlaylistManager::Play(const std::string& playlistName, const PlaylistOption
 
     StartTrackAtIndex(plist, plist.currentIndex);
 
-    spdlog::info("Playlist '{}' started.", playlistName);
+    if (plist.isPlaying)
+        spdlog::info("Playback source '{}' started.", plist.name);
+    return plist.isPlaying;
 }
 
 void PlaylistManager::Stop(const std::string& playlistName)
@@ -1271,9 +1356,10 @@ void PlaylistManager::Stop(const std::string& playlistName)
                 stopPlaylist(plist);
             }
         }
+        if (m_libraryPlayback.isPlaying) stopPlaylist(m_libraryPlayback);
 
         m_activePlaylistName.clear();
-        spdlog::info("All playlists stopped with fade-out");
+        spdlog::info("All programme playback stopped with fade-out");
         return;
     }
 
@@ -1296,11 +1382,28 @@ void PlaylistManager::Stop(const std::string& playlistName)
     spdlog::info("Playlist '{}' stopped with fade-out", playlistName);
 }
 
+void PlaylistManager::StopLibrary()
+{
+    if (!m_libraryPlayback.isPlaying) return;
+    StopOwnedChannelWithFade(
+        m_libraryPlayback.currentChannel, m_libraryPlayback.expectedCurrentSound);
+    StopOwnedChannelWithFade(
+        m_libraryPlayback.nextChannel, m_libraryPlayback.expectedNextSound);
+    ClearLogicalPlaybackState(m_libraryPlayback);
+    m_activePlaylistName.clear();
+    spdlog::info("Music library playback stopped with fade-out");
+}
+
 void PlaylistManager::Update(float deltaTime)
 {
     for (auto& plist : m_playlists)
-    {
-        if (!plist.isPlaying) continue;
+        UpdatePlayback(plist, deltaTime);
+    UpdatePlayback(m_libraryPlayback, deltaTime);
+}
+
+void PlaylistManager::UpdatePlayback(Playlist& plist, float deltaTime)
+{
+        if (!plist.isPlaying) return;
 
         constexpr float baseMusicVol = 1.0f;
 
@@ -1350,7 +1453,7 @@ void PlaylistManager::Update(float deltaTime)
                 plist.currentChannel = nullptr;
                 plist.expectedCurrentSound = nullptr;
                 StartTrackAtIndex(plist, plist.currentIndex);
-                continue;
+                return;
             }
 
             bool isPlaying = false;
@@ -1360,7 +1463,7 @@ void PlaylistManager::Update(float deltaTime)
             {
                 spdlog::error("Channel state check failed, restarting track");
                 StartTrackAtIndex(plist, plist.currentIndex);
-                continue;
+                return;
             }
 
             float trackRemaining = std::numeric_limits<float>::max();
@@ -1396,7 +1499,7 @@ void PlaylistManager::Update(float deltaTime)
             if (decision.shouldTransition)
             {
                 StartNextTrack(plist, decision.crossfadeDuration, decision.reason);
-                continue;
+                return;
             }
         }
         else
@@ -1404,7 +1507,6 @@ void PlaylistManager::Update(float deltaTime)
             spdlog::warn("Invalid channel state detected, attempting to recover");
             StartTrackAtIndex(plist, plist.currentIndex);
         }
-    }
 }
 
 std::string PlaylistManager::GetCurrentTrackName() const
@@ -1553,6 +1655,7 @@ const char* PlaylistManager::GetLastTransitionReason() const
 
 const PlaylistManager::Playlist* PlaylistManager::GetActivePlaylist() const
 {
+    if (m_libraryPlayback.isPlaying) return &m_libraryPlayback;
     if (m_activePlaylistName.empty()) return nullptr;
     auto it = std::find_if(m_playlists.begin(), m_playlists.end(),
         [this](const Playlist& p) { return p.name == m_activePlaylistName; });
@@ -1561,6 +1664,7 @@ const PlaylistManager::Playlist* PlaylistManager::GetActivePlaylist() const
 
 PlaylistManager::Playlist* PlaylistManager::GetActivePlaylist()
 {
+    if (m_libraryPlayback.isPlaying) return &m_libraryPlayback;
     if (m_activePlaylistName.empty()) return nullptr;
     auto it = std::find_if(m_playlists.begin(), m_playlists.end(),
         [this](Playlist& p) { return p.name == m_activePlaylistName; });
@@ -1864,10 +1968,7 @@ void PlaylistManager::MoveTrackDown(const std::string& playlistName, int index)
 
 void PlaylistManager::PlayFromIndex(const std::string& playlistName, int index)
 {
-    if (!m_activePlaylistName.empty())
-    {
-        Stop(m_activePlaylistName);
-    }
+    if (GetActivePlaylist()) Stop(m_activePlaylistName);
 
     auto it = std::find_if(m_playlists.begin(), m_playlists.end(),
         [&playlistName](const Playlist& p){ return p.name == playlistName; });
@@ -1957,6 +2058,20 @@ void PlaylistManager::SkipToNextTrack(const std::string& playlistName)
     StartNextTrack(plist, -1.0f, TransitionLogic::Reason::ManualSkip);
     
     spdlog::info("Passage to next track in playlist '{}'.", playlistName);
+}
+
+void PlaylistManager::SkipLibrary()
+{
+    if (!m_libraryPlayback.isPlaying)
+    {
+        spdlog::error("Music library playback is not active.");
+        return;
+    }
+
+    if (m_libraryPlayback.isCrossfading) FinishCrossfade(m_libraryPlayback);
+    StartNextTrack(
+        m_libraryPlayback, -1.0f, TransitionLogic::Reason::ManualSkip);
+    spdlog::info("Advanced to the next track in the music library.");
 }
 
 } // namespace TSM

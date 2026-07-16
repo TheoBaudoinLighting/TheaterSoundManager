@@ -61,6 +61,27 @@ if(NOT error_code STREQUAL "persistent_host_required")
     message(FATAL_ERROR "Unexpected state mutation error: ${output}")
 endif()
 
+foreach(library_command IN ITEMS stop next)
+    execute_process(
+        COMMAND "${TSM_EXECUTABLE}" --cli library "${library_command}"
+            --no-sound --quiet
+        OUTPUT_VARIABLE output
+        ERROR_VARIABLE error_output
+        RESULT_VARIABLE exit_code
+        TIMEOUT 10
+    )
+    if(NOT exit_code EQUAL 5 OR NOT error_output STREQUAL "")
+        message(FATAL_ERROR
+            "One-shot library ${library_command} should require serve, got ${exit_code}: ${output}\n${error_output}")
+    endif()
+    string(STRIP "${output}" output)
+    string(JSON error_code GET "${output}" error code)
+    if(NOT error_code STREQUAL "persistent_host_required")
+        message(FATAL_ERROR
+            "Unexpected library ${library_command} error: ${output}")
+    endif()
+endforeach()
+
 execute_process(
     COMMAND "${TSM_EXECUTABLE}" --cli playlist options playlist_PreShow
         --no-sound --quiet

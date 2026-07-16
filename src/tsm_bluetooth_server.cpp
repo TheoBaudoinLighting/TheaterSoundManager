@@ -553,7 +553,6 @@ void ProcessPendingBluetoothCommands()
         commands.swap(g_pendingCommands);
     }
 
-    constexpr const char* preShowPlaylistName = "playlist_PreShow";
     for (const BluetoothCommand& command : commands)
     {
         auto& playlistManager = TSM::PlaylistManager::GetInstance();
@@ -561,9 +560,22 @@ void ProcessPendingBluetoothCommands()
         switch (command.type)
         {
             case BluetoothCommandType::Play:
-                if (auto* playlist = playlistManager.GetPlaylistByName(preShowPlaylistName))
-                    playlistManager.Play(preShowPlaylistName, playlist->options);
+            {
+                const std::string selectedPlaylist =
+                    uiManager.GetSelectedPlaylistName();
+                if (selectedPlaylist.empty())
+                {
+                    (void)playlistManager.PlayLibrary(
+                        playlistManager.GetLibraryOptions(),
+                        playlistManager.GetLibraryCrossfadeDuration());
+                }
+                else if (auto* playlist =
+                             playlistManager.GetPlaylistByName(selectedPlaylist))
+                {
+                    playlistManager.Play(selectedPlaylist, playlist->options);
+                }
                 break;
+            }
             case BluetoothCommandType::PlayRandom:
                 uiManager.PlayRandomMusic();
                 break;
@@ -571,8 +583,17 @@ void ProcessPendingBluetoothCommands()
                 uiManager.StopAllMusic();
                 break;
             case BluetoothCommandType::Next:
-                playlistManager.SkipToNextTrack(preShowPlaylistName);
+            {
+                if (playlistManager.IsLibraryPlaying())
+                {
+                    playlistManager.SkipLibrary();
+                }
+                else if (const auto* active = playlistManager.GetActivePlaylist())
+                {
+                    playlistManager.SkipToNextTrack(active->name);
+                }
                 break;
+            }
             case BluetoothCommandType::WeddingPhase1:
                 uiManager.StartWeddingPhase1(true);
                 break;

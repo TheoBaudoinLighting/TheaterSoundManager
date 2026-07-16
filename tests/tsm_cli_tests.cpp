@@ -202,6 +202,29 @@ TEST(CliParserTests, ParsesCommandGlobalOptionsAndTypedFlags)
     EXPECT_TRUE(parsed.invocation.runtime.noSound);
 }
 
+TEST(CliParserTests, ParsesGlobalMusicLibraryPlaybackOptions)
+{
+    const CliParseResult parsed = ParseCliArguments({
+        "TheaterSoundManager.exe",
+        "--cli",
+        "library",
+        "play",
+        "--random-order",
+        "--no-random-segment",
+        "--crossfade",
+        "3.5",
+        "--no-loop"
+    });
+
+    ASSERT_TRUE(parsed.ok) << parsed.errorMessage;
+    EXPECT_EQ(parsed.invocation.mode, CliInvocation::Mode::Execute);
+    EXPECT_EQ(parsed.invocation.command, "library.play");
+    EXPECT_EQ(parsed.invocation.parameters.at("random_order"), true);
+    EXPECT_EQ(parsed.invocation.parameters.at("random_segment"), false);
+    EXPECT_EQ(parsed.invocation.parameters.at("crossfade"), "3.5");
+    EXPECT_EQ(parsed.invocation.parameters.at("loop"), false);
+}
+
 TEST(CliParserTests, PreservesUnicodeAndParsesRawRequest)
 {
     const CliParseResult parsed = ParseCliArguments({
@@ -288,6 +311,13 @@ TEST(CliContractTests, BuildsStableSuccessAndErrorEnvelopes)
     EXPECT_EQ(failure.at("id"), 42);
 }
 
+TEST(CliContractTests, HelpPublishesGlobalMusicLibraryCommands)
+{
+    const std::string help = GetCliHelp();
+    EXPECT_NE(help.find("library       play, stop, next, status"), std::string::npos);
+    EXPECT_NE(help.find("--cli library play"), std::string::npos);
+}
+
 TEST(CliContractTests, SchemaDescribesBooleanIdsAndStableExitCodes)
 {
     const nlohmann::json schema = CliCommandProcessor::GetSchema();
@@ -318,7 +348,8 @@ TEST(CliContractTests, EveryPublishedCommandHasAConsistentParameterSchema)
         "playlist.remove", "playlist.clear", "playlist.move", "playlist.options",
         "playlist.import", "playlist.export", "playlist.save", "playlist.load",
         "playlist.play", "playlist.play-index", "playlist.stop", "playlist.next",
-        "playlist.status", "announcement.list", "announcement.load",
+        "playlist.status", "library.play", "library.stop", "library.next",
+        "library.status", "announcement.list", "announcement.load",
         "announcement.unload", "announcement.play", "announcement.stop",
         "announcement.status", "schedule.list", "schedule.add", "schedule.update",
         "schedule.remove", "schedule.reset", "mixer.get", "mixer.set",
@@ -411,6 +442,18 @@ TEST(CliContractTests, ParameterSchemasExposeTypesDefaultsRangesAndConstraints)
     ASSERT_NE(playlistRemove, commands.end());
     EXPECT_EQ(playlistRemove->at("paramsSchema").at("oneOf").size(), 2u);
 
+    const auto libraryPlay = findCommand("library.play");
+    ASSERT_NE(libraryPlay, commands.end());
+    EXPECT_TRUE(libraryPlay->at("positionals").empty());
+    EXPECT_TRUE(libraryPlay->at("paramsSchema").at("required").empty());
+    const auto& libraryPlayProperties =
+        libraryPlay->at("paramsSchema").at("properties");
+    EXPECT_EQ(
+        libraryPlayProperties.at("random_order").at("x-tsm-omitted"),
+        "preserveLibrary");
+    EXPECT_EQ(libraryPlayProperties.at("crossfade").at("minimum"), 0.0);
+    EXPECT_EQ(libraryPlayProperties.at("crossfade").at("maximum"), 3600.0);
+
     const auto scheduleAdd = findCommand("schedule.add");
     ASSERT_NE(scheduleAdd, commands.end());
     EXPECT_EQ(scheduleAdd->at("paramsSchema").at("oneOf").size(), 2u);
@@ -485,6 +528,119 @@ TEST_F(CliRuntimeTests, MixerAndPlaylistCrudAreExposed)
 
     result = processor.Execute("playlist.delete", {{"name", "CLI playlist"}});
     EXPECT_TRUE(result.IsSuccess()) << result.errorMessage;
+}
+
+TEST_F(CliRuntimeTests, GlobalMusicLibraryIncludesPlaylistAndOrphanMusicOnly)
+{
+    CliCommandProcessor processor(runtime);
+
+    CliResult result = processor.Execute("library.play", nlohmann::json::object());
+    EXPECT_EQ(result.exitCode, CliExitCode::Conflict);
+    EXPECT_EQ(result.errorCode, "music_library_not_playable");
+
+    result = processor.Execute("library.next", nlohmann::json::object());
+    EXPECT_EQ(result.exitCode, CliExitCode::Conflict);
+    EXPECT_EQ(result.errorCode, "music_library_not_playing");
+
+    const std::filesystem::path wave = CreateWave();
+    const std::vector<std::pair<std::string, std::string>> sounds = {
+        {"music_in_playlist", "music"},
+        {"music_orphan", "music"},
+        {"announcement", "announcement"},
+        {"wedding", "wedding"},
+        {"sound_effect", "sfx"}
+    };
+    for (const auto& [id, kind] : sounds)
+    {
+        result = processor.Execute(
+            "sound.load", {{"id", id}, {"path", wave.string()}, {"kind", kind}});
+        ASSERT_TRUE(result.IsSuccess()) << id << ": " << result.errorMessage;
+    }
+
+    for (const char* playlistName : {"pre_show", "post_show"})
+    {
+        result = processor.Execute("playlist.create", {{"name", playlistName}});
+        ASSERT_TRUE(result.IsSuccess()) << result.errorMessage;
+        result = processor.Execute(
+            "playlist.add", {{"name", playlistName}, {"id", "music_in_playlist"}});
+        ASSERT_TRUE(result.IsSuccess()) << result.errorMessage;
+    }
+
+    result = processor.Execute("library.status", nlohmann::json::object());
+    ASSERT_TRUE(result.IsSuccess()) << result.errorMessage;
+    const auto& initialLibrary = result.data.at("library");
+    EXPECT_EQ(initialLibrary.at("source"), "music_library");
+    EXPECT_FALSE(initialLibrary.at("playing"));
+    EXPECT_EQ(initialLibrary.at("trackCount"), 2u);
+    EXPECT_EQ(
+        initialLibrary.at("tracks").get<std::vector<std::string>>(),
+        (std::vector<std::string>{"music_in_playlist", "music_orphan"}));
+
+    result = processor.Execute(
+        "playlist.play",
+        {{"name", "pre_show"}, {"random_order", false},
+         {"random_segment", false}, {"loop", true}, {"crossfade", 0.0}});
+    ASSERT_TRUE(result.IsSuccess()) << result.errorMessage;
+
+    result = processor.Execute(
+        "library.play",
+        {{"random_order", false}, {"random_segment", false},
+         {"loop", true}, {"crossfade", 2.5}});
+    ASSERT_TRUE(result.IsSuccess()) << result.errorMessage;
+    const auto& playingLibrary = result.data.at("library");
+    EXPECT_TRUE(playingLibrary.at("playing"));
+    EXPECT_EQ(playingLibrary.at("trackCount"), 2u);
+    EXPECT_EQ(playingLibrary.at("availableTrackCount"), 2u);
+    EXPECT_FALSE(playingLibrary.at("options").at("randomOrder"));
+    EXPECT_FALSE(playingLibrary.at("options").at("randomSegment"));
+    EXPECT_TRUE(playingLibrary.at("options").at("loop"));
+    EXPECT_FLOAT_EQ(
+        playingLibrary.at("options").at("crossfadeDuration").get<float>(), 2.5f);
+
+    result = processor.Execute("playlist.status", {{"name", "pre_show"}});
+    ASSERT_TRUE(result.IsSuccess()) << result.errorMessage;
+    EXPECT_FALSE(result.data.at("active").at("playing"));
+
+    result = processor.Execute("system.status", nlohmann::json::object());
+    ASSERT_TRUE(result.IsSuccess()) << result.errorMessage;
+    EXPECT_TRUE(result.data.at("activePlaylist").is_null());
+    EXPECT_TRUE(result.data.at("musicLibrary").at("playing"));
+    EXPECT_EQ(result.data.at("musicLibrary").at("trackCount"), 2u);
+
+    result = processor.Execute(
+        "sound.load",
+        {{"id", "music_loaded_later"}, {"path", wave.string()}, {"kind", "music"}});
+    ASSERT_TRUE(result.IsSuccess()) << result.errorMessage;
+    result = processor.Execute("library.status", nlohmann::json::object());
+    ASSERT_TRUE(result.IsSuccess()) << result.errorMessage;
+    EXPECT_EQ(result.data.at("library").at("trackCount"), 2u);
+    EXPECT_EQ(result.data.at("library").at("availableTrackCount"), 3u);
+    EXPECT_EQ(
+        result.data.at("library").at("tracks").get<std::vector<std::string>>(),
+        (std::vector<std::string>{"music_in_playlist", "music_orphan"}));
+
+    result = processor.Execute("sound.unload", {{"id", "music_orphan"}});
+    EXPECT_EQ(result.exitCode, CliExitCode::Conflict);
+    EXPECT_EQ(result.errorCode, "sound_in_use");
+    EXPECT_TRUE(
+        result.errorDetails.at("references").at("activeMusicLibrary"));
+
+    result = processor.Execute("library.next", nlohmann::json::object());
+    ASSERT_TRUE(result.IsSuccess()) << result.errorMessage;
+    EXPECT_TRUE(result.data.at("library").at("playing"));
+
+    result = processor.Execute("library.stop", nlohmann::json::object());
+    ASSERT_TRUE(result.IsSuccess()) << result.errorMessage;
+    EXPECT_FALSE(result.data.at("library").at("playing"));
+
+    runtime.Tick(2.0f);
+    result = processor.Execute("sound.unload", {{"id", "music_orphan"}});
+    ASSERT_TRUE(result.IsSuccess()) << result.errorMessage;
+
+    result = processor.Execute("library.status", nlohmann::json::object());
+    ASSERT_TRUE(result.IsSuccess()) << result.errorMessage;
+    EXPECT_EQ(result.data.at("library").at("trackCount"), 2u);
+    EXPECT_EQ(result.data.at("library").at("availableTrackCount"), 2u);
 }
 
 TEST_F(CliRuntimeTests, MutationsValidateCompletelyBeforeChangingState)
