@@ -519,6 +519,7 @@ bool ApplicationRuntime::LoadConfiguration(
         return false;
     }
 
+    UIManager::GetInstance().RefreshPlaylistSelection();
     UIManager::GetInstance().UpdateWeddingFilePaths();
     if (!m_loadReport.failures.empty())
     {

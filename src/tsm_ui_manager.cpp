@@ -297,13 +297,56 @@ UIManager::UIManager()
       m_weddingEntranceSoundId("wedding_entrance_sound"),
       m_weddingCeremonySoundId("wedding_ceremony_sound"),
       m_weddingExitSoundId("wedding_exit_sound"),
-      m_normalPlaylistAfterWedding("playlist_PostShow"),
-      m_playlistName("playlist_PreShow")
+      m_normalPlaylistAfterWedding("playlist_PostShow")
 {
     m_opts.randomOrder = true;      
     m_opts.randomSegment = true;     
     m_opts.loopPlaylist = true;     
     m_opts.segmentDuration = PlaylistOptions::DefaultSegmentDuration;
+}
+
+bool UIManager::SelectPlaylist(const std::string& playlistName)
+{
+    auto* playlist = PlaylistManager::GetInstance().GetPlaylistByName(playlistName);
+    if (!playlist) return false;
+
+    const bool changed = m_playlistName != playlistName;
+    m_playlistName = playlistName;
+    m_opts = playlist->options;
+    m_crossfadeDuration = playlist->crossfadeDuration;
+    if (changed)
+    {
+        m_playlistFeedback.clear();
+        m_playlistFeedbackIsError = false;
+    }
+    return true;
+}
+
+void UIManager::RefreshPlaylistSelection()
+{
+    auto& playlists = PlaylistManager::GetInstance();
+    if (!m_playlistName.empty() && playlists.GetPlaylistByName(m_playlistName)) return;
+
+    m_playlistName.clear();
+    const std::vector<std::string> names = playlists.GetPlaylistNames();
+    if (names.empty()) return;
+
+    if (const auto* active = playlists.GetActivePlaylist();
+        active && active->isPlaying && SelectPlaylist(active->name))
+        return;
+
+    const auto isPlayable = [&](const std::string& name) {
+        const auto* playlist = playlists.GetPlaylistByName(name);
+        return playlist && !playlist->tracks.empty();
+    };
+    const auto preShow = std::find(names.begin(), names.end(), "playlist_PreShow");
+    if (preShow != names.end() && isPlayable(*preShow) && SelectPlaylist(*preShow))
+        return;
+
+    const auto firstPlayable = std::find_if(names.begin(), names.end(), isPlayable);
+    if (firstPlayable != names.end() && SelectPlaylist(*firstPlayable)) return;
+    if (preShow != names.end() && SelectPlaylist(*preShow)) return;
+    (void)SelectPlaylist(names.front());
 }
 
 bool UIManager::Init(
@@ -721,20 +764,19 @@ void UIManager::RenderPlaylistManagerTab()
 {
     static char newPlaylistName[256] = "";
     static int selectedPlaylistIndex = -1;
-    static std::vector<std::string> playlistNames;
     static char renameBuffer[256] = "";
     static bool renameMode = false;
     static bool showImportExportOptions = false;
     static char importExportPath[512] = "playlists.json";
+    std::vector<std::string> playlistNames =
+        PlaylistManager::GetInstance().GetPlaylistNames();
 
-    if (ImGui::Button("Refresh playlists", ImVec2(200, 30)))
+    if (selectedPlaylistIndex >= static_cast<int>(playlistNames.size()))
     {
-        playlistNames = PlaylistManager::GetInstance().GetPlaylistNames();
-        if (selectedPlaylistIndex >= static_cast<int>(playlistNames.size()))
-        {
-            selectedPlaylistIndex = -1;
-        }
+        selectedPlaylistIndex = -1;
+        renameMode = false;
     }
+    ImGui::Text("Available playlists: %zu", playlistNames.size());
 
     ImGui::Separator();
     ImGui::Text("Create a new playlist");
@@ -753,11 +795,6 @@ void UIManager::RenderPlaylistManagerTab()
 
     ImGui::Separator();
     ImGui::Text("Available playlists");
-
-    if (playlistNames.empty())
-    {
-        playlistNames = PlaylistManager::GetInstance().GetPlaylistNames();
-    }
 
     if (ImGui::BeginTable("PlaylistsTable", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
     {
@@ -781,6 +818,7 @@ void UIManager::RenderPlaylistManagerTab()
             if (ImGui::Selectable(playlistName.c_str(), selected, ImGuiSelectableFlags_None))
             {
                 selectedPlaylistIndex = i;
+                (void)SelectPlaylist(playlistName);
                 if (!renameMode)
                 {
                     CopyToBuffer(renameBuffer, playlistName);
@@ -810,7 +848,7 @@ void UIManager::RenderPlaylistManagerTab()
                     PlaylistManager::GetInstance().SetCrossfadeDuration(playlist->crossfadeDuration);
                     
                     // Mettre à jour le nom de playlist actuel dans l'UIManager pour que les contrôles principaux fonctionnent
-                    m_playlistName = playlistName;
+                    (void)SelectPlaylist(playlistName);
                 } else {
                     // Fallback avec options par défaut si la playlist n'est pas trouvée
                     PlaylistOptions defaultOpts;
@@ -818,8 +856,8 @@ void UIManager::RenderPlaylistManagerTab()
                     defaultOpts.loopPlaylist = true;
                     PlaylistManager::GetInstance().Play(playlistName, defaultOpts);
                     
-                    // Mettre à jour le nom de playlist actuel dans l'UIManager
-                    m_playlistName = playlistName;
+                    // Keep the main controls synchronized with the row action.
+                    (void)SelectPlaylist(playlistName);
                 }
             }
 
@@ -859,6 +897,7 @@ void UIManager::RenderPlaylistManagerTab()
                     {
                         selectedPlaylistIndex = -1;
                     }
+                    RefreshPlaylistSelection();
                     ImGui::CloseCurrentPopup();
                 }
 
@@ -892,6 +931,15 @@ void UIManager::RenderPlaylistManagerTab()
                 PlaylistManager::GetInstance().RenamePlaylist(
                     playlistNames[selectedPlaylistIndex], renameBuffer);
                 playlistNames = PlaylistManager::GetInstance().GetPlaylistNames();
+                const auto renamed = std::find(
+                    playlistNames.begin(), playlistNames.end(), renameBuffer);
+                selectedPlaylistIndex = renamed == playlistNames.end()
+                    ? -1
+                    : static_cast<int>(std::distance(playlistNames.begin(), renamed));
+                if (selectedPlaylistIndex >= 0)
+                    (void)SelectPlaylist(renameBuffer);
+                else
+                    RefreshPlaylistSelection();
                 renameMode = false;
             }
         }
@@ -1018,7 +1066,7 @@ void UIManager::RenderPlaylistManagerTab()
                         PlaylistManager::GetInstance().SetCrossfadeDuration(playlist->crossfadeDuration);
                         
                         // Mettre à jour le nom de playlist actuel dans l'UIManager
-                        m_playlistName = selectedPlaylist;
+                        (void)SelectPlaylist(selectedPlaylist);
                     }
 
                     ImGui::SameLine();
@@ -1503,43 +1551,133 @@ void UIManager::RenderSFXTab() {
 
 void UIManager::RenderPlaylistControls()
 {
-    if (ImGui::Button("Play")) {
-        auto& playlistManager = PlaylistManager::GetInstance();
+    auto& playlistManager = PlaylistManager::GetInstance();
+    RefreshPlaylistSelection();
+    const std::vector<std::string> playlistNames = playlistManager.GetPlaylistNames();
 
+    ImGui::TextUnformatted("Programme playback");
+    ImGui::SetNextItemWidth(360.0f);
+    const char* preview = m_playlistName.empty()
+        ? "No playlist available"
+        : m_playlistName.c_str();
+    if (ImGui::BeginCombo("Playlist", preview))
+    {
+        for (const std::string& playlistName : playlistNames)
+        {
+            const bool selected = playlistName == m_playlistName;
+            if (ImGui::Selectable(playlistName.c_str(), selected))
+                (void)SelectPlaylist(playlistName);
+            if (selected) ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+
+    auto* selectedPlaylist = m_playlistName.empty()
+        ? nullptr
+        : playlistManager.GetPlaylistByName(m_playlistName);
+    const bool hasTracks = selectedPlaylist && !selectedPlaylist->tracks.empty();
+    const bool selectedIsPlaying = selectedPlaylist &&
+        playlistManager.IsPlaylistPlaying(m_playlistName);
+    const bool playbackBlocked = AudioManager::GetInstance().IsNormalPlaybackBlocked();
+
+    if (selectedPlaylist)
+    {
+        ImGui::Text("%zu track%s", selectedPlaylist->tracks.size(),
+                    selectedPlaylist->tracks.size() == 1 ? "" : "s");
+        ImGui::SameLine();
+        ImGui::TextColored(
+            selectedIsPlaying ? ImVec4(0.25f, 0.85f, 0.35f, 1.0f)
+                              : ImVec4(0.65f, 0.65f, 0.65f, 1.0f),
+            selectedIsPlaying ? "Playing" : "Stopped");
+    }
+    else
+    {
+        ImGui::TextColored(
+            ImVec4(1.0f, 0.65f, 0.25f, 1.0f),
+            "No playlist is configured. Import or create one in the audio library.");
+    }
+
+    if (playbackBlocked)
+    {
+        ImGui::TextColored(
+            ImVec4(1.0f, 0.3f, 0.3f, 1.0f),
+            "Playback inhibited by the cinema safety gate.");
+    }
+    else if (selectedPlaylist && !hasTracks)
+    {
+        ImGui::TextColored(
+            ImVec4(1.0f, 0.65f, 0.25f, 1.0f),
+            "The selected playlist is empty.");
+    }
+
+    const bool canPlay = hasTracks && !playbackBlocked;
+    ImGui::BeginDisabled(!canPlay);
+    if (ImGui::Button("Play", ImVec2(100.0f, 32.0f)))
+    {
         playlistManager.Play(m_playlistName, m_opts);
         playlistManager.SetCrossfadeDuration(m_crossfadeDuration);
         UpdateAllVolumes();
+        const bool started = playlistManager.IsPlaylistPlaying(m_playlistName);
+        m_playlistFeedback = started
+            ? "Playback started."
+            : "Unable to start: no loaded playable track is available.";
+        m_playlistFeedbackIsError = !started;
     }
+    ImGui::EndDisabled();
 
     ImGui::SameLine();
-
-    if (ImGui::Button("Stop")) {
-        PlaylistManager::GetInstance().Stop(m_playlistName);
+    ImGui::BeginDisabled(!selectedIsPlaying);
+    if (ImGui::Button("Stop", ImVec2(100.0f, 32.0f)))
+    {
+        playlistManager.Stop(m_playlistName);
+        m_playlistFeedback = "Playback stopped.";
+        m_playlistFeedbackIsError = false;
     }
+    ImGui::EndDisabled();
 
     ImGui::SameLine();
+    ImGui::BeginDisabled(!selectedIsPlaying || playbackBlocked);
+    if (ImGui::Button("Skip", ImVec2(100.0f, 32.0f)))
+    {
+        playlistManager.SkipToNextTrack(m_playlistName);
+        m_playlistFeedback = "Skipped to the next playable track.";
+        m_playlistFeedbackIsError = false;
+    }
+    ImGui::EndDisabled();
 
-    if (ImGui::Button("Skip")) {
-        PlaylistManager::GetInstance().SkipToNextTrack(m_playlistName);
+    if (!m_playlistFeedback.empty())
+    {
+        ImGui::TextColored(
+            m_playlistFeedbackIsError
+                ? ImVec4(1.0f, 0.35f, 0.35f, 1.0f)
+                : ImVec4(0.35f, 0.85f, 0.45f, 1.0f),
+            "%s", m_playlistFeedback.c_str());
     }
 
     ImGui::Separator();
     ImGui::Text("Playback options:");
-    
-    ImGui::Checkbox("Random Order", &m_opts.randomOrder);
-    ImGui::Checkbox("Random Segment", &m_opts.randomSegment);
-    ImGui::Checkbox("Loop Playlist", &m_opts.loopPlaylist);
-    ImGui::SliderFloat("Segment Duration", &m_opts.segmentDuration, 10.0f, 300.0f, "%.1f s");
-    
-    if (ImGui::SliderFloat("Crossfade Duration", &m_crossfadeDuration, 0.0f, 10.0f, "%.1f s")) {
-        PlaylistManager::GetInstance().SetCrossfadeDuration(m_crossfadeDuration);
+
+    ImGui::BeginDisabled(!selectedPlaylist);
+    bool optionsChanged = false;
+    optionsChanged |= ImGui::Checkbox("Random order", &m_opts.randomOrder);
+    optionsChanged |= ImGui::Checkbox("Random segment", &m_opts.randomSegment);
+    optionsChanged |= ImGui::Checkbox("Loop playlist", &m_opts.loopPlaylist);
+    optionsChanged |= ImGui::SliderFloat(
+        "Segment duration", &m_opts.segmentDuration, 10.0f, 1800.0f, "%.1f s");
+    const bool crossfadeChanged = ImGui::SliderFloat(
+        "Crossfade duration", &m_crossfadeDuration, 0.0f, 10.0f, "%.1f s");
+    optionsChanged |= crossfadeChanged;
+    ImGui::EndDisabled();
+
+    if (selectedPlaylist && optionsChanged)
+    {
+        selectedPlaylist->options = m_opts;
+        selectedPlaylist->crossfadeDuration = m_crossfadeDuration;
+        if (selectedIsPlaying && crossfadeChanged)
+            playlistManager.SetCrossfadeDuration(m_crossfadeDuration);
     }
-    
+
     ImGui::Spacing();
-    
-    ImGui::Text("Note: The volume controls are available in the 'Volume Controls' panel");
-    ImGui::Text("Note: The announcement information is available in the 'Announcements' tab");
-    
     ImGui::Separator();
 
     std::string currentTrack = PlaylistManager::GetInstance().GetCurrentTrackName();
@@ -2994,7 +3132,9 @@ void UIManager::ResetSessionState()
     m_weddingCeremonyFilePath.clear();
     m_weddingExitFilePath.clear();
     m_normalPlaylistAfterWedding = "playlist_PostShow";
-    m_playlistName = "playlist_sample";
+    m_playlistName.clear();
+    m_playlistFeedback.clear();
+    m_playlistFeedbackIsError = false;
     m_originalDuckFactor = 1.0f;
     m_targetDuckFactor = 0.3f;
     m_crossfadeDuration = 10.0f;

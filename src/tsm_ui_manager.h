@@ -74,6 +74,8 @@ public:
     void StopWeddingMode();
     void StopAllMusic();
     void ResetSessionState();
+    void RefreshPlaylistSelection();
+    const std::string& GetSelectedPlaylistName() const { return m_playlistName; }
     bool IsWeddingModeActive() const { return m_weddingModeActive; }
     int GetWeddingPhase() const { return m_weddingPhase; }
     const char* GetWeddingStateString() const;
@@ -119,6 +121,7 @@ private:
     };
 
     void EnsureDefaultPlaylist();
+    bool SelectPlaylist(const std::string& playlistName);
     std::optional<PlaylistData> GetCurrentPlaylistData() const;
     std::string GetDisplayName(const std::string& path) const;
 
@@ -157,7 +160,9 @@ private:
 
     
     PlaylistOptions m_opts;
-    std::string m_playlistName = "playlist_sample";
+    std::string m_playlistName;
+    std::string m_playlistFeedback;
+    bool m_playlistFeedbackIsError = false;
 
     WeddingPhase1State m_phase1State = WeddingPhase1State::IDLE;
     float m_phase1DuckTimer = 0.0f;

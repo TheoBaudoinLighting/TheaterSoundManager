@@ -6,9 +6,20 @@ namespace TSM {
         class UIManagerTests : public ::testing::Test {
         protected:
             void SetUp() override {
+                ClearPlaylists();
+                UIManager::GetInstance().ResetSessionState();
             }
 
             void TearDown() override {
+                ClearPlaylists();
+                UIManager::GetInstance().ResetSessionState();
+            }
+
+            static void ClearPlaylists() {
+                auto& playlists = PlaylistManager::GetInstance();
+                for (const std::string& name : playlists.GetPlaylistNames()) {
+                    playlists.DeletePlaylist(name);
+                }
             }
         };
 
@@ -54,6 +65,24 @@ namespace TSM {
             ASSERT_FLOAT_EQ(manager.GetAnnouncementVolume(), 3.0f);
             ASSERT_FLOAT_EQ(manager.GetSFXVolume(), 0.0f);
             ASSERT_FLOAT_EQ(manager.GetDuckFactor(), 1.0f);
+        }
+
+        TEST_F(UIManagerTests, PlaylistControlsAlwaysResolveToAnExistingPlaylist) {
+            auto& playlists = PlaylistManager::GetInstance();
+            auto& manager = UIManager::GetInstance();
+
+            playlists.CreatePlaylist("playlist_PostShow");
+            playlists.CreatePlaylist("playlist_PreShow");
+            manager.RefreshPlaylistSelection();
+            EXPECT_EQ(manager.GetSelectedPlaylistName(), "playlist_PreShow");
+
+            playlists.DeletePlaylist("playlist_PreShow");
+            manager.RefreshPlaylistSelection();
+            EXPECT_EQ(manager.GetSelectedPlaylistName(), "playlist_PostShow");
+
+            playlists.DeletePlaylist("playlist_PostShow");
+            manager.RefreshPlaylistSelection();
+            EXPECT_TRUE(manager.GetSelectedPlaylistName().empty());
         }
 
     }
