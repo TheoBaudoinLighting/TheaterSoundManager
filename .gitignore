@@ -4,15 +4,19 @@
 # Local CMake and IDE state
 CMakeUserPresets.json
 /.vs/
+__pycache__/
+*.py[cod]
 
 # Proprietary SDK (see the tracked instructions)
 /external/*
 !/external/README.md
 
-# Runtime state written in the repository root
+# Legacy/accidental runtime state (current builds use user-local app data)
 /imgui.ini
 /tsm.log
 /loudness_cache.json
+/playback_state.json
+/safety_state.json
 /playlists.json
 /playlist_single.json
 

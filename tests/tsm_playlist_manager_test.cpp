@@ -1,7 +1,58 @@
 #include "pch.h"
 
+#include <cstdint>
+
 namespace TSM {
     namespace Tests {
+
+        namespace {
+
+        void WriteLittleEndian16(std::ofstream& output, std::uint16_t value) {
+            const char bytes[] = {
+                static_cast<char>(value & 0xffu),
+                static_cast<char>((value >> 8u) & 0xffu)
+            };
+            output.write(bytes, sizeof(bytes));
+        }
+
+        void WriteLittleEndian32(std::ofstream& output, std::uint32_t value) {
+            const char bytes[] = {
+                static_cast<char>(value & 0xffu),
+                static_cast<char>((value >> 8u) & 0xffu),
+                static_cast<char>((value >> 16u) & 0xffu),
+                static_cast<char>((value >> 24u) & 0xffu)
+            };
+            output.write(bytes, sizeof(bytes));
+        }
+
+        void WriteSilentWave(const std::filesystem::path& path) {
+            constexpr std::uint32_t sampleRate = 8000;
+            constexpr std::uint16_t channels = 1;
+            constexpr std::uint16_t bitsPerSample = 16;
+            constexpr std::uint32_t sampleCount = 800;
+            constexpr std::uint32_t dataSize =
+                sampleCount * channels * (bitsPerSample / 8u);
+
+            std::ofstream output(path, std::ios::binary);
+            ASSERT_TRUE(output.is_open());
+            output.write("RIFF", 4);
+            WriteLittleEndian32(output, 36u + dataSize);
+            output.write("WAVEfmt ", 8);
+            WriteLittleEndian32(output, 16);
+            WriteLittleEndian16(output, 1);
+            WriteLittleEndian16(output, channels);
+            WriteLittleEndian32(output, sampleRate);
+            WriteLittleEndian32(
+                output, sampleRate * channels * (bitsPerSample / 8u));
+            WriteLittleEndian16(output, channels * (bitsPerSample / 8u));
+            WriteLittleEndian16(output, bitsPerSample);
+            output.write("data", 4);
+            WriteLittleEndian32(output, dataSize);
+            const std::vector<char> silence(dataSize, 0);
+            output.write(silence.data(), static_cast<std::streamsize>(silence.size()));
+        }
+
+        } // namespace
 
         class PlaylistManagerTests : public ::testing::Test {
         protected:
@@ -21,9 +72,24 @@ namespace TSM {
                 for (const auto& name : manager.GetPlaylistNames()) {
                     manager.DeletePlaylist(name);
                 }
+
+                for (const auto& path : m_temporaryPaths) {
+                    std::error_code removeError;
+                    std::filesystem::remove(path, removeError);
+                }
+            }
+
+            std::filesystem::path TemporaryPath(const char* suffix) {
+                const auto stamp = std::chrono::high_resolution_clock::now()
+                    .time_since_epoch().count();
+                const auto path = std::filesystem::temp_directory_path() /
+                    ("tsm_playlist_" + std::to_string(stamp) + suffix);
+                m_temporaryPaths.push_back(path);
+                return path;
             }
 
             std::string m_playlistName;
+            std::vector<std::filesystem::path> m_temporaryPaths;
         };
 
         TEST_F(PlaylistManagerTests, CreatePlaylist) {
@@ -109,6 +175,98 @@ namespace TSM {
             EXPECT_FALSE(manager.IsPlaylistPlaying(m_playlistName));
             EXPECT_EQ(manager.GetCurrentChannel(), nullptr);
             EXPECT_TRUE(manager.GetCurrentTrackName().empty());
+        }
+
+        TEST_F(PlaylistManagerTests, CrossfadeDurationRoundTripsThroughPlaylistFiles) {
+            auto& manager = PlaylistManager::GetInstance();
+            manager.CreatePlaylist(m_playlistName);
+
+            auto* playlist = manager.GetPlaylistByName(m_playlistName);
+            ASSERT_NE(playlist, nullptr);
+            playlist->options.randomOrder = false;
+            playlist->options.randomSegment = false;
+            playlist->options.loopPlaylist = false;
+            playlist->options.segmentDuration = 42.0f;
+            playlist->crossfadeDuration = 4.25f;
+
+            const auto singlePlaylist = TemporaryPath("_single.json");
+            ASSERT_TRUE(manager.ExportPlaylist(m_playlistName, singlePlaylist.string()));
+
+            playlist->options.randomOrder = true;
+            playlist->options.segmentDuration = 99.0f;
+            playlist->crossfadeDuration = 0.5f;
+            ASSERT_TRUE(manager.ImportPlaylist(singlePlaylist.string(), m_playlistName));
+
+            playlist = manager.GetPlaylistByName(m_playlistName);
+            ASSERT_NE(playlist, nullptr);
+            EXPECT_FALSE(playlist->options.randomOrder);
+            EXPECT_FLOAT_EQ(playlist->options.segmentDuration, 42.0f);
+            EXPECT_FLOAT_EQ(playlist->crossfadeDuration, 4.25f);
+
+            const auto allPlaylists = TemporaryPath("_all.json");
+            ASSERT_TRUE(manager.SavePlaylistsToFile(allPlaylists.string()));
+
+            playlist->options.randomSegment = true;
+            playlist->crossfadeDuration = 1.0f;
+            ASSERT_TRUE(manager.LoadPlaylistsFromFile(allPlaylists.string()));
+
+            playlist = manager.GetPlaylistByName(m_playlistName);
+            ASSERT_NE(playlist, nullptr);
+            EXPECT_FALSE(playlist->options.randomSegment);
+            EXPECT_FLOAT_EQ(playlist->crossfadeDuration, 4.25f);
+        }
+
+        TEST_F(PlaylistManagerTests, FailedImportPreservesPlaylistAndRollsBackSounds) {
+            ApplicationRuntime runtime;
+            RuntimeOptions runtimeOptions;
+            runtimeOptions.loadConfig = false;
+            runtimeOptions.noSound = true;
+            std::string runtimeError;
+            ASSERT_TRUE(runtime.Initialize(runtimeOptions, runtimeError)) << runtimeError;
+
+            auto& manager = PlaylistManager::GetInstance();
+            manager.CreatePlaylist(m_playlistName);
+            manager.AddToPlaylist(m_playlistName, "original_track");
+            auto* playlist = manager.GetPlaylistByName(m_playlistName);
+            ASSERT_NE(playlist, nullptr);
+            playlist->options.randomOrder = false;
+            playlist->crossfadeDuration = 7.0f;
+            playlist->isPlaying = true;
+
+            const auto wave = TemporaryPath(".wav");
+            WriteSilentWave(wave);
+            const auto documentPath = TemporaryPath("_rollback.json");
+            const auto missingWave = TemporaryPath("_missing.wav");
+            const nlohmann::json document = {
+                {"name", m_playlistName},
+                {"options", {
+                    {"randomOrder", true},
+                    {"crossfadeDuration", 2.0}
+                }},
+                {"tracks", nlohmann::json::array({
+                    {{"id", "loaded_then_rolled_back"}, {"path", wave.string()}},
+                    {{"id", "unavailable_track"}, {"path", missingWave.string()}}
+                })}
+            };
+            {
+                std::ofstream output(documentPath);
+                ASSERT_TRUE(output.is_open());
+                output << document.dump(2);
+            }
+
+            EXPECT_FALSE(manager.ImportPlaylist(documentPath.string(), m_playlistName));
+
+            playlist = manager.GetPlaylistByName(m_playlistName);
+            ASSERT_NE(playlist, nullptr);
+            ASSERT_EQ(playlist->tracks.size(), 1u);
+            EXPECT_EQ(playlist->tracks.front(), "original_track");
+            EXPECT_FALSE(playlist->options.randomOrder);
+            EXPECT_FLOAT_EQ(playlist->crossfadeDuration, 7.0f);
+            EXPECT_TRUE(playlist->isPlaying);
+            EXPECT_FALSE(AudioManager::GetInstance().GetAllSounds().contains(
+                "loaded_then_rolled_back"));
+            EXPECT_FALSE(AudioManager::GetInstance().GetAllSounds().contains(
+                "unavailable_track"));
         }
 
     }

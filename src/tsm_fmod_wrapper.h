@@ -19,11 +19,12 @@ public:
         return instance;
     }
 
-    bool Initialize();
+    bool Initialize(bool noSound = false);
     void Update();
     void Shutdown();
 
     FMOD::System* GetSystem() { return m_system; }
+    bool IsInitialized() const { return m_system != nullptr; }
 
 private:
     FModWrapper() : m_system(nullptr) {}

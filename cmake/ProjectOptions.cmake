@@ -1,7 +1,7 @@
 include_guard(GLOBAL)
 
 option(TSM_WARNINGS_AS_ERRORS "Treat project warnings as errors" OFF)
-option(TSM_INSTALL_ASSETS "Include local media assets when installing or packaging" ON)
+option(TSM_INSTALL_ASSETS "Include local media assets when installing or packaging" OFF)
 
 function(tsm_configure_target target)
     target_compile_features(${target} PUBLIC cxx_std_20)

@@ -8,6 +8,7 @@
 #include <optional>
 #include <algorithm>
 
+#include "tsm_mixer.h"
 #include "tsm_playlist_manager.h"
 
 namespace TSM
@@ -32,7 +33,11 @@ public:
         return instance;
     }
 
-    bool Init(int width, int height);
+    bool Init(
+        int width,
+        int height,
+        const std::string& resourceRoot = {},
+        const std::string& imguiIniPath = {});
     bool HandleEvents();
     void PreRender();
     void Render();
@@ -42,20 +47,20 @@ public:
     bool IsRunning() const { return m_isRunning; }
     bool IsInitialized() const { return m_isInitialized; }
 
-    float GetMasterVolume() const        { return m_masterVolume; }
-    float GetMusicVolume() const         { return m_musicVolume; }
-    float GetAnnouncementVolume() const  { return m_announcementVolume; }
-    float GetSFXVolume() const           { return m_sfxVolume; }
+    float GetMasterVolume() const        { return MixerState::GetInstance().GetMasterVolume(); }
+    float GetMusicVolume() const         { return MixerState::GetInstance().GetMusicVolume(); }
+    float GetAnnouncementVolume() const  { return MixerState::GetInstance().GetAnnouncementVolume(); }
+    float GetSFXVolume() const           { return MixerState::GetInstance().GetSfxVolume(); }
 
-    void SetMasterVolume(float volume)        { m_masterVolume = std::clamp(volume, 0.0f, 1.0f); }
-    void SetMusicVolume(float volume)         { m_musicVolume = std::clamp(volume, 0.0f, 1.0f); }
-    void SetAnnouncementVolume(float volume)  { m_announcementVolume = std::clamp(volume, 0.0f, 3.0f); }
-    void SetSFXVolume(float volume)            { m_sfxVolume = std::clamp(volume, 0.0f, 3.0f); }
+    void SetMasterVolume(float volume)        { MixerState::GetInstance().SetMasterVolume(volume); }
+    void SetMusicVolume(float volume)         { MixerState::GetInstance().SetMusicVolume(volume); }
+    void SetAnnouncementVolume(float volume)  { MixerState::GetInstance().SetAnnouncementVolume(volume); }
+    void SetSFXVolume(float volume)            { MixerState::GetInstance().SetSfxVolume(volume); }
 
     void ForceUpdateAllVolumes() { UpdateAllVolumes(); }
 
-    void SetDuckFactor(float factor)   { m_duckFactor = std::clamp(factor, 0.0f, 1.0f); }
-    float GetDuckFactor() const        { return m_duckFactor; }
+    void SetDuckFactor(float factor)   { MixerState::GetInstance().SetWeddingDuckFactor(factor); }
+    float GetDuckFactor() const        { return MixerState::GetInstance().GetWeddingDuckFactor(); }
 
     void UpdateWeddingMode(float deltaTime);
     
@@ -66,7 +71,12 @@ public:
     void StartWeddingPhase2(bool transitionToNormalMusicAfter = false);
     void StartWeddingPhase3(bool transitionToNormalMusicAfter = false, const std::string& postWeddingPlaylist = "");
     void NextWeddingPhase();
+    void StopWeddingMode();
     void StopAllMusic();
+    void ResetSessionState();
+    bool IsWeddingModeActive() const { return m_weddingModeActive; }
+    int GetWeddingPhase() const { return m_weddingPhase; }
+    const char* GetWeddingStateString() const;
 
 private:
     UIManager();
@@ -91,6 +101,7 @@ private:
 
     void UpdateAllVolumes();
     void CheckWeddingPhaseTransition();
+    void StopAudioBeforeWeddingPhase();
     
     bool ImportWeddingMusic(int phase, const std::string& filePath);
     void StartNormalMusicAfterWedding();
@@ -117,20 +128,20 @@ private:
     SDL_Renderer* m_renderer   = nullptr;
     bool          m_isRunning  = true;
     bool          m_isInitialized = false;
+    bool          m_sdlInitialized = false;
+    bool          m_imguiContextCreated = false;
+    bool          m_imguiSdlInitialized = false;
+    bool          m_imguiOpenGlInitialized = false;
+    std::string   m_imguiIniPath;
 
-    float m_masterVolume       = 0.5f;
-    float m_musicVolume        = 0.5f;
-    float m_announcementVolume = 0.5f;
-    float m_sfxVolume          = 0.5f;
-
-    float m_duckFactor         = 1.0f;
-    
     bool m_weddingModeActive = false;
     int m_weddingPhase = 0;  
     bool m_autoDuckingActive = false;
     float m_originalDuckFactor = 1.0f;
     float m_targetDuckFactor = 0.3f;
     float m_crossfadeDuration = 10.0f;
+    float m_autoDuckStartFactor = 1.0f;
+    float m_autoDuckTimer = 0.0f;
     bool m_autoTransitionToPhase2 = false;
     bool m_transitionToNormalMusicAfterWedding = false;
     

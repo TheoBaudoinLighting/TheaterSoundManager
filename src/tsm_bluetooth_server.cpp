@@ -4,12 +4,19 @@
 #include <wchar.h>
 #include <initguid.h>
 #include <string.h>
+#include <cerrno>
+#include <cctype>
+#include <cmath>
 #include <thread>
+#include <utility>
 #include <iostream>
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <deque>
 #include <mutex>
 #include <string>
+#include <string_view>
 
 #include "tsm_playlist_manager.h"
 #include "tsm_ui_manager.h"
@@ -45,20 +52,73 @@ struct BluetoothCommand
 std::mutex g_commandMutex;
 std::deque<BluetoothCommand> g_pendingCommands;
 std::mutex g_socketMutex;
+std::mutex g_stateMutex;
+std::mutex g_lifecycleMutex;
+std::condition_variable g_stateChanged;
 std::thread g_bluetoothThread;
 std::atomic<bool> g_serverRunning{false};
+BluetoothServerStatus g_serverStatus;
 SOCKET g_serverSocket = INVALID_SOCKET;
 SOCKET g_clientSocket = INVALID_SOCKET;
+constexpr std::size_t MaximumPendingCommands = 256;
+constexpr std::size_t MaximumCommandBytes = 4096;
 
-void QueueCommand(BluetoothCommandType type, float value = 0.0f)
+void SetServerStatus(BluetoothServerState state, std::string error = {})
 {
-    std::lock_guard<std::mutex> lock(g_commandMutex);
-    g_pendingCommands.push_back({type, value});
+    {
+        std::lock_guard<std::mutex> lock(g_stateMutex);
+        g_serverStatus = {state, std::move(error)};
+    }
+    g_stateChanged.notify_all();
 }
 
-void SendResponse(SOCKET clientSocket, const char* response)
+void FailServer(std::string error)
 {
-    send(clientSocket, response, static_cast<int>(strlen(response)), 0);
+    g_serverRunning = false;
+    SetServerStatus(BluetoothServerState::Failed, std::move(error));
+}
+
+void ClearPendingCommands()
+{
+    std::lock_guard<std::mutex> lock(g_commandMutex);
+    g_pendingCommands.clear();
+}
+
+bool QueueCommand(BluetoothCommandType type, float value = 0.0f)
+{
+    std::lock_guard<std::mutex> lock(g_commandMutex);
+    if (g_pendingCommands.size() >= MaximumPendingCommands) return false;
+    g_pendingCommands.push_back({type, value});
+    return true;
+}
+
+bool SendResponse(SOCKET clientSocket, std::string_view response)
+{
+    std::string framed(response);
+    framed.push_back('\n');
+    std::size_t sent = 0;
+    while (sent < framed.size())
+    {
+        const int result = send(
+            clientSocket,
+            framed.data() + sent,
+            static_cast<int>(framed.size() - sent),
+            0);
+        if (result == SOCKET_ERROR || result == 0) return false;
+        sent += static_cast<std::size_t>(result);
+    }
+    return true;
+}
+
+void QueueOrRespond(
+    SOCKET clientSocket,
+    BluetoothCommandType type,
+    std::string_view successResponse,
+    float value = 0.0f)
+{
+    SendResponse(
+        clientSocket,
+        QueueCommand(type, value) ? successResponse : "Command queue full");
 }
 
 void ReleaseTrackedSocket(SOCKET socket, bool client)
@@ -164,57 +224,69 @@ int RegisterBluetoothService(SOCKADDR_BTH* localBthAddr)
     return 0;
 }
 
-void processCommand(SOCKET clientSocket, char* buffer)
+bool ParseVolumeCommand(const std::string& command, float& volume)
 {
-    buffer[strcspn(buffer, "\r\n")] = 0;
-    
-    if (strcmp(buffer, "PLAY") == 0)
+    constexpr std::string_view prefix = "SET_VOLUME ";
+    if (!command.starts_with(prefix)) return false;
+
+    const char* begin = command.c_str() + prefix.size();
+    char* end = nullptr;
+    errno = 0;
+    volume = std::strtof(begin, &end);
+    while (end && std::isspace(static_cast<unsigned char>(*end))) ++end;
+    return end != begin && end && *end == '\0' && errno != ERANGE &&
+           std::isfinite(volume) && volume >= 0.0f && volume <= 1.0f;
+}
+
+void ProcessCommand(SOCKET clientSocket, const std::string& command)
+{
+    if (command == "PLAY")
     {
-        QueueCommand(BluetoothCommandType::Play);
-        SendResponse(clientSocket, "Play queued");
+        QueueOrRespond(clientSocket, BluetoothCommandType::Play, "Play queued");
     }
-    else if (strcmp(buffer, "PLAY_RANDOM") == 0)
+    else if (command == "PLAY_RANDOM")
     {
-        QueueCommand(BluetoothCommandType::PlayRandom);
-        SendResponse(clientSocket, "Random playback queued");
+        QueueOrRespond(
+            clientSocket, BluetoothCommandType::PlayRandom, "Random playback queued");
     }
-    else if (strcmp(buffer, "STOP") == 0)
+    else if (command == "STOP")
     {
-        QueueCommand(BluetoothCommandType::Stop);
-        SendResponse(clientSocket, "Stop queued");
+        QueueOrRespond(clientSocket, BluetoothCommandType::Stop, "Stop queued");
     }
-    else if (strcmp(buffer, "NEXT") == 0)
+    else if (command == "NEXT")
     {
-        QueueCommand(BluetoothCommandType::Next);
-        SendResponse(clientSocket, "Next track queued");
+        QueueOrRespond(clientSocket, BluetoothCommandType::Next, "Next track queued");
     }
-    else if (strcmp(buffer, "WEDDING_PHASE1") == 0)
+    else if (command == "WEDDING_PHASE1")
     {
-        QueueCommand(BluetoothCommandType::WeddingPhase1);
-        SendResponse(clientSocket, "Wedding phase 1 queued");
+        QueueOrRespond(
+            clientSocket, BluetoothCommandType::WeddingPhase1, "Wedding phase 1 queued");
     }
-    else if (strcmp(buffer, "WEDDING_PHASE2") == 0)
+    else if (command == "WEDDING_PHASE2")
     {
-        QueueCommand(BluetoothCommandType::WeddingPhase2);
-        SendResponse(clientSocket, "Wedding phase 2 queued");
+        QueueOrRespond(
+            clientSocket, BluetoothCommandType::WeddingPhase2, "Wedding phase 2 queued");
     }
-    else if (strcmp(buffer, "WEDDING_PHASE3") == 0)
+    else if (command == "WEDDING_PHASE3")
     {
-        QueueCommand(BluetoothCommandType::WeddingPhase3);
-        SendResponse(clientSocket, "Wedding phase 3 queued");
+        QueueOrRespond(
+            clientSocket, BluetoothCommandType::WeddingPhase3, "Wedding phase 3 queued");
     }
-    else if (strcmp(buffer, "NEXT_PHASE") == 0)
+    else if (command == "NEXT_PHASE")
     {
-        QueueCommand(BluetoothCommandType::NextPhase);
-        SendResponse(clientSocket, "Next wedding phase queued");
+        QueueOrRespond(
+            clientSocket, BluetoothCommandType::NextPhase, "Next wedding phase queued");
     }
-    else if (strncmp(buffer, "SET_VOLUME", 10) == 0)
+    else if (command.starts_with("SET_VOLUME"))
     {
-        float volume = 0.5f;
-        if (sscanf_s(buffer, "SET_VOLUME %f", &volume) == 1)
+        float volume = 0.0f;
+        if (ParseVolumeCommand(command, volume))
         {
-            QueueCommand(BluetoothCommandType::SetVolume, volume);
-            SendResponse(clientSocket, "Volume change queued");
+            QueueOrRespond(
+                clientSocket,
+                BluetoothCommandType::SetVolume,
+                "Volume change queued",
+                volume);
         }
         else
         {
@@ -233,17 +305,19 @@ void BluetoothServerLoop()
     int result = WSAStartup(MAKEWORD(2,2), &wsaData);
     if (result != 0)
     {
-        spdlog::error("WSAStartup failed ({}).", result);
-        g_serverRunning = false;
+        const std::string error = "WSAStartup failed (" + std::to_string(result) + ").";
+        spdlog::error("{}", error);
+        FailServer(error);
         return;
     }
     
     ULONGLONG btAddr = GetLocalBluetoothAddress();
     if (btAddr == 0)
     {
-        spdlog::error("Invalid or disabled Bluetooth adapter.");
+        const std::string error = "No enabled Bluetooth adapter is available.";
+        spdlog::error("{}", error);
         WSACleanup();
-        g_serverRunning = false;
+        FailServer(error);
         return;
     }
     spdlog::info("Local Bluetooth address: 0x{}.", btAddr);
@@ -252,9 +326,11 @@ void BluetoothServerLoop()
     if (serverSocket == INVALID_SOCKET)
     {
         int err = WSAGetLastError();
-        spdlog::error("socket() failed ({}).", err);
+        const std::string error = "Bluetooth socket creation failed (" +
+            std::to_string(err) + ").";
+        spdlog::error("{}", error);
         WSACleanup();
-        g_serverRunning = false;
+        FailServer(error);
         return;
     }
     {
@@ -271,10 +347,12 @@ void BluetoothServerLoop()
     if (bind(serverSocket, (SOCKADDR*)&localAddr, sizeof(localAddr)) == SOCKET_ERROR)
     {
         int err = WSAGetLastError();
-        spdlog::error("bind() failed ({}).", err);
+        const std::string error = "Bluetooth bind failed (" +
+            std::to_string(err) + ").";
+        spdlog::error("{}", error);
         ReleaseTrackedSocket(serverSocket, false);
         WSACleanup();
-        g_serverRunning = false;
+        FailServer(error);
         return;
     }
     
@@ -282,32 +360,38 @@ void BluetoothServerLoop()
     if (getsockname(serverSocket, (SOCKADDR*)&localAddr, &addrLen) == SOCKET_ERROR)
     {
         int err = WSAGetLastError();
-        spdlog::error("getsockname() failed ({}).", err);
+        const std::string error = "Bluetooth endpoint query failed (" +
+            std::to_string(err) + ").";
+        spdlog::error("{}", error);
         ReleaseTrackedSocket(serverSocket, false);
         WSACleanup();
-        g_serverRunning = false;
+        FailServer(error);
         return;
     }
     spdlog::info("Server listening on RFCOMM port: {}.", localAddr.port);
     
     if (RegisterBluetoothService(&localAddr) != 0)
     {
-        spdlog::error("Failed to register service.");
+        const std::string error = "Bluetooth service registration failed.";
+        spdlog::error("{}", error);
         ReleaseTrackedSocket(serverSocket, false);
         WSACleanup();
-        g_serverRunning = false;
+        FailServer(error);
         return;
     }
     
     if (listen(serverSocket, 1) == SOCKET_ERROR)
     {
         int err = WSAGetLastError();
-        spdlog::error("listen() failed ({}).", err);
+        const std::string error = "Bluetooth listen failed (" +
+            std::to_string(err) + ").";
+        spdlog::error("{}", error);
         ReleaseTrackedSocket(serverSocket, false);
         WSACleanup();
-        g_serverRunning = false;
+        FailServer(error);
         return;
     }
+    SetServerStatus(BluetoothServerState::Running);
     spdlog::info("Waiting for Bluetooth connection...");
     
     while (g_serverRunning)
@@ -317,25 +401,55 @@ void BluetoothServerLoop()
         {
             if (!g_serverRunning) break;
             int err = WSAGetLastError();
-            spdlog::error("accept() failed ({}).", err);
+            const std::string error = "Bluetooth accept failed (" +
+                std::to_string(err) + ").";
+            spdlog::error("{}", error);
+            FailServer(error);
             break;
         }
         {
             std::lock_guard<std::mutex> lock(g_socketMutex);
+            if (!g_serverRunning)
+            {
+                closesocket(clientSocket);
+                break;
+            }
             g_clientSocket = clientSocket;
         }
         spdlog::info("Client connected.");
         
-        const int bufferSize = 1024;
-        char buffer[bufferSize];
-        int bytesReceived;
-        do {
-            bytesReceived = recv(clientSocket, buffer, bufferSize - 1, 0);
+        char buffer[1024];
+        std::string pendingInput;
+        int bytesReceived = 0;
+        bool closeClient = false;
+        do
+        {
+            bytesReceived = recv(
+                clientSocket, buffer, static_cast<int>(sizeof(buffer)), 0);
             if (bytesReceived > 0)
             {
-                buffer[bytesReceived] = '\0';
-                spdlog::info("Received: {}", buffer);
-                processCommand(clientSocket, buffer);
+                pendingInput.append(buffer, static_cast<std::size_t>(bytesReceived));
+                std::size_t newline = std::string::npos;
+                while ((newline = pendingInput.find('\n')) != std::string::npos)
+                {
+                    std::string command = pendingInput.substr(0, newline);
+                    pendingInput.erase(0, newline + 1);
+                    if (!command.empty() && command.back() == '\r') command.pop_back();
+                    if (command.size() > MaximumCommandBytes)
+                    {
+                        SendResponse(clientSocket, "Command too large");
+                        closeClient = true;
+                        break;
+                    }
+                    if (command.empty()) continue;
+                    spdlog::info("Received Bluetooth command: {}", command);
+                    ProcessCommand(clientSocket, command);
+                }
+                if (pendingInput.size() > MaximumCommandBytes)
+                {
+                    SendResponse(clientSocket, "Command too large");
+                    closeClient = true;
+                }
             }
             else if (bytesReceived == 0)
             {
@@ -347,7 +461,7 @@ void BluetoothServerLoop()
                 spdlog::error("recv() failed ({}).", err);
                 break;
             }
-        } while (bytesReceived > 0 && g_serverRunning);
+        } while (bytesReceived > 0 && g_serverRunning && !closeClient);
         
         ReleaseTrackedSocket(clientSocket, true);
         spdlog::info("Waiting for new connection...");
@@ -356,16 +470,79 @@ void BluetoothServerLoop()
     ReleaseTrackedSocket(serverSocket, false);
     WSACleanup();
     g_serverRunning = false;
+    if (GetBluetoothServerStatus().state != BluetoothServerState::Failed)
+        SetServerStatus(BluetoothServerState::Stopped);
     spdlog::info("Bluetooth server stopped.");
 }
 
-void StartBluetoothServer()
+namespace
 {
-    if (g_serverRunning || g_bluetoothThread.joinable())
-        return;
+void StopBluetoothServerUnlocked()
+{
+    g_serverRunning = false;
+    {
+        std::lock_guard<std::mutex> lock(g_socketMutex);
+        if (g_clientSocket != INVALID_SOCKET)
+        {
+            shutdown(g_clientSocket, SD_BOTH);
+            closesocket(g_clientSocket);
+            g_clientSocket = INVALID_SOCKET;
+        }
+        if (g_serverSocket != INVALID_SOCKET)
+        {
+            shutdown(g_serverSocket, SD_BOTH);
+            closesocket(g_serverSocket);
+            g_serverSocket = INVALID_SOCKET;
+        }
+    }
 
+    if (g_bluetoothThread.joinable()) g_bluetoothThread.join();
+    ClearPendingCommands();
+    SetServerStatus(BluetoothServerState::Stopped);
+}
+}
+
+bool StartBluetoothServer(std::string& errorMessage)
+{
+    std::lock_guard<std::mutex> lifecycleLock(g_lifecycleMutex);
+    errorMessage.clear();
+    const BluetoothServerStatus current = GetBluetoothServerStatus();
+    if (current.state == BluetoothServerState::Running) return true;
+    if (g_bluetoothThread.joinable()) g_bluetoothThread.join();
+
+    ClearPendingCommands();
+    SetServerStatus(BluetoothServerState::Starting);
     g_serverRunning = true;
     g_bluetoothThread = std::thread(BluetoothServerLoop);
+
+    std::unique_lock<std::mutex> lock(g_stateMutex);
+    const bool completed = g_stateChanged.wait_for(
+        lock,
+        std::chrono::seconds(10),
+        [] { return g_serverStatus.state != BluetoothServerState::Starting; });
+    BluetoothServerStatus status = g_serverStatus;
+    lock.unlock();
+
+    if (!completed)
+    {
+        errorMessage = "Bluetooth server startup timed out.";
+        StopBluetoothServerUnlocked();
+        SetServerStatus(BluetoothServerState::Failed, errorMessage);
+        return false;
+    }
+    if (status.state == BluetoothServerState::Running) return true;
+
+    errorMessage = status.error.empty()
+        ? "Bluetooth server failed to start."
+        : status.error;
+    if (g_bluetoothThread.joinable()) g_bluetoothThread.join();
+    return false;
+}
+
+BluetoothServerStatus GetBluetoothServerStatus()
+{
+    std::lock_guard<std::mutex> lock(g_stateMutex);
+    return g_serverStatus;
 }
 
 void ProcessPendingBluetoothCommands()
@@ -418,25 +595,11 @@ void ProcessPendingBluetoothCommands()
 
 void StopBluetoothServer()
 {
-    g_serverRunning = false;
-    {
-        std::lock_guard<std::mutex> lock(g_socketMutex);
-        if (g_clientSocket != INVALID_SOCKET)
-        {
-            shutdown(g_clientSocket, SD_BOTH);
-            closesocket(g_clientSocket);
-            g_clientSocket = INVALID_SOCKET;
-        }
-        if (g_serverSocket != INVALID_SOCKET)
-        {
-            shutdown(g_serverSocket, SD_BOTH);
-            closesocket(g_serverSocket);
-            g_serverSocket = INVALID_SOCKET;
-        }
-    }
+    std::lock_guard<std::mutex> lifecycleLock(g_lifecycleMutex);
+    StopBluetoothServerUnlocked();
+}
 
-    if (g_bluetoothThread.joinable())
-    {
-        g_bluetoothThread.join();
-    }
+void DiscardPendingBluetoothCommands()
+{
+    ClearPendingCommands();
 }

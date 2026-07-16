@@ -2,6 +2,7 @@
 #pragma once
 
 #include <fmod.hpp>
+#include <cstdint>
 #include <string>
 #include <vector>
 #include <map>
@@ -39,17 +40,25 @@ public:
     
     struct ScheduledAnnouncement
     {
+        std::uint64_t scheduleId = 0;
         int hour;
         int minute;
         std::string announcementId;
-        std::string announceID;
         bool triggered = false;
+        int lastTriggeredYear = -1;
+        int lastTriggeredDay = -1;
     };
     
     const std::vector<ScheduledAnnouncement>& GetScheduledAnnouncements() const { return m_scheduled; }
     void RemoveScheduledAnnouncement(size_t index);
     void UpdateScheduledAnnouncement(size_t index, int hour, int minute, const std::string& announcementId);
+    bool RemoveScheduledAnnouncementById(std::uint64_t scheduleId);
+    bool UpdateScheduledAnnouncementById(
+        std::uint64_t scheduleId, int hour, int minute, const std::string& announcementId);
     void ResetTriggeredAnnouncements();
+    void RestoreScheduledAnnouncement(const ScheduledAnnouncement& announcement);
+    void SetNextScheduleIdAtLeast(std::uint64_t nextScheduleId);
+    void ResetSession();
     
     bool IsAnnouncing() const { return m_isAnnouncing; }
     AnnouncementState GetAnnouncementState() const { return m_state; }
@@ -81,6 +90,7 @@ private:
 private:
     void CheckSchedules(float deltaTime);
     std::vector<ScheduledAnnouncement> m_scheduled;
+    std::uint64_t m_nextScheduleId = 1;
 };
 
 } // namespace TSM

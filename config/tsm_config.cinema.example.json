@@ -1,0 +1,123 @@
+{
+  "loudnessTargetLufs": -16.0,
+  "playlists": [
+    {
+      "name": "Lobby - Halloween",
+      "options": {
+        "randomOrder": true,
+        "randomSegment": false,
+        "loopPlaylist": true,
+        "segmentDuration": 180.0
+      },
+      "tracks": [
+        {
+          "id": "halloween_ambient_01",
+          "path": "assets/musics/halloween_ambient_01.mp3"
+        }
+      ]
+    },
+    {
+      "name": "Lobby - Christmas",
+      "options": {
+        "randomOrder": true,
+        "randomSegment": false,
+        "loopPlaylist": true,
+        "segmentDuration": 180.0
+      },
+      "tracks": [
+        {
+          "id": "christmas_ambient_01",
+          "path": "assets/musics/christmas_ambient_01.mp3"
+        }
+      ]
+    },
+    {
+      "name": "Lobby - Easter",
+      "options": {
+        "randomOrder": true,
+        "randomSegment": false,
+        "loopPlaylist": true,
+        "segmentDuration": 180.0
+      },
+      "tracks": [
+        {
+          "id": "easter_ambient_01",
+          "path": "assets/musics/easter_ambient_01.mp3"
+        }
+      ]
+    }
+  ],
+  "announcements": [
+    {
+      "id": "evacuation_fr",
+      "path": "assets/annonces/evacuation_fr.mp3"
+    }
+  ],
+  "wedding": {},
+  "cinema": {
+    "enabled": true,
+    "schedules": [
+      {
+        "id": "halloween",
+        "playlist": "Lobby - Halloween",
+        "enabled": true,
+        "priority": 300,
+        "period": {
+          "type": "annual-date",
+          "date": "10-31"
+        },
+        "window": {
+          "start": "09:00",
+          "end": "02:00"
+        }
+      },
+      {
+        "id": "christmas-season",
+        "playlist": "Lobby - Christmas",
+        "enabled": true,
+        "priority": 200,
+        "period": {
+          "type": "annual-range",
+          "start": "12-01",
+          "end": "12-31"
+        },
+        "window": {
+          "start": "09:00",
+          "end": "23:30"
+        }
+      },
+      {
+        "id": "easter-week",
+        "playlist": "Lobby - Easter",
+        "enabled": true,
+        "priority": 100,
+        "period": {
+          "type": "easter-range",
+          "startOffsetDays": -6,
+          "endOffsetDays": 1
+        },
+        "window": {
+          "start": "09:00",
+          "end": "23:30"
+        }
+      }
+    ],
+    "resume": {
+      "enabled": true,
+      "automatic": true,
+      "maxAgeMinutes": 720,
+      "checkpointIntervalSeconds": 1
+    },
+    "safety": {
+      "enabled": true,
+      "evacuationAnnouncementId": "evacuation_fr",
+      "interlock": {
+        "enabled": true,
+        "expectedHeartbeatSource": "fire-panel",
+        "heartbeatTimeoutMilliseconds": 2000,
+        "startupGraceMilliseconds": 10000,
+        "safeStableMilliseconds": 1000
+      }
+    }
+  }
+}

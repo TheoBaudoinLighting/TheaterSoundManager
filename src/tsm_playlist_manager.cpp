@@ -3,7 +3,6 @@
 #include "tsm_playlist_manager.h"
 #include "tsm_audio_manager.h"
 #include "tsm_fmod_wrapper.h"
-#include "tsm_ui_manager.h"
 #include <fstream>
 #include <spdlog/spdlog.h>
 #include <nlohmann/json.hpp>
@@ -12,10 +11,272 @@
 #include <ctime>
 #include <cmath>
 #include <limits>
+#include <filesystem>
+#include <optional>
+#include <set>
 
 namespace TSM
 {
     using json = nlohmann::json;
+
+namespace
+{
+std::filesystem::path PathFromUtf8(const std::string& value)
+{
+    const auto* begin = reinterpret_cast<const char8_t*>(value.data());
+    return std::filesystem::path(std::u8string(begin, begin + value.size()));
+}
+
+std::string PathToUtf8(const std::filesystem::path& path)
+{
+    const std::u8string value = path.generic_u8string();
+    return std::string(reinterpret_cast<const char*>(value.data()), value.size());
+}
+
+std::string ResolveImportedTrackPath(
+    const std::string& trackPath, const std::string& playlistFilePath)
+{
+    std::filesystem::path path = PathFromUtf8(trackPath);
+    if (path.is_relative())
+        path = PathFromUtf8(playlistFilePath).parent_path() / path;
+    return PathToUtf8(path.lexically_normal());
+}
+
+struct ImportedTrack
+{
+    std::string id;
+    std::optional<std::string> path;
+};
+
+struct ImportedPlaylist
+{
+    std::string name;
+    PlaylistOptions options = [] {
+        PlaylistOptions defaults;
+        defaults.randomOrder = true;
+        defaults.randomSegment = true;
+        defaults.loopPlaylist = true;
+        defaults.segmentDuration = PlaylistOptions::DefaultSegmentDuration;
+        return defaults;
+    }();
+    float crossfadeDuration = 10.0f;
+    std::vector<ImportedTrack> tracks;
+};
+
+bool ReadBooleanOption(
+    const json& options, const char* key, bool& destination, std::string& errorMessage)
+{
+    if (!options.contains(key)) return true;
+    if (!options[key].is_boolean())
+    {
+        errorMessage = std::string("Playlist option '") + key + "' must be a boolean.";
+        return false;
+    }
+    destination = options[key].get<bool>();
+    return true;
+}
+
+bool ReadDurationOption(
+    const json& options, const char* key, double minimum, bool minimumInclusive,
+    double maximum, float& destination, std::string& errorMessage)
+{
+    if (!options.contains(key)) return true;
+    const json& value = options[key];
+    if (!value.is_number())
+    {
+        errorMessage = std::string("Playlist option '") + key + "' must be a number.";
+        return false;
+    }
+
+    const double duration = value.get<double>();
+    const bool belowMinimum = minimumInclusive ? duration < minimum : duration <= minimum;
+    if (!std::isfinite(duration) || belowMinimum || duration > maximum)
+    {
+        errorMessage = std::string("Playlist option '") + key +
+            "' is outside the supported range.";
+        return false;
+    }
+    destination = static_cast<float>(duration);
+    return true;
+}
+
+bool ParseImportedPlaylist(
+    const json& document, const std::string& nameOverride,
+    ImportedPlaylist& imported, std::string& errorMessage)
+{
+    if (!document.is_object())
+    {
+        errorMessage = "A playlist document must be a JSON object.";
+        return false;
+    }
+
+    if (!nameOverride.empty())
+    {
+        imported.name = nameOverride;
+    }
+    else
+    {
+        if (!document.contains("name") || !document["name"].is_string())
+        {
+            errorMessage = "A playlist must contain a string 'name'.";
+            return false;
+        }
+        imported.name = document["name"].get<std::string>();
+    }
+    if (imported.name.empty())
+    {
+        errorMessage = "A playlist name cannot be empty.";
+        return false;
+    }
+
+    if (document.contains("options"))
+    {
+        const json& options = document["options"];
+        if (!options.is_object())
+        {
+            errorMessage = "Playlist 'options' must be a JSON object.";
+            return false;
+        }
+        if (!ReadBooleanOption(
+                options, "randomOrder", imported.options.randomOrder, errorMessage) ||
+            !ReadBooleanOption(
+                options, "randomSegment", imported.options.randomSegment, errorMessage) ||
+            !ReadBooleanOption(
+                options, "loopPlaylist", imported.options.loopPlaylist, errorMessage) ||
+            !ReadDurationOption(
+                options, "segmentDuration", 0.0, false, 86400.0,
+                imported.options.segmentDuration, errorMessage) ||
+            !ReadDurationOption(
+                options, "crossfadeDuration", 0.0, true, 3600.0,
+                imported.crossfadeDuration, errorMessage))
+        {
+            return false;
+        }
+    }
+
+    if (!document.contains("tracks") || !document["tracks"].is_array())
+    {
+        errorMessage = "A playlist must contain a 'tracks' array.";
+        return false;
+    }
+
+    imported.tracks.clear();
+    imported.tracks.reserve(document["tracks"].size());
+    for (std::size_t index = 0; index < document["tracks"].size(); ++index)
+    {
+        const json& trackDocument = document["tracks"][index];
+        if (!trackDocument.is_object() || !trackDocument.contains("id") ||
+            !trackDocument["id"].is_string())
+        {
+            errorMessage = "Playlist track " + std::to_string(index) +
+                " must contain a string 'id'.";
+            return false;
+        }
+
+        ImportedTrack track;
+        track.id = trackDocument["id"].get<std::string>();
+        if (track.id.empty())
+        {
+            errorMessage = "Playlist track " + std::to_string(index) +
+                " has an empty id.";
+            return false;
+        }
+        if (trackDocument.contains("path"))
+        {
+            if (!trackDocument["path"].is_string())
+            {
+                errorMessage = "Playlist track " + std::to_string(index) +
+                    " has a non-string path.";
+                return false;
+            }
+            std::string path = trackDocument["path"].get<std::string>();
+            if (path.empty())
+            {
+                errorMessage = "Playlist track " + std::to_string(index) +
+                    " has an empty path.";
+                return false;
+            }
+            track.path = std::move(path);
+        }
+        imported.tracks.push_back(std::move(track));
+    }
+    return true;
+}
+
+class NewlyLoadedSoundRollback
+{
+public:
+    void Add(std::string id) { m_soundIds.push_back(std::move(id)); }
+    void Dismiss() noexcept { m_active = false; }
+
+    ~NewlyLoadedSoundRollback()
+    {
+        if (!m_active) return;
+        auto& audioManager = AudioManager::GetInstance();
+        for (auto it = m_soundIds.rbegin(); it != m_soundIds.rend(); ++it)
+        {
+            try
+            {
+                if (!audioManager.UnloadSound(*it))
+                    spdlog::warn("Unable to roll back newly loaded sound '{}'.", *it);
+            }
+            catch (const std::exception& error)
+            {
+                spdlog::warn(
+                    "Exception while rolling back newly loaded sound '{}': {}",
+                    *it, error.what());
+            }
+            catch (...)
+            {
+                spdlog::warn(
+                    "Unknown exception while rolling back newly loaded sound '{}'.", *it);
+            }
+        }
+    }
+
+private:
+    std::vector<std::string> m_soundIds;
+    bool m_active = true;
+};
+
+bool LoadImportedTracks(
+    const ImportedPlaylist& imported, const std::string& playlistFilePath,
+    NewlyLoadedSoundRollback& rollback, std::string& errorMessage)
+{
+    auto& audioManager = AudioManager::GetInstance();
+    for (const ImportedTrack& track : imported.tracks)
+    {
+        auto loaded = audioManager.GetAllSounds().find(track.id);
+        if (loaded == audioManager.GetAllSounds().end())
+        {
+            if (!track.path)
+            {
+                errorMessage = "Track '" + track.id +
+                    "' is not loaded and has no path in the playlist document.";
+                return false;
+            }
+            const std::string resolvedPath = ResolveImportedTrackPath(
+                *track.path, playlistFilePath);
+            if (!audioManager.LoadSound(
+                    track.id, resolvedPath, true, AudioManager::SoundKind::Music))
+            {
+                errorMessage = "Unable to load playlist track '" + track.id + "'.";
+                return false;
+            }
+            rollback.Add(track.id);
+            loaded = audioManager.GetAllSounds().find(track.id);
+        }
+
+        if (loaded == audioManager.GetAllSounds().end() ||
+            loaded->second.kind != AudioManager::SoundKind::Music)
+        {
+            errorMessage = "Track '" + track.id + "' is not classified as music.";
+            return false;
+        }
+    }
+    return true;
+}
+}
 
 void PlaylistManager::CreatePlaylist(const std::string& playlistName)
 {
@@ -130,6 +391,8 @@ void PlaylistManager::DuplicatePlaylist(const std::string& sourceName, const std
     newPlaylist.isPlaying = false;
     newPlaylist.currentChannel = nullptr;
     newPlaylist.nextChannel = nullptr;
+    newPlaylist.expectedCurrentSound = nullptr;
+    newPlaylist.expectedNextSound = nullptr;
     newPlaylist.nextIndex = -1;
     newPlaylist.isCrossfading = false;
     
@@ -141,6 +404,15 @@ void PlaylistManager::DuplicatePlaylist(const std::string& sourceName, const std
 
 void PlaylistManager::AddToPlaylist(const std::string& playlistName, const std::string& soundName)
 {
+    const auto& sounds = AudioManager::GetInstance().GetAllSounds();
+    const auto sound = sounds.find(soundName);
+    if (sound != sounds.end() && sound->second.kind != AudioManager::SoundKind::Music)
+    {
+        spdlog::error(
+            "Sound '{}' is not classified as music and cannot be added to a playlist.",
+            soundName);
+        return;
+    }
     auto it = std::find_if(m_playlists.begin(), m_playlists.end(),
         [&playlistName](const Playlist& p) { return p.name == playlistName; });
 
@@ -258,6 +530,7 @@ bool PlaylistManager::ExportPlaylist(const std::string& playlistName, const std:
         j["options"]["randomSegment"] = it->options.randomSegment;
         j["options"]["segmentDuration"] = it->options.segmentDuration;
         j["options"]["loopPlaylist"] = it->options.loopPlaylist;
+        j["options"]["crossfadeDuration"] = it->crossfadeDuration;
         j["tracks"] = json::array();
         
         const auto& audioManager = AudioManager::GetInstance();
@@ -277,7 +550,7 @@ bool PlaylistManager::ExportPlaylist(const std::string& playlistName, const std:
             j["tracks"].push_back(track);
         }
         
-        std::ofstream file(filePath.c_str());
+        std::ofstream file(PathFromUtf8(filePath));
         if (!file.is_open())
         {
             spdlog::error("Failed to open file '{}' for writing.", filePath);
@@ -299,9 +572,10 @@ bool PlaylistManager::ExportPlaylist(const std::string& playlistName, const std:
 
 bool PlaylistManager::ImportPlaylist(const std::string& filePath, const std::string& playlistName)
 {
+    NewlyLoadedSoundRollback rollback;
     try
     {
-        std::ifstream file(filePath.c_str());
+        std::ifstream file(PathFromUtf8(filePath));
         if (!file.is_open())
         {
             spdlog::error("Failed to open file '{}' for reading.", filePath);
@@ -311,78 +585,52 @@ bool PlaylistManager::ImportPlaylist(const std::string& filePath, const std::str
         json j;
         file >> j;
         file.close();
-        
-        std::string importedName = playlistName.empty() ? j["name"].get<std::string>() : playlistName;
-        
+
+        ImportedPlaylist imported;
+        std::string errorMessage;
+        if (!ParseImportedPlaylist(j, playlistName, imported, errorMessage))
+        {
+            spdlog::error("Invalid playlist document '{}': {}", filePath, errorMessage);
+            return false;
+        }
+        if (!LoadImportedTracks(imported, filePath, rollback, errorMessage))
+        {
+            spdlog::error("Unable to import playlist from '{}': {}", filePath, errorMessage);
+            return false;
+        }
+
+        Playlist replacement;
+        replacement.name = imported.name;
+        replacement.options = imported.options;
+        replacement.crossfadeDuration = imported.crossfadeDuration;
+        replacement.tracks.reserve(imported.tracks.size());
+        for (const ImportedTrack& track : imported.tracks)
+            replacement.tracks.push_back(track.id);
+
         auto existingIt = std::find_if(m_playlists.begin(), m_playlists.end(),
-            [&importedName](const Playlist& p) { return p.name == importedName; });
-            
+            [&imported](const Playlist& p) { return p.name == imported.name; });
+
         if (existingIt != m_playlists.end())
         {
-            spdlog::warn("Playlist '{}' already exists. It will be overwritten.", importedName);
+            spdlog::warn("Playlist '{}' already exists. It will be overwritten.", imported.name);
             if (existingIt->isPlaying)
-            {
-                Stop(importedName);
-            }
-            existingIt->tracks.clear();
+                Stop(imported.name);
+            *existingIt = std::move(replacement);
         }
         else
         {
-            CreatePlaylist(importedName);
-            existingIt = std::find_if(m_playlists.begin(), m_playlists.end(),
-                [&importedName](const Playlist& p) { return p.name == importedName; });
+            m_playlists.push_back(std::move(replacement));
         }
-        
-        if (existingIt != m_playlists.end())
-        {
-            // Options par défaut
-            existingIt->options.randomOrder = true;
-            existingIt->options.randomSegment = true;
-            existingIt->options.loopPlaylist = true;
-            existingIt->options.segmentDuration = PlaylistOptions::DefaultSegmentDuration;
-            
-            // Remplacer par les options du fichier si elles existent
-            if (j.contains("options"))
-            {
-                const auto& options = j["options"];
-                if (options.contains("randomOrder"))
-                    existingIt->options.randomOrder = options["randomOrder"].get<bool>();
-                if (options.contains("randomSegment"))
-                    existingIt->options.randomSegment = options["randomSegment"].get<bool>();
-                if (options.contains("segmentDuration"))
-                    existingIt->options.segmentDuration = options["segmentDuration"].get<float>();
-                if (options.contains("loopPlaylist"))
-                    existingIt->options.loopPlaylist = options["loopPlaylist"].get<bool>();
-            }
-            
-            auto& audioManager = AudioManager::GetInstance();
-            
-            for (const auto& trackJson : j["tracks"])
-            {
-                std::string trackId = trackJson["id"].get<std::string>();
-                
-                if (!audioManager.GetSound(trackId) && trackJson.contains("path"))
-                {
-                    std::string trackPath = trackJson["path"].get<std::string>();
-                    audioManager.LoadSound(trackId, trackPath, true);
-                }
-                
-                if (audioManager.GetSound(trackId))
-                {
-                    existingIt->tracks.push_back(trackId);
-                    audioManager.QueueLoudnessAnalysis(trackId);
-                }
-                else
-                {
-                    spdlog::warn("Track '{}' could not be loaded during import. Skipping.", trackId);
-                }
-            }
-            
-            spdlog::info("Playlist '{}' imported from '{}' with {} tracks.", 
-                        importedName, filePath, existingIt->tracks.size());
-            NotifyPlaylistChanged();
-            return true;
-        }
+
+        rollback.Dismiss();
+        auto& audioManager = AudioManager::GetInstance();
+        for (const ImportedTrack& track : imported.tracks)
+            audioManager.QueueLoudnessAnalysis(track.id);
+
+        spdlog::info("Playlist '{}' imported from '{}' with {} tracks.",
+                    imported.name, filePath, imported.tracks.size());
+        NotifyPlaylistChanged();
+        return true;
     }
     catch(const std::exception& e)
     {
@@ -484,6 +732,7 @@ bool PlaylistManager::SavePlaylistsToFile(const std::string& filePath)
             playlistJson["options"]["randomSegment"] = playlist.options.randomSegment;
             playlistJson["options"]["segmentDuration"] = playlist.options.segmentDuration;
             playlistJson["options"]["loopPlaylist"] = playlist.options.loopPlaylist;
+            playlistJson["options"]["crossfadeDuration"] = playlist.crossfadeDuration;
             playlistJson["tracks"] = json::array();
             
             const auto& audioManager = AudioManager::GetInstance();
@@ -506,7 +755,7 @@ bool PlaylistManager::SavePlaylistsToFile(const std::string& filePath)
             j.push_back(playlistJson);
         }
         
-        std::ofstream file(filePath.c_str());
+        std::ofstream file(PathFromUtf8(filePath));
         if (!file.is_open())
         {
             spdlog::error("Failed to open file '{}' for writing.", filePath);
@@ -528,9 +777,10 @@ bool PlaylistManager::SavePlaylistsToFile(const std::string& filePath)
 
 bool PlaylistManager::LoadPlaylistsFromFile(const std::string& filePath)
 {
+    NewlyLoadedSoundRollback rollback;
     try
     {
-        std::ifstream file(filePath.c_str());
+        std::ifstream file(PathFromUtf8(filePath));
         if (!file.is_open())
         {
             spdlog::error("Failed to open file '{}' for reading.", filePath);
@@ -540,65 +790,72 @@ bool PlaylistManager::LoadPlaylistsFromFile(const std::string& filePath)
         json j;
         file >> j;
         file.close();
-        
+
+        if (!j.is_array())
+        {
+            spdlog::error("Invalid playlists document '{}': expected a JSON array.", filePath);
+            return false;
+        }
+
+        std::vector<ImportedPlaylist> importedPlaylists;
+        importedPlaylists.reserve(j.size());
+        std::set<std::string> playlistNames;
+        for (std::size_t index = 0; index < j.size(); ++index)
+        {
+            ImportedPlaylist imported;
+            std::string errorMessage;
+            if (!ParseImportedPlaylist(j[index], "", imported, errorMessage))
+            {
+                spdlog::error(
+                    "Invalid playlist {} in '{}': {}", index, filePath, errorMessage);
+                return false;
+            }
+            if (!playlistNames.insert(imported.name).second)
+            {
+                spdlog::error(
+                    "Invalid playlists document '{}': duplicate playlist name '{}'.",
+                    filePath, imported.name);
+                return false;
+            }
+            importedPlaylists.push_back(std::move(imported));
+        }
+
+        for (const ImportedPlaylist& imported : importedPlaylists)
+        {
+            std::string errorMessage;
+            if (!LoadImportedTracks(imported, filePath, rollback, errorMessage))
+            {
+                spdlog::error(
+                    "Unable to load playlist '{}' from '{}': {}",
+                    imported.name, filePath, errorMessage);
+                return false;
+            }
+        }
+
         std::vector<Playlist> newPlaylists;
-        
-        auto& audioManager = AudioManager::GetInstance();
-        
-        for (const auto& playlistJson : j)
+        newPlaylists.reserve(importedPlaylists.size());
+        for (const ImportedPlaylist& imported : importedPlaylists)
         {
             Playlist playlist;
-            playlist.name = playlistJson["name"].get<std::string>();
-            
-            // Options par défaut
-            playlist.options.randomOrder = true;
-            playlist.options.randomSegment = true;
-            playlist.options.loopPlaylist = true;
-            playlist.options.segmentDuration = PlaylistOptions::DefaultSegmentDuration;
-            
-            // Remplacer par les options du fichier si elles existent
-            if (playlistJson.contains("options"))
-            {
-                const auto& options = playlistJson["options"];
-                if (options.contains("randomOrder"))
-                    playlist.options.randomOrder = options["randomOrder"].get<bool>();
-                if (options.contains("randomSegment"))
-                    playlist.options.randomSegment = options["randomSegment"].get<bool>();
-                if (options.contains("segmentDuration"))
-                    playlist.options.segmentDuration = options["segmentDuration"].get<float>();
-                if (options.contains("loopPlaylist"))
-                    playlist.options.loopPlaylist = options["loopPlaylist"].get<bool>();
-            }
-            
-            for (const auto& trackJson : playlistJson["tracks"])
-            {
-                std::string trackId = trackJson["id"].get<std::string>();
-                
-                if (!audioManager.GetSound(trackId) && trackJson.contains("path"))
-                {
-                    std::string trackPath = trackJson["path"].get<std::string>();
-                    audioManager.LoadSound(trackId, trackPath, true);
-                }
-                
-                if (audioManager.GetSound(trackId))
-                {
-                    playlist.tracks.push_back(trackId);
-                    audioManager.QueueLoudnessAnalysis(trackId);
-                }
-                else
-                {
-                    spdlog::warn("Track '{}' in playlist '{}' could not be loaded. Skipping.", 
-                                trackId, playlist.name);
-                }
-            }
-            
-            newPlaylists.push_back(playlist);
+            playlist.name = imported.name;
+            playlist.options = imported.options;
+            playlist.crossfadeDuration = imported.crossfadeDuration;
+            playlist.tracks.reserve(imported.tracks.size());
+            for (const ImportedTrack& track : imported.tracks)
+                playlist.tracks.push_back(track.id);
+            newPlaylists.push_back(std::move(playlist));
         }
-        
+
         Stop("");
         m_playlists = std::move(newPlaylists);
         m_activePlaylistName = "";
-        
+
+        rollback.Dismiss();
+        auto& audioManager = AudioManager::GetInstance();
+        for (const ImportedPlaylist& imported : importedPlaylists)
+            for (const ImportedTrack& track : imported.tracks)
+                audioManager.QueueLoudnessAnalysis(track.id);
+
         spdlog::info("Loaded {} playlists from '{}'.", m_playlists.size(), filePath);
         NotifyPlaylistChanged();
         return true;
@@ -621,6 +878,315 @@ void PlaylistManager::NotifyPlaylistChanged()
     {
         callback();
     }
+}
+
+bool PlaylistManager::IsOwnedChannel(
+    FMOD::Channel* channel, FMOD::Sound* expectedSound)
+{
+    if (!channel || !expectedSound) return false;
+
+    FMOD::Sound* actualSound = nullptr;
+    return channel->getCurrentSound(&actualSound) == FMOD_OK &&
+           actualSound == expectedSound;
+}
+
+bool PlaylistManager::IsOwnedChannelPlaying(
+    FMOD::Channel* channel, FMOD::Sound* expectedSound)
+{
+    if (!IsOwnedChannel(channel, expectedSound)) return false;
+
+    bool isPlaying = false;
+    return channel->isPlaying(&isPlaying) == FMOD_OK && isPlaying;
+}
+
+void PlaylistManager::StopOwnedChannelWithFade(
+    FMOD::Channel* channel, FMOD::Sound* expectedSound)
+{
+    if (IsOwnedChannelPlaying(channel, expectedSound))
+        AudioManager::GetInstance().StopChannelWithFadeOut(channel);
+}
+
+void PlaylistManager::StopOwnedChannelImmediately(
+    FMOD::Channel* channel, FMOD::Sound* expectedSound)
+{
+    if (IsOwnedChannelPlaying(channel, expectedSound)) channel->stop();
+}
+
+void PlaylistManager::ClearLogicalPlaybackState(Playlist& plist)
+{
+    plist.isPlaying = false;
+    plist.currentIndex = -1;
+    plist.nextIndex = -1;
+    plist.randomIndices.clear();
+    plist.randomIndexPos = 0;
+    plist.currentChannel = nullptr;
+    plist.nextChannel = nullptr;
+    plist.expectedCurrentSound = nullptr;
+    plist.expectedNextSound = nullptr;
+    plist.isCrossfading = false;
+    plist.crossfadeTimer = 0.0f;
+    plist.segmentTimer = 0.0f;
+    plist.segmentMaxDuration = 0.0f;
+    plist.segmentModeActive = false;
+    plist.chosenStartTime = 0.0f;
+    plist.secondsUntilTransition = (std::numeric_limits<float>::max)();
+    plist.lastTransitionReason = TransitionLogic::Reason::None;
+}
+
+PlaybackState PlaylistManager::CapturePlaybackState() const
+{
+    PlaybackState state;
+    const Playlist* playlist = GetActivePlaylist();
+    if (!playlist || !playlist->isPlaying) return state;
+
+    FMOD::Channel* channel = nullptr;
+    FMOD::Sound* expectedSound = nullptr;
+    int trackIndex = -1;
+    if (playlist->isCrossfading &&
+        IsOwnedChannelPlaying(playlist->nextChannel, playlist->expectedNextSound))
+    {
+        channel = playlist->nextChannel;
+        expectedSound = playlist->expectedNextSound;
+        trackIndex = playlist->nextIndex;
+    }
+    else if (IsOwnedChannelPlaying(
+                 playlist->currentChannel, playlist->expectedCurrentSound))
+    {
+        channel = playlist->currentChannel;
+        expectedSound = playlist->expectedCurrentSound;
+        trackIndex = playlist->currentIndex;
+    }
+
+    if (!channel || !expectedSound || trackIndex < 0 ||
+        trackIndex >= static_cast<int>(playlist->tracks.size()))
+        return state;
+
+    unsigned int positionMs = 0;
+    if (channel->getPosition(&positionMs, FMOD_TIMEUNIT_MS) != FMOD_OK) return state;
+
+    state.isPlaying = true;
+    state.playlistName = playlist->name;
+    state.trackId = playlist->tracks[trackIndex];
+    state.trackIndex = trackIndex;
+    state.positionMs = positionMs;
+    state.options = playlist->options;
+    state.crossfadeDuration = playlist->crossfadeDuration;
+    state.segmentActive = playlist->segmentModeActive;
+
+    const auto secondsToMilliseconds = [](float seconds) {
+        if (!std::isfinite(seconds) || seconds <= 0.0f) return std::uint32_t{0};
+        const double milliseconds = static_cast<double>(seconds) * 1000.0;
+        return static_cast<std::uint32_t>(std::llround(std::min(
+            milliseconds,
+            static_cast<double>((std::numeric_limits<std::uint32_t>::max)()))));
+    };
+    if (state.segmentActive)
+    {
+        state.segmentStartMs = secondsToMilliseconds(playlist->chosenStartTime);
+        state.segmentElapsedMs = secondsToMilliseconds(playlist->segmentTimer);
+    }
+
+    if (state.options.randomOrder)
+    {
+        state.randomPermutation = playlist->randomIndices;
+        const auto current = std::find(
+            state.randomPermutation.begin(), state.randomPermutation.end(), trackIndex);
+        if (current == state.randomPermutation.end()) return PlaybackState{};
+        state.randomPermutationIndex = static_cast<int>(
+            std::distance(state.randomPermutation.begin(), current));
+    }
+
+    return state;
+}
+
+bool PlaylistManager::ResumePlaybackState(
+    const PlaybackState& state, std::string& errorMessage)
+{
+    errorMessage.clear();
+    if (!state.isPlaying)
+    {
+        AbortImmediately();
+        return true;
+    }
+
+    Playlist* playlist = GetPlaylistByName(state.playlistName);
+    if (!playlist)
+    {
+        errorMessage = "The saved playlist no longer exists.";
+        return false;
+    }
+    if (state.trackIndex < 0 ||
+        state.trackIndex >= static_cast<int>(playlist->tracks.size()))
+    {
+        errorMessage = "The saved track index is outside the playlist.";
+        return false;
+    }
+    if (state.trackId.empty() || playlist->tracks[state.trackIndex] != state.trackId)
+    {
+        errorMessage = "The saved track id does not match the playlist index.";
+        return false;
+    }
+    if (!std::isfinite(state.options.segmentDuration) ||
+        state.options.segmentDuration <= 0.0f ||
+        state.options.segmentDuration > 86400.0f)
+    {
+        errorMessage = "The saved segment duration is outside the supported range.";
+        return false;
+    }
+    if (!std::isfinite(state.crossfadeDuration) ||
+        state.crossfadeDuration < 0.0f || state.crossfadeDuration > 3600.0f)
+    {
+        errorMessage = "The saved crossfade duration is outside the supported range.";
+        return false;
+    }
+    if (state.segmentActive != state.options.randomSegment)
+    {
+        errorMessage = "The saved segment state conflicts with the playlist options.";
+        return false;
+    }
+
+    FMOD::Sound* expectedSound = AudioManager::GetInstance().GetSound(state.trackId);
+    unsigned int lengthMs = 0;
+    if (!expectedSound ||
+        expectedSound->getLength(&lengthMs, FMOD_TIMEUNIT_MS) != FMOD_OK ||
+        lengthMs == 0)
+    {
+        errorMessage = "The saved track is unavailable or has no playable duration.";
+        return false;
+    }
+
+    if (state.segmentActive)
+    {
+        const double durationMs = static_cast<double>(state.options.segmentDuration) * 1000.0;
+        if (state.segmentStartMs >= lengthMs ||
+            static_cast<double>(state.segmentElapsedMs) > durationMs)
+        {
+            errorMessage = "The saved random segment position is invalid.";
+            return false;
+        }
+    }
+    else if (state.segmentStartMs != 0 || state.segmentElapsedMs != 0)
+    {
+        errorMessage = "A non-segmented playback state contains segment progress.";
+        return false;
+    }
+
+    if (state.options.randomOrder)
+    {
+        if (state.randomPermutationIndex < 0 ||
+            state.randomPermutationIndex >=
+                static_cast<int>(state.randomPermutation.size()) ||
+            state.randomPermutation[state.randomPermutationIndex] != state.trackIndex)
+        {
+            errorMessage = "The saved random playlist cursor is invalid.";
+            return false;
+        }
+
+        std::set<int> eligibleIndices;
+        for (int index = 0; index < static_cast<int>(playlist->tracks.size()); ++index)
+        {
+            if (IsTrackEligibleForPlayback(*playlist, index)) eligibleIndices.insert(index);
+        }
+        const std::set<int> savedIndices(
+            state.randomPermutation.begin(), state.randomPermutation.end());
+        if (savedIndices.size() != state.randomPermutation.size() ||
+            savedIndices != eligibleIndices)
+        {
+            errorMessage = "The saved random permutation no longer matches the playlist.";
+            return false;
+        }
+    }
+    else if (!state.randomPermutation.empty() || state.randomPermutationIndex != -1)
+    {
+        errorMessage = "A sequential playback state contains a random permutation.";
+        return false;
+    }
+
+    unsigned int clampedPositionMs = std::min(state.positionMs, lengthMs - 1u);
+    if (state.segmentActive)
+    {
+        const std::uint64_t segmentEndMs =
+            static_cast<std::uint64_t>(state.segmentStartMs) +
+            static_cast<std::uint64_t>(state.options.segmentDuration * 1000.0f);
+        const unsigned int maximumSegmentPosition = static_cast<unsigned int>(
+            std::min<std::uint64_t>(lengthMs - 1u, segmentEndMs));
+        clampedPositionMs = std::clamp(
+            clampedPositionMs, state.segmentStartMs, maximumSegmentPosition);
+    }
+    FMOD::Channel* stagedChannel = AudioManager::GetInstance().PlayMusic(
+        state.trackId, false, 1.0f);
+    if (!stagedChannel)
+    {
+        errorMessage = "Unable to create a channel for the saved track.";
+        return false;
+    }
+
+    FMOD::Sound* actualSound = nullptr;
+    const FMOD_RESULT soundResult = stagedChannel->getCurrentSound(&actualSound);
+    if (soundResult != FMOD_OK || actualSound != expectedSound)
+    {
+        StopOwnedChannelImmediately(stagedChannel, expectedSound);
+        errorMessage = "The resumed channel does not own the expected track.";
+        return false;
+    }
+
+    FMOD_RESULT result = stagedChannel->setPaused(true);
+    if (result == FMOD_OK)
+        result = stagedChannel->setPosition(clampedPositionMs, FMOD_TIMEUNIT_MS);
+    if (result == FMOD_OK) result = stagedChannel->setPaused(false);
+    if (result != FMOD_OK)
+    {
+        StopOwnedChannelImmediately(stagedChannel, expectedSound);
+        errorMessage = std::string("Unable to seek the resumed track: ") +
+            FMOD_ErrorString(result);
+        return false;
+    }
+
+    // Commit only after the replacement channel has been fully validated. A
+    // just-created channel can reuse a stale FMOD handle, so preserve it while
+    // clearing the previous logical state.
+    for (Playlist& existing : m_playlists)
+    {
+        if (existing.currentChannel != stagedChannel)
+            StopOwnedChannelImmediately(
+                existing.currentChannel, existing.expectedCurrentSound);
+        if (existing.nextChannel != stagedChannel)
+            StopOwnedChannelImmediately(existing.nextChannel, existing.expectedNextSound);
+        ClearLogicalPlaybackState(existing);
+    }
+
+    playlist->options = state.options;
+    playlist->crossfadeDuration = state.crossfadeDuration;
+    playlist->activeCrossfadeDuration = state.crossfadeDuration;
+    playlist->currentIndex = state.trackIndex;
+    playlist->currentChannel = stagedChannel;
+    playlist->expectedCurrentSound = expectedSound;
+    playlist->randomIndices = state.randomPermutation;
+    playlist->randomIndexPos = state.options.randomOrder
+        ? state.randomPermutationIndex
+        : 0;
+    playlist->segmentModeActive = state.segmentActive;
+    playlist->segmentMaxDuration = state.segmentActive
+        ? state.options.segmentDuration
+        : 0.0f;
+    playlist->chosenStartTime = state.segmentStartMs / 1000.0f;
+    playlist->segmentTimer = state.segmentElapsedMs / 1000.0f;
+    playlist->isPlaying = true;
+    m_activePlaylistName = state.playlistName;
+    return true;
+}
+
+void PlaylistManager::AbortImmediately()
+{
+    for (Playlist& playlist : m_playlists)
+    {
+        StopOwnedChannelImmediately(
+            playlist.currentChannel, playlist.expectedCurrentSound);
+        StopOwnedChannelImmediately(playlist.nextChannel, playlist.expectedNextSound);
+        ClearLogicalPlaybackState(playlist);
+    }
+    m_activePlaylistName.clear();
+    spdlog::warn("Playlist playback aborted immediately");
 }
 
 void PlaylistManager::Play(const std::string& playlistName, const PlaylistOptions& options)
@@ -676,6 +1242,8 @@ void PlaylistManager::Play(const std::string& playlistName, const PlaylistOption
     plist.isPlaying = true;
     plist.currentChannel = nullptr;
     plist.nextChannel = nullptr;
+    plist.expectedCurrentSound = nullptr;
+    plist.expectedNextSound = nullptr;
     plist.nextIndex = -1;
     plist.isCrossfading = false;
     plist.crossfadeTimer = 0.0f;
@@ -689,18 +1257,9 @@ void PlaylistManager::Stop(const std::string& playlistName)
 {
     auto stopPlaylist = [](Playlist& plist)
     {
-        auto& audioManager = AudioManager::GetInstance();
-        audioManager.StopChannelWithFadeOut(plist.currentChannel);
-        audioManager.StopChannelWithFadeOut(plist.nextChannel);
-
-        plist.isPlaying = false;
-        plist.isCrossfading = false;
-        plist.currentChannel = nullptr;
-        plist.nextChannel = nullptr;
-        plist.currentIndex = -1;
-        plist.nextIndex = -1;
-        plist.randomIndexPos = 0;
-        plist.segmentTimer = 0.0f;
+        StopOwnedChannelWithFade(plist.currentChannel, plist.expectedCurrentSound);
+        StopOwnedChannelWithFade(plist.nextChannel, plist.expectedNextSound);
+        ClearLogicalPlaybackState(plist);
     };
 
     if (playlistName.empty())
@@ -743,9 +1302,7 @@ void PlaylistManager::Update(float deltaTime)
     {
         if (!plist.isPlaying) continue;
 
-        float baseMusicVol = UIManager::GetInstance().GetMasterVolume() 
-                           * UIManager::GetInstance().GetMusicVolume()
-                           * UIManager::GetInstance().GetDuckFactor();
+        constexpr float baseMusicVol = 1.0f;
 
         if (plist.isCrossfading)
         {
@@ -761,32 +1318,23 @@ void PlaylistManager::Update(float deltaTime)
             bool currentChannelValid = false;
             bool nextChannelValid    = false;
 
-            if (plist.currentChannel)
+            if (IsOwnedChannelPlaying(
+                    plist.currentChannel, plist.expectedCurrentSound))
             {
-                bool isPlaying = false;
-                FMOD_RESULT result = plist.currentChannel->isPlaying(&isPlaying);
-                currentChannelValid = (result == FMOD_OK && isPlaying);
-
-                if (currentChannelValid) {
-                    const float normalizationGain = AudioManager::GetInstance()
-                        .GetNormalizationGainForChannel(plist.currentChannel);
-                    float volOld = gains.outgoing * baseMusicVol * normalizationGain;
-                    plist.currentChannel->setVolume(volOld);
-                }
+                currentChannelValid = true;
+                const float normalizationGain = AudioManager::GetInstance()
+                    .GetNormalizationGainForChannel(plist.currentChannel);
+                float volOld = gains.outgoing * baseMusicVol * normalizationGain;
+                plist.currentChannel->setVolume(volOld);
             }
 
-            if (plist.nextChannel)
+            if (IsOwnedChannelPlaying(plist.nextChannel, plist.expectedNextSound))
             {
-                bool isPlaying = false;
-                FMOD_RESULT result = plist.nextChannel->isPlaying(&isPlaying);
-                nextChannelValid = (result == FMOD_OK && isPlaying);
-                
-                if (nextChannelValid) {
-                    const float normalizationGain = AudioManager::GetInstance()
-                        .GetNormalizationGainForChannel(plist.nextChannel);
-                    float volNext = gains.incoming * baseMusicVol * normalizationGain;
-                    plist.nextChannel->setVolume(volNext);
-                }
+                nextChannelValid = true;
+                const float normalizationGain = AudioManager::GetInstance()
+                    .GetNormalizationGainForChannel(plist.nextChannel);
+                float volNext = gains.incoming * baseMusicVol * normalizationGain;
+                plist.nextChannel->setVolume(volNext);
             }
 
             if (t >= 1.0f || (!currentChannelValid && !nextChannelValid))
@@ -796,6 +1344,15 @@ void PlaylistManager::Update(float deltaTime)
         }
         else if (plist.currentChannel)
         {
+            if (!IsOwnedChannel(plist.currentChannel, plist.expectedCurrentSound))
+            {
+                spdlog::error("Playlist channel ownership changed, restarting track");
+                plist.currentChannel = nullptr;
+                plist.expectedCurrentSound = nullptr;
+                StartTrackAtIndex(plist, plist.currentIndex);
+                continue;
+            }
+
             bool isPlaying = false;
             FMOD_RESULT result = plist.currentChannel->isPlaying(&isPlaying);
             
@@ -808,9 +1365,8 @@ void PlaylistManager::Update(float deltaTime)
 
             float trackRemaining = std::numeric_limits<float>::max();
 
-            FMOD::Sound* sound = nullptr;
-            result = plist.currentChannel->getCurrentSound(&sound);
-            if (result == FMOD_OK && sound)
+            FMOD::Sound* sound = plist.expectedCurrentSound;
+            if (sound)
             {
                 unsigned int lengthMs = 0;
                 unsigned int positionMs = 0;
@@ -864,7 +1420,8 @@ std::string PlaylistManager::GetCurrentTrackName() const
 float PlaylistManager::GetTrackProgress() const
 {
     auto* activePlaylist = GetActivePlaylist();
-    if (!activePlaylist || !activePlaylist->currentChannel) 
+    if (!activePlaylist || !IsOwnedChannelPlaying(
+            activePlaylist->currentChannel, activePlaylist->expectedCurrentSound))
         return 0.0f;
 
     unsigned int positionMs = 0;
@@ -874,8 +1431,7 @@ float PlaylistManager::GetTrackProgress() const
     FMOD_RESULT result = activePlaylist->currentChannel->getPosition(&positionMs, FMOD_TIMEUNIT_MS);
     if (result != FMOD_OK) return 0.0f;
 
-    result = activePlaylist->currentChannel->getCurrentSound(&sound);
-    if (result != FMOD_OK || !sound) return 0.0f;
+    sound = activePlaylist->expectedCurrentSound;
 
     result = sound->getLength(&lengthMs, FMOD_TIMEUNIT_MS);
     if (result != FMOD_OK || lengthMs == 0) return 0.0f;
@@ -915,7 +1471,10 @@ void PlaylistManager::SetCrossfadeDuration(float duration)
 FMOD::Channel* PlaylistManager::GetCurrentChannel() const
 {
     auto* activePlaylist = GetActivePlaylist();
-    return activePlaylist ? activePlaylist->currentChannel : nullptr;
+    return activePlaylist && IsOwnedChannelPlaying(
+        activePlaylist->currentChannel, activePlaylist->expectedCurrentSound)
+        ? activePlaylist->currentChannel
+        : nullptr;
 }
 
 bool PlaylistManager::IsInCrossfade() const
@@ -937,7 +1496,10 @@ float PlaylistManager::GetCrossfadeProgress() const
 FMOD::Channel* PlaylistManager::GetNextChannel() const
 {
     auto* activePlaylist = GetActivePlaylist();
-    return activePlaylist ? activePlaylist->nextChannel : nullptr;
+    return activePlaylist && IsOwnedChannelPlaying(
+        activePlaylist->nextChannel, activePlaylist->expectedNextSound)
+        ? activePlaylist->nextChannel
+        : nullptr;
 }
 
 std::string PlaylistManager::GetNextTrackName() const
@@ -1047,34 +1609,35 @@ void PlaylistManager::StartNextTrack(Playlist& plist, float transitionDuration,
         : std::max(plist.crossfadeDuration, 0.0f);
 
     plist.oldChannelVolume = 1.0f;
-    if (plist.currentChannel)
+    if (IsOwnedChannelPlaying(plist.currentChannel, plist.expectedCurrentSound))
     {
         float vol = 1.0f;
         plist.currentChannel->getVolume(&vol);
         plist.oldChannelVolume = vol;
     }
 
-    float userVolume = UIManager::GetInstance().GetMasterVolume() 
-                     * UIManager::GetInstance().GetMusicVolume();
+    constexpr float userVolume = 1.0f;
     plist.nextTargetVolume = userVolume;
 
     std::string nextTrack = plist.tracks[nextIndex];
+    FMOD::Sound* expectedSound = AudioManager::GetInstance().GetSound(nextTrack);
     FMOD::Channel* ch = AudioManager::GetInstance().PlayMusic(nextTrack, false, 0.0f);
-    if (!ch)
+    if (!ch || !IsOwnedChannelPlaying(ch, expectedSound))
     {
+        StopOwnedChannelImmediately(ch, expectedSound);
         spdlog::error("Failed to start next track '{}' in playlist '{}'.", nextTrack, plist.name);
         FinishPlaylist(plist);
         return;
     }
     plist.nextChannel = ch;
+    plist.expectedNextSound = expectedSound;
 
     plist.nextIndex = nextIndex;
 
     plist.segmentTimer = 0.0f;
     if (plist.segmentModeActive && ch)
     {
-        FMOD::Sound* sound = nullptr;
-        ch->getCurrentSound(&sound);
+        FMOD::Sound* sound = expectedSound;
         if (sound)
         {
             unsigned int lengthMs = 0;
@@ -1098,32 +1661,31 @@ void PlaylistManager::StartTrackAtIndex(Playlist& plist, int index)
 
     std::string track = plist.tracks[index];
 
-    float userVolume = UIManager::GetInstance().GetMasterVolume() 
-                     * UIManager::GetInstance().GetMusicVolume();
+    constexpr float userVolume = 1.0f;
 
     // A track must finish naturally so StartNextTrack can apply the playlist's
     // loop policy. Looping the FMOD sound bypasses playlist progression.
+    FMOD::Sound* expectedSound = AudioManager::GetInstance().GetSound(track);
     FMOD::Channel* ch = AudioManager::GetInstance().PlayMusicWithFadeIn(track, false, userVolume);
-    if (!ch) {
+    if (!ch || !IsOwnedChannelPlaying(ch, expectedSound)) {
+        StopOwnedChannelImmediately(ch, expectedSound);
         spdlog::error("Failed to start track at index {}", index);
         FinishPlaylist(plist);
         return;
     }
 
-    if (plist.currentChannel) {
-        bool isPlaying = false;
-        FMOD_RESULT result = plist.currentChannel->isPlaying(&isPlaying);
-        if (result == FMOD_OK && isPlaying) {
-            AudioManager::GetInstance().StopChannelWithFadeOut(plist.currentChannel);
-        }
-    }
+    if (plist.currentChannel != ch)
+        StopOwnedChannelWithFade(plist.currentChannel, plist.expectedCurrentSound);
 
     plist.currentChannel = ch;
+    plist.expectedCurrentSound = expectedSound;
 
     bool isPlaying = false;
     FMOD_RESULT result = plist.currentChannel->isPlaying(&isPlaying);
-    if (result != FMOD_OK) {
+    if (result != FMOD_OK || !isPlaying) {
         spdlog::error("Channel validation failed after start");
+        StopOwnedChannelImmediately(plist.currentChannel, plist.expectedCurrentSound);
+        FinishPlaylist(plist);
         return;
     }
 
@@ -1133,8 +1695,7 @@ void PlaylistManager::StartTrackAtIndex(Playlist& plist, int index)
     {
         plist.segmentModeActive = true;
         
-        FMOD::Sound* sound = nullptr;
-        ch->getCurrentSound(&sound);
+        FMOD::Sound* sound = expectedSound;
         if (sound)
         {
             unsigned int lengthMs = 0;
@@ -1161,18 +1722,14 @@ void PlaylistManager::StartTrackAtIndex(Playlist& plist, int index)
 
 void PlaylistManager::FinishCrossfade(Playlist& plist)
 {
-    if (plist.currentChannel)
-    {
-        bool isPlaying = false;
-        FMOD_RESULT result = plist.currentChannel->isPlaying(&isPlaying);
-        if (result == FMOD_OK && isPlaying) {
-            plist.currentChannel->stop();
-        }
-        plist.currentChannel = nullptr;
-    }
+    StopOwnedChannelImmediately(plist.currentChannel, plist.expectedCurrentSound);
+    plist.currentChannel = nullptr;
+    plist.expectedCurrentSound = nullptr;
 
     plist.currentChannel = plist.nextChannel;
+    plist.expectedCurrentSound = plist.expectedNextSound;
     plist.nextChannel    = nullptr;
+    plist.expectedNextSound = nullptr;
     if (plist.nextIndex >= 0) plist.currentIndex = plist.nextIndex;
     plist.nextIndex = -1;
     plist.isCrossfading  = false;
@@ -1180,12 +1737,12 @@ void PlaylistManager::FinishCrossfade(Playlist& plist)
 
     if (plist.currentChannel)
     {
-        bool isPlaying = false;
-        FMOD_RESULT result = plist.currentChannel->isPlaying(&isPlaying);
-        if (result != FMOD_OK || !isPlaying)
+        if (!IsOwnedChannelPlaying(
+                plist.currentChannel, plist.expectedCurrentSound))
         {
             spdlog::warn("New current channel ended during crossfade, advancing playlist");
             plist.currentChannel = nullptr;
+            plist.expectedCurrentSound = nullptr;
             StartNextTrack(plist, 0.0f, TransitionLogic::Reason::PlaybackFailure);
         }
     }
@@ -1257,16 +1814,9 @@ bool PlaylistManager::HasNextTrack(const Playlist& plist) const
 
 void PlaylistManager::FinishPlaylist(Playlist& plist)
 {
-    auto& audioManager = AudioManager::GetInstance();
-    audioManager.StopChannelWithFadeOut(plist.currentChannel);
-    audioManager.StopChannelWithFadeOut(plist.nextChannel);
-    plist.currentChannel = nullptr;
-    plist.nextChannel = nullptr;
-    plist.nextIndex = -1;
-    plist.currentIndex = -1;
-    plist.isPlaying = false;
-    plist.isCrossfading = false;
-    plist.segmentTimer = 0.0f;
+    StopOwnedChannelWithFade(plist.currentChannel, plist.expectedCurrentSound);
+    StopOwnedChannelWithFade(plist.nextChannel, plist.expectedNextSound);
+    ClearLogicalPlaybackState(plist);
 
     if (m_activePlaylistName == plist.name)
     {
@@ -1353,6 +1903,8 @@ void PlaylistManager::PlayFromIndex(const std::string& playlistName, int index)
     plist.nextIndex = -1;
     plist.currentChannel = nullptr;
     plist.nextChannel = nullptr;
+    plist.expectedCurrentSound = nullptr;
+    plist.expectedNextSound = nullptr;
     plist.isCrossfading = false;
     plist.crossfadeTimer = 0.0f;
 

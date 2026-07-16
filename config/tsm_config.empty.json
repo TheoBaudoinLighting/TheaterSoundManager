@@ -1,0 +1,26 @@
+{
+  "loudnessTargetLufs": -16.0,
+  "playlists": [],
+  "announcements": [],
+  "cinema": {
+    "enabled": false,
+    "schedules": [],
+    "resume": {
+      "enabled": true,
+      "automatic": true,
+      "maxAgeMinutes": 720,
+      "checkpointIntervalSeconds": 1
+    },
+    "safety": {
+      "enabled": false,
+      "evacuationAnnouncementId": "",
+      "interlock": {
+        "enabled": false,
+        "expectedHeartbeatSource": "",
+        "heartbeatTimeoutMilliseconds": 5000,
+        "startupGraceMilliseconds": 10000,
+        "safeStableMilliseconds": 1000
+      }
+    }
+  }
+}

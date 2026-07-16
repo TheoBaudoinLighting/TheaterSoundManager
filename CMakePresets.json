@@ -20,7 +20,8 @@
         "BUILD_TESTING": "ON",
         "CMAKE_CONFIGURATION_TYPES": "Debug;Release",
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/install",
-        "TSM_WARNINGS_AS_ERRORS": "OFF"
+        "TSM_WARNINGS_AS_ERRORS": "ON",
+        "TSM_INSTALL_ASSETS": "OFF"
       },
       "warnings": {
         "deprecated": false,
@@ -38,6 +39,18 @@
       "name": "release",
       "configurePreset": "default",
       "configuration": "Release"
+    },
+    {
+      "name": "install-release",
+      "configurePreset": "default",
+      "configuration": "Release",
+      "targets": ["install"]
+    },
+    {
+      "name": "package-release",
+      "configurePreset": "default",
+      "configuration": "Release",
+      "targets": ["package"]
     }
   ],
   "testPresets": [
@@ -67,13 +80,15 @@
   "workflowPresets": [
     {
       "name": "validate",
-      "displayName": "Configure, build and test Debug + Release",
+      "displayName": "Build, test, install and package Debug + Release",
       "steps": [
         { "type": "configure", "name": "default" },
         { "type": "build", "name": "debug" },
         { "type": "test", "name": "debug" },
         { "type": "build", "name": "release" },
-        { "type": "test", "name": "release" }
+        { "type": "test", "name": "release" },
+        { "type": "build", "name": "install-release" },
+        { "type": "build", "name": "package-release" }
       ]
     }
   ]

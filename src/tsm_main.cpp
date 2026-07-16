@@ -1,18 +1,18 @@
-// tsm_main.cpp
-
-#include <chrono>
-#include <string>
-
-#include "tsm_announcement_manager.h"
-#include "tsm_audio_manager.h"
-#include "tsm_bluetooth_server.h"
-#include "tsm_config.h"
-#include "tsm_fmod_wrapper.h"
+#include "tsm_cli.h"
 #include "tsm_logger.h"
-#include "tsm_playlist_manager.h"
+#include "tsm_runtime.h"
 #include "tsm_ui_manager.h"
 
 #include <SDL.h>
+
+#include <algorithm>
+#include <chrono>
+#include <cstdio>
+#include <exception>
+#include <string>
+#include <vector>
+
+#include <spdlog/spdlog.h>
 
 #ifdef _WIN32
     #undef main
@@ -21,109 +21,125 @@
 
 namespace
 {
-void LoadConfiguredAssets(const TSM::AppConfig& config)
+
+bool InitializeGuiLogger()
 {
-    auto& audioManager = TSM::AudioManager::GetInstance();
-    auto& playlistManager = TSM::PlaylistManager::GetInstance();
-    auto& announcementManager = TSM::AnnouncementManager::GetInstance();
-
-    audioManager.SetLoudnessTarget(config.loudnessTargetLufs);
-    for (const auto& playlist : config.playlists)
+    try
     {
-        playlistManager.CreatePlaylist(playlist.name);
-        for (const auto& track : playlist.tracks)
-        {
-            if (audioManager.LoadSound(track.id, track.path, true))
-            {
-                playlistManager.AddToPlaylist(playlist.name, track.id);
-            }
-        }
-
-        if (auto* loadedPlaylist = playlistManager.GetPlaylistByName(playlist.name))
-        {
-            loadedPlaylist->options = playlist.options;
-        }
+        TSM::Logger::Options options;
+        options.fileLogging = true;
+        options.filePath = TSM::GetApplicationDataFilePath("tsm.log");
+        TSM::Logger::Init(options);
+        return true;
     }
-
-    if (!config.wedding.entrance.empty())
-        audioManager.LoadWeddingEntranceSound(config.wedding.entrance);
-    if (!config.wedding.ceremony.empty())
-        audioManager.LoadWeddingCeremonySound(config.wedding.ceremony);
-    if (!config.wedding.exit.empty())
-        audioManager.LoadWeddingExitSound(config.wedding.exit);
-    if (!config.wedding.transitionSfx.id.empty() && !config.wedding.transitionSfx.path.empty())
+    catch (const std::exception& error)
     {
-        audioManager.LoadSound(
-            config.wedding.transitionSfx.id, config.wedding.transitionSfx.path, false);
-    }
-
-    for (const auto& announcement : config.announcements)
-    {
-        if (!audioManager.LoadAnnouncement(announcement.id, announcement.path)) continue;
-        if (announcement.hour >= 0 && announcement.minute >= 0)
+        std::fprintf(stderr, "Unable to initialize GUI file logging: %s\n", error.what());
+        TSM::Logger::Shutdown();
+        try
         {
-            announcementManager.ScheduleAnnouncement(
-                announcement.hour, announcement.minute, announcement.id);
+            TSM::Logger::Options fallback;
+            fallback.console = TSM::Logger::ConsoleTarget::Stderr;
+            fallback.fileLogging = false;
+            TSM::Logger::Init(fallback);
+            spdlog::warn("File logging is disabled: {}", error.what());
+            return true;
+        }
+        catch (const std::exception& fallbackError)
+        {
+            std::fprintf(
+                stderr,
+                "Unable to initialize fallback logging: %s\n",
+                fallbackError.what());
+            return false;
         }
     }
 }
-}
 
-int main()
+int RunGraphicalApplication(const std::vector<std::string>& arguments)
 {
-    TSM::Logger::Init();
-    if (!TSM::FModWrapper::GetInstance().Initialize())
+    const std::string executablePath = TSM::GetExecutablePath(arguments.front());
+    if (!InitializeGuiLogger())
+        return static_cast<int>(TSM::CliExitCode::InputOutput);
+
+    TSM::RuntimeOptions runtimeOptions;
+    runtimeOptions.configPath = TSM::ResolveDefaultConfigPath(executablePath);
+    // RFCOMM control is unauthenticated and therefore opt-in in production.
+    // A cinema deployment should prefer the local NDJSON CLI supervised by
+    // the host application, especially for any safety-related workflow.
+    runtimeOptions.startBluetooth =
+        std::find(arguments.begin() + 1, arguments.end(), "--bluetooth") !=
+        arguments.end();
+
+    TSM::ApplicationRuntime runtime;
+    std::string error;
+    if (!runtime.Initialize(runtimeOptions, error))
     {
-        spdlog::error("Failed to initialize FMOD.");
-        return -1;
+        spdlog::error("Application runtime initialization failed: {}", error);
+        TSM::Logger::Shutdown();
+        const TSM::CliExitCode exitCode =
+            runtime.GetLastErrorKind() == TSM::RuntimeErrorKind::Configuration
+                ? TSM::CliExitCode::Configuration
+                : runtime.GetLastErrorKind() == TSM::RuntimeErrorKind::InputOutput
+                    ? TSM::CliExitCode::InputOutput
+                    : TSM::CliExitCode::AudioEngine;
+        return static_cast<int>(exitCode);
     }
 
-    if (!TSM::UIManager::GetInstance().Init(1920, 1080))
+    auto& ui = TSM::UIManager::GetInstance();
+    std::string imguiIniPath;
+    try
+    {
+        imguiIniPath = TSM::GetApplicationDataFilePath("imgui.ini");
+    }
+    catch (const std::exception& pathError)
+    {
+        spdlog::warn("ImGui layout persistence is disabled: {}", pathError.what());
+    }
+    bool uiInitialized = false;
+    try
+    {
+        uiInitialized = ui.Init(
+            1920, 1080, runtime.GetResourceRoot(), imguiIniPath);
+    }
+    catch (const std::exception& uiError)
+    {
+        spdlog::error("GUI initialization raised an exception: {}", uiError.what());
+    }
+    if (!uiInitialized)
     {
         spdlog::error("Failed to initialize GUI.");
-        TSM::FModWrapper::GetInstance().Shutdown();
-        return -1;
+        ui.Shutdown();
+        runtime.Shutdown();
+        TSM::Logger::Shutdown();
+        return static_cast<int>(TSM::CliExitCode::Internal);
     }
 
-    StartBluetoothServer();
-
-    TSM::AppConfig config;
-    std::string configError;
-    if (TSM::LoadAppConfig("config/tsm_config.json", config, configError))
-    {
-        LoadConfiguredAssets(config);
-    }
-    else
-    {
-        spdlog::error("Application configuration was not loaded: {}", configError);
-    }
-    TSM::UIManager::GetInstance().UpdateWeddingFilePaths();
-
-    bool isRunning = true;
     auto lastTime = std::chrono::high_resolution_clock::now();
-    while (isRunning)
+    while (ui.IsRunning())
     {
         const auto currentTime = std::chrono::high_resolution_clock::now();
         const float deltaTime = std::chrono::duration<float>(currentTime - lastTime).count();
         lastTime = currentTime;
 
-        ProcessPendingBluetoothCommands();
-        TSM::AudioManager::GetInstance().Update(deltaTime);
-        TSM::AnnouncementManager::GetInstance().Update(deltaTime);
-        TSM::PlaylistManager::GetInstance().Update(deltaTime);
-        TSM::UIManager::GetInstance().UpdateWeddingMode(deltaTime);
-
-        TSM::UIManager::GetInstance().HandleEvents();
-        TSM::UIManager::GetInstance().PreRender();
-        TSM::UIManager::GetInstance().Render();
-        TSM::UIManager::GetInstance().PostRender();
-
-        if (!TSM::UIManager::GetInstance().IsRunning()) isRunning = false;
+        runtime.Tick(deltaTime);
+        ui.HandleEvents();
+        ui.PreRender();
+        ui.Render();
+        ui.PostRender();
     }
 
-    StopBluetoothServer();
-    TSM::AudioManager::GetInstance().Shutdown();
-    TSM::UIManager::GetInstance().Shutdown();
-    TSM::FModWrapper::GetInstance().Shutdown();
+    runtime.Shutdown();
+    ui.Shutdown();
+    TSM::Logger::Shutdown();
     return 0;
+}
+
+} // namespace
+
+int main(int argc, char** argv)
+{
+    const std::vector<std::string> arguments = TSM::GetUtf8CommandLineArguments(argc, argv);
+    if (TSM::IsCliInvocation(arguments)) return TSM::RunCli(arguments);
+    return RunGraphicalApplication(arguments);
 }

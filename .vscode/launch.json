@@ -6,7 +6,7 @@
       "type": "cppvsdbg",
       "request": "launch",
       "program": "${workspaceFolder}/build/bin/Debug/TheaterSoundManager.exe",
-      "cwd": "${workspaceFolder}",
+      "cwd": "${workspaceFolder}/build/runtime",
       "preLaunchTask": "CMake: build Debug",
       "stopAtEntry": false
     }

@@ -30,6 +30,18 @@ namespace TSM
 
 namespace
 {
+std::filesystem::path PathFromUtf8(const std::string& value)
+{
+    const auto* begin = reinterpret_cast<const char8_t*>(value.data());
+    return std::filesystem::path(std::u8string(begin, begin + value.size()));
+}
+
+std::string PathToUtf8(const std::filesystem::path& path)
+{
+    const std::u8string value = path.generic_u8string();
+    return std::string(reinterpret_cast<const char*>(value.data()), value.size());
+}
+
 std::string FormatDuration(float seconds)
 {
     seconds = std::max(seconds, 0.0f);
@@ -252,7 +264,9 @@ void ImportAudioFiles() {
             isMusic = true;
         }
 
-        bool ok = AudioManager::GetInstance().LoadSound(soundID, path, isMusic);
+        const auto soundKind = isMusic ? AudioManager::SoundKind::Music
+                                       : AudioManager::SoundKind::SoundEffect;
+        bool ok = AudioManager::GetInstance().LoadSound(soundID, path, isMusic, soundKind);
         if(ok) {
             spdlog::info("Imported audio file '{}' as '{}'", path, soundID);
             
@@ -272,11 +286,6 @@ UIManager::UIManager()
       m_renderer(nullptr),
       m_isRunning(true),
       m_isInitialized(false),
-      m_masterVolume(0.5f),
-      m_musicVolume(0.5f),
-      m_announcementVolume(3.0f),
-      m_sfxVolume(3.0f),
-      m_duckFactor(1.0f),
       m_weddingModeActive(false),
       m_weddingPhase(0),
       m_autoDuckingActive(false),
@@ -297,12 +306,20 @@ UIManager::UIManager()
     m_opts.segmentDuration = PlaylistOptions::DefaultSegmentDuration;
 }
 
-bool UIManager::Init(int width, int height)
+bool UIManager::Init(
+    int width,
+    int height,
+    const std::string& resourceRoot,
+    const std::string& imguiIniPath)
 {
+    Shutdown();
+    m_isRunning = true;
+
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) < 0) {
         spdlog::error("SDL initialization failed: {}", SDL_GetError());
         return false;
     }
+    m_sdlInitialized = true;
 
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
@@ -322,12 +339,14 @@ bool UIManager::Init(int width, int height)
 
     if (!m_window) {
         spdlog::error("Window creation failed: {}", SDL_GetError());
+        Shutdown();
         return false;
     }
     
     m_glContext = SDL_GL_CreateContext(m_window);
     if (!m_glContext) {
         spdlog::error("OpenGL context creation failed: {}", SDL_GetError());
+        Shutdown();
         return false;
     }
 
@@ -336,7 +355,10 @@ bool UIManager::Init(int width, int height)
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+    m_imguiContextCreated = true;
     ImGuiIO& io = ImGui::GetIO();
+    m_imguiIniPath = imguiIniPath;
+    io.IniFilename = m_imguiIniPath.empty() ? nullptr : m_imguiIniPath.c_str();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;    
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;  
@@ -367,27 +389,43 @@ bool UIManager::Init(int width, int height)
 
     if (!ImGui_ImplSDL2_InitForOpenGL(m_window, m_glContext)) {
         spdlog::error("ImGui SDL2 initialization failed");
+        Shutdown();
         return false;
     }
+    m_imguiSdlInitialized = true;
 
     if (!ImGui_ImplOpenGL3_Init("#version 130")) {
         spdlog::error("ImGui OpenGL initialization failed");
+        Shutdown();
         return false;
     }
+    m_imguiOpenGlInitialized = true;
 
-    const std::filesystem::path fontPath("assets/fonts/Jost-Regular.ttf");
-    std::error_code fontError;
-    if (std::filesystem::exists(fontPath, fontError) && !fontError)
+    if (!resourceRoot.empty())
     {
-        if (!io.Fonts->AddFontFromFileTTF(fontPath.string().c_str(), 24.0f))
+        const std::filesystem::path fontPath =
+            PathFromUtf8(resourceRoot) / "assets/fonts/Jost-Regular.ttf";
+        const std::string fontPathUtf8 = PathToUtf8(fontPath.lexically_normal());
+        std::error_code fontError;
+        if (std::filesystem::exists(fontPath, fontError) && !fontError)
         {
-            spdlog::warn("Unable to load font '{}'; using ImGui's default font.", fontPath.string());
+            if (!io.Fonts->AddFontFromFileTTF(fontPathUtf8.c_str(), 24.0f))
+            {
+                spdlog::warn(
+                    "Unable to load font '{}'; using ImGui's default font.", fontPathUtf8);
+                io.Fonts->AddFontDefault();
+            }
+        }
+        else
+        {
+            spdlog::warn(
+                "Font '{}' was not found; using ImGui's default font.", fontPathUtf8);
             io.Fonts->AddFontDefault();
         }
     }
     else
     {
-        spdlog::warn("Font '{}' was not found; using ImGui's default font.", fontPath.string());
+        spdlog::warn("No resource root is configured; using ImGui's default font.");
         io.Fonts->AddFontDefault();
     }
 
@@ -505,11 +543,21 @@ void UIManager::SetupBlenderStyle()
 
 void UIManager::Shutdown()
 {
-    if (!m_isInitialized) return;
-
-    ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplSDL2_Shutdown();
-    ImGui::DestroyContext();
+    if (m_imguiOpenGlInitialized)
+    {
+        ImGui_ImplOpenGL3_Shutdown();
+        m_imguiOpenGlInitialized = false;
+    }
+    if (m_imguiSdlInitialized)
+    {
+        ImGui_ImplSDL2_Shutdown();
+        m_imguiSdlInitialized = false;
+    }
+    if (m_imguiContextCreated)
+    {
+        ImGui::DestroyContext();
+        m_imguiContextCreated = false;
+    }
 
     if (m_glContext) {
         SDL_GL_DeleteContext(m_glContext);
@@ -521,8 +569,13 @@ void UIManager::Shutdown()
         m_window = nullptr;
     }
 
-    SDL_Quit();
+    if (m_sdlInitialized)
+    {
+        SDL_Quit();
+        m_sdlInitialized = false;
+    }
     m_isInitialized = false;
+    m_imguiIniPath.clear();
 }
 
 bool UIManager::HandleEvents()
@@ -1021,8 +1074,7 @@ void UIManager::RenderPlaylistManagerTab()
 
                 for (const auto& [soundId, soundData] : AudioManager::GetInstance().GetAllSounds())
                 {
-                    if (soundId.find("sfx_") == std::string::npos &&
-                        soundId.find("announce_") == std::string::npos)
+                    if (soundData.kind == AudioManager::SoundKind::Music)
                     {
                         availableTracks.push_back({soundId, GetDisplayName(soundData.filePath)});
                     }
@@ -1040,8 +1092,7 @@ void UIManager::RenderPlaylistManagerTab()
 
                     for (const auto& [soundId, soundData] : AudioManager::GetInstance().GetAllSounds())
                     {
-                        if (soundId.find("sfx_") == std::string::npos &&
-                            soundId.find("announce_") == std::string::npos)
+                        if (soundData.kind == AudioManager::SoundKind::Music)
                         {
                             availableTracks.push_back({soundId, GetDisplayName(soundData.filePath)});
                         }
@@ -1295,8 +1346,7 @@ void UIManager::RenderMusicPlaylistTab()
         const auto& allSounds = AudioManager::GetInstance().GetAllSounds();
         
         for (const auto& kv : allSounds) {
-            if (kv.first.find("sfx") == std::string::npos && 
-                kv.first.find("announce") == std::string::npos) {
+            if (kv.second.kind == AudioManager::SoundKind::Music) {
                 musicList.push_back({kv.first, kv.second.filePath});
             }
         }
@@ -1315,7 +1365,7 @@ void UIManager::RenderMusicPlaylistTab()
             
             ImGui::TableNextColumn();
             if (ImGui::Button("Play")) {
-                AudioManager::GetInstance().PlayMusic(soundId, false, m_musicVolume * m_masterVolume);
+                AudioManager::GetInstance().PlayMusic(soundId);
             }
             
             ImGui::SameLine();
@@ -1806,27 +1856,39 @@ void UIManager::RenderAudioControls()
     ImGui::Text("Volume controls");
     ImGui::Separator();
 
-    if (ImGui::SliderFloat("Master volume", &m_masterVolume, 0.0f, 1.0f, "%.2f")) {
+    float masterVolume = GetMasterVolume();
+    if (ImGui::SliderFloat("Master volume", &masterVolume, 0.0f, 1.0f, "%.2f")) {
+        SetMasterVolume(masterVolume);
         UpdateAllVolumes();
     }
 
     ImGui::Spacing();
 
-    if (ImGui::SliderFloat("Music volume", &m_musicVolume, 0.0f, 1.0f, "%.2f")) {
+    float musicVolume = GetMusicVolume();
+    if (ImGui::SliderFloat("Music volume", &musicVolume, 0.0f, 1.0f, "%.2f")) {
+        SetMusicVolume(musicVolume);
         UpdateAllVolumes();
     }
 
-    if (ImGui::SliderFloat("Announcement volume", &m_announcementVolume, 0.0f, 3.0f, "%.2f")) {
+    float announcementVolume = GetAnnouncementVolume();
+    if (ImGui::SliderFloat(
+            "Announcement volume", &announcementVolume, 0.0f, 3.0f, "%.2f")) {
+        SetAnnouncementVolume(announcementVolume);
         UpdateAllVolumes();
     }
 
-    if (ImGui::SliderFloat("SFX volume", &m_sfxVolume, 0.0f, 3.0f, "%.2f")) {
+    float sfxVolume = GetSFXVolume();
+    if (ImGui::SliderFloat("SFX volume", &sfxVolume, 0.0f, 3.0f, "%.2f")) {
+        SetSFXVolume(sfxVolume);
         UpdateAllVolumes();
     }
     
     ImGui::Spacing();
     
-    if (ImGui::SliderFloat("Current ducking", &m_duckFactor, 0.0f, 1.0f, "%.2f")) {
+    auto& mixer = MixerState::GetInstance();
+    float duckFactor = mixer.GetDuckFactor();
+    if (ImGui::SliderFloat("Current ducking", &duckFactor, 0.0f, 1.0f, "%.2f")) {
+        mixer.SetDuckFactor(duckFactor);
         UpdateAllVolumes();
     }
     
@@ -1983,55 +2045,16 @@ void UIManager::RenderDebugInfo()
 
 void UIManager::UpdateAllVolumes()
 {
-    for (const auto& kv : AudioManager::GetInstance().GetAllSounds()) 
-    {
-        const std::string& soundName = kv.first; 
-        const auto& soundData = kv.second;
+    MixerState::GetInstance().ApplyAllVolumes();
+}
 
-        float baseVolume = 1.0f;
-
-        bool isAnnouncement = (soundName.find("announce") != std::string::npos);
-        bool isSfx = (soundName.find("sfx") != std::string::npos);
-        bool isWeddingSound = (soundName == m_weddingEntranceSoundId || 
-                              soundName == m_weddingCeremonySoundId || 
-                              soundName == m_weddingExitSoundId);
-
-        if (isAnnouncement) {
-            baseVolume = m_announcementVolume;
-        }
-        else if (isSfx && !isWeddingSound) {
-            baseVolume = m_sfxVolume;
-        }
-        else {
-            baseVolume = m_musicVolume * m_duckFactor;
-        }
-
-        float finalVolume = m_masterVolume * baseVolume;
-        if (soundData.isMusic)
-        {
-            finalVolume *= soundData.normalizationGainLinear;
-        }
-        
-        if (finalVolume < 0.0f) finalVolume = 0.0f;
-
-        for (auto* channel : soundData.channels) {
-            if (!channel) continue;
-            if (AudioManager::GetInstance().IsChannelFading(channel)) continue;
-            bool isPlaying = false;
-            channel->isPlaying(&isPlaying);
-
-            if (isPlaying) {
-                channel->setVolume(finalVolume);
-                
-                float currentVolume = 0.0f;
-                channel->getVolume(&currentVolume);
-                
-                if (std::abs(currentVolume - finalVolume) > 0.01f) {
-                    channel->setVolume(finalVolume);
-                }
-            }
-        }
-    }
+void UIManager::StopAudioBeforeWeddingPhase()
+{
+    // AnnouncementManager owns its channel handles and duck layer. Reset it
+    // before AudioManager clears every channel during a wedding transition.
+    AnnouncementManager::GetInstance().StopAnnouncement();
+    PlaylistManager::GetInstance().Stop("");
+    AudioManager::GetInstance().StopAllNonEmergencyImmediately();
 }
 
 void UIManager::UpdateWeddingMode(float deltaTime)
@@ -2059,17 +2082,14 @@ void UIManager::UpdateWeddingMode(float deltaTime)
                 if (t >= 1.0f) {
                     spdlog::info("Wedding Phase 1: Fade out complete, stopping all music");
 
-                    PlaylistManager::GetInstance().Stop("");
-                    AudioManager::GetInstance().StopAllSounds();
+                    StopAudioBeforeWeddingPhase();
 
                     m_phase1DuckTimer = 0.0f;
 
-                    float sfxVolume = GetSFXVolume() * GetMasterVolume();
-                    m_phase1SfxChannel = AudioManager::GetInstance().PlaySound("sfx_shine", false, sfxVolume);
+                    m_phase1SfxChannel = AudioManager::GetInstance().PlaySound("sfx_shine");
 
                     if (m_phase1SfxChannel) {
-                        m_phase1SfxChannel->setVolume(sfxVolume);
-                        spdlog::info("Wedding Phase 1: Playing SFX 'sfx_shine' at volume {}", sfxVolume);
+                        spdlog::info("Wedding Phase 1: Playing SFX 'sfx_shine'");
                         m_phase1State = WeddingPhase1State::PLAYING_SFX_BEFORE;
                     } else {
                         spdlog::error("Wedding Phase 1: Failed to play SFX 'sfx_shine'");
@@ -2111,9 +2131,8 @@ void UIManager::UpdateWeddingMode(float deltaTime)
                     spdlog::info("Wedding Phase 1: Wait complete, starting entrance music with ducking");
 
                     SetDuckFactor(0.0f);
-                    float musicVolume = GetMusicVolume() * GetMasterVolume();
                     m_phase1EntranceChannel = AudioManager::GetInstance().PlayMusic(
-                        m_weddingEntranceSoundId, false, musicVolume);
+                        m_weddingEntranceSoundId);
 
                     if (!m_phase1EntranceChannel) {
                         spdlog::error("Wedding Phase 1: entrance music asset is unavailable; cancelling wedding mode");
@@ -2189,23 +2208,18 @@ void UIManager::UpdateWeddingMode(float deltaTime)
     }
 
     if (m_autoDuckingActive) {
-        float currentDuckFactor = GetDuckFactor();
-        float targetDuckFactor = m_targetDuckFactor;
+        m_autoDuckTimer += std::max(deltaTime, 0.0f);
+        const float progress = m_crossfadeDuration <= 0.0f
+            ? 1.0f
+            : std::clamp(m_autoDuckTimer / m_crossfadeDuration, 0.0f, 1.0f);
+        const float newDuckFactor = m_autoDuckStartFactor +
+            (m_targetDuckFactor - m_autoDuckStartFactor) * progress;
+        SetDuckFactor(newDuckFactor);
+        UpdateAllVolumes();
 
-        float newDuckFactor = targetDuckFactor > (currentDuckFactor - (deltaTime / m_crossfadeDuration)) 
-            ? targetDuckFactor 
-            : (currentDuckFactor - (deltaTime / m_crossfadeDuration));
-
-        if (newDuckFactor != currentDuckFactor) {
-            SetDuckFactor(newDuckFactor);
-            UpdateAllVolumes();
-
-            spdlog::debug("Progressive ducking: {} -> {}", currentDuckFactor, newDuckFactor);
-
-            if (newDuckFactor <= targetDuckFactor + 0.01f) {
-                m_autoDuckingActive = false;
-                spdlog::info("Progressive ducking finished for phase {}", m_weddingPhase);
-            }
+        if (progress >= 1.0f) {
+            m_autoDuckingActive = false;
+            spdlog::info("Progressive ducking finished for phase {}", m_weddingPhase);
         }
     }
 
@@ -2306,34 +2320,30 @@ void UIManager::CheckWeddingPhaseTransition()
 bool UIManager::ImportWeddingMusic(int phase, const std::string& filePath)
 {
     if (filePath.empty()) return false;
+    if (m_weddingModeActive)
+    {
+        spdlog::error("Stop the wedding sequence before replacing an active phase asset.");
+        return false;
+    }
 
-    std::string soundId;
     std::string* storedPath = nullptr;
 
     switch (phase) {
         case 1: 
-            soundId = m_weddingEntranceSoundId;
             storedPath = &m_weddingEntranceFilePath;
             break;
         case 2:
-            soundId = m_weddingCeremonySoundId;
             storedPath = &m_weddingCeremonyFilePath;
             break;
         case 3: 
-            soundId = m_weddingExitSoundId;
             storedPath = &m_weddingExitFilePath;
             break;
         default:
             return false;
     }
 
-    AudioManager::GetInstance().StopSound(soundId);
-
-    if (AudioManager::GetInstance().GetSound(soundId)) {
-        AudioManager::GetInstance().UnloadSound(soundId);
-    }
-
-    bool success = AudioManager::GetInstance().LoadSound(soundId, filePath, true);
+    const bool success = AudioManager::GetInstance().LoadWeddingPhaseSound(
+        phase, filePath);
 
     if (success) {
         *storedPath = filePath;
@@ -2350,7 +2360,7 @@ void UIManager::StartNormalMusicAfterWedding()
     PlaylistManager::GetInstance().Stop("");
     AudioManager::GetInstance().StopAllSoundsWithFadeOut(); 
 
-    m_originalDuckFactor = m_duckFactor;
+    m_originalDuckFactor = GetDuckFactor();
     SetDuckFactor(1.0f);
     UpdateAllVolumes();
 
@@ -2565,13 +2575,11 @@ void UIManager::RenderWeddingModeTab()
                 if (m_weddingPhase == 1) {
                     if (m_phase1State == WeddingPhase1State::FADING_OUT_PREVIOUS) {
                         spdlog::info("Skip: End of fade out of previous music");
-                        PlaylistManager::GetInstance().Stop("");
-                        AudioManager::GetInstance().StopAllSounds();
+                        StopAudioBeforeWeddingPhase();
                         m_phase1DuckTimer = 0.0f;
                         m_phase1State = WeddingPhase1State::PLAYING_SFX_BEFORE;
 
-                        float sfxVolume = GetSFXVolume() * GetMasterVolume();
-                        m_phase1SfxChannel = AudioManager::GetInstance().PlaySound("sfx_shine", false, sfxVolume);
+                        m_phase1SfxChannel = AudioManager::GetInstance().PlaySound("sfx_shine");
                     }
                     else if (m_phase1State == WeddingPhase1State::PLAYING_SFX_BEFORE) {
                         spdlog::info("Skip: End of SFX");
@@ -2587,9 +2595,8 @@ void UIManager::RenderWeddingModeTab()
                         m_phase1DuckTimer = m_phase1WaitDuration;
                         SetDuckFactor(0.0f);
 
-                        float musicVolume = GetMusicVolume() * GetMasterVolume();
                         m_phase1EntranceChannel = AudioManager::GetInstance().PlayMusic(
-                            m_weddingEntranceSoundId, false, musicVolume);
+                            m_weddingEntranceSoundId);
                         UpdateAllVolumes();
 
                         m_phase1DuckTimer = 0.0f;
@@ -2769,6 +2776,9 @@ void UIManager::RenderWeddingModeTab()
 void UIManager::UpdateWeddingFilePaths()
 {
     const auto& allSounds = AudioManager::GetInstance().GetAllSounds();
+    m_weddingEntranceFilePath.clear();
+    m_weddingCeremonyFilePath.clear();
+    m_weddingExitFilePath.clear();
 
     auto entranceIt = allSounds.find(m_weddingEntranceSoundId);
     if (entranceIt != allSounds.end()) {
@@ -2807,7 +2817,7 @@ void UIManager::PlayRandomMusic() {
 
 void UIManager::StartWeddingPhase1(bool transitionToNormalMusicAfter) {
 
-    m_originalDuckFactor = m_duckFactor; 
+    m_originalDuckFactor = GetDuckFactor();
 
     m_weddingCeremonyChannel = nullptr;
     m_weddingExitChannel = nullptr;
@@ -2822,11 +2832,12 @@ void UIManager::StartWeddingPhase1(bool transitionToNormalMusicAfter) {
 }
 
 void UIManager::StartWeddingPhase2(bool transitionToNormalMusicAfter) {
-    PlaylistManager::GetInstance().Stop("");
-    AudioManager::GetInstance().StopAllSounds();
+    StopAudioBeforeWeddingPhase();
 
     m_originalDuckFactor = 1.0f;
     SetDuckFactor(0.0f);
+    m_autoDuckStartFactor = 0.0f;
+    m_autoDuckTimer = 0.0f;
 
     m_phase1SfxChannel = nullptr;
     m_phase1EntranceChannel = nullptr;
@@ -2834,7 +2845,7 @@ void UIManager::StartWeddingPhase2(bool transitionToNormalMusicAfter) {
 
     const bool loopCeremony = !transitionToNormalMusicAfter;
     m_weddingCeremonyChannel = AudioManager::GetInstance().PlayMusic(
-        m_weddingCeremonySoundId, loopCeremony, m_musicVolume * m_masterVolume);
+        m_weddingCeremonySoundId, loopCeremony);
 
     if (!m_weddingCeremonyChannel) {
         spdlog::error("Wedding phase 2 music asset is unavailable; cancelling wedding mode");
@@ -2862,19 +2873,20 @@ void UIManager::StartWeddingPhase2(bool transitionToNormalMusicAfter) {
 }
 
 void UIManager::StartWeddingPhase3(bool transitionToNormalMusicAfter, const std::string& postWeddingPlaylist) {
-    PlaylistManager::GetInstance().Stop("");
-    AudioManager::GetInstance().StopAllSounds();
+    StopAudioBeforeWeddingPhase();
 
     m_originalDuckFactor = 1.0f;
     m_targetDuckFactor = 1.0f;
     SetDuckFactor(0.0f);
+    m_autoDuckStartFactor = 0.0f;
+    m_autoDuckTimer = 0.0f;
 
     m_phase1SfxChannel = nullptr;
     m_phase1EntranceChannel = nullptr;
     m_weddingCeremonyChannel = nullptr;
 
     m_weddingExitChannel = AudioManager::GetInstance().PlayMusic(
-        m_weddingExitSoundId, false, m_musicVolume * m_masterVolume);
+        m_weddingExitSoundId);
 
     if (!m_weddingExitChannel) {
         spdlog::error("Wedding phase 3 music asset is unavailable; cancelling wedding mode");
@@ -2915,18 +2927,42 @@ void UIManager::NextWeddingPhase() {
     } else if (m_weddingPhase == 2) {
         StartWeddingPhase3(m_transitionToNormalMusicAfterWedding, m_normalPlaylistAfterWedding);
     } else if (m_weddingPhase == 3) {
-        StopAllMusic();
+        StopWeddingMode();
     }
 }
 
-void UIManager::StopAllMusic() {
-    PlaylistManager::GetInstance().Stop("");
-    AudioManager::GetInstance().StopAllSoundsWithFadeOut();
+const char* UIManager::GetWeddingStateString() const
+{
+    if (!m_weddingModeActive) return "idle";
+    if (m_weddingPhase == 2) return "ceremony";
+    if (m_weddingPhase == 3) return "exit";
+    if (m_weddingPhase != 1) return "unknown";
 
-    m_phase1SfxChannel = nullptr;
-    m_phase1EntranceChannel = nullptr;
-    m_weddingCeremonyChannel = nullptr;
-    m_weddingExitChannel = nullptr;
+    switch (m_phase1State)
+    {
+        case WeddingPhase1State::IDLE: return "entrance.idle";
+        case WeddingPhase1State::FADING_OUT_PREVIOUS: return "entrance.fading_out_previous";
+        case WeddingPhase1State::PLAYING_SFX_BEFORE: return "entrance.playing_sfx";
+        case WeddingPhase1State::WAITING_AFTER_SFX: return "entrance.waiting_after_sfx";
+        case WeddingPhase1State::DUCKING_IN: return "entrance.ducking_in";
+        case WeddingPhase1State::PLAYING_ENTRANCE: return "entrance.playing";
+        case WeddingPhase1State::DUCKING_OUT: return "entrance.ducking_out";
+    }
+    return "unknown";
+}
+
+void UIManager::StopWeddingMode()
+{
+    const auto stopChannel = [](FMOD::Channel*& channel) {
+        if (!channel) return;
+        bool playing = false;
+        if (channel->isPlaying(&playing) == FMOD_OK && playing) channel->stop();
+        channel = nullptr;
+    };
+    stopChannel(m_phase1SfxChannel);
+    stopChannel(m_phase1EntranceChannel);
+    stopChannel(m_weddingCeremonyChannel);
+    stopChannel(m_weddingExitChannel);
 
     SetDuckFactor(1.0f);
     UpdateAllVolumes();
@@ -2934,10 +2970,34 @@ void UIManager::StopAllMusic() {
     m_weddingModeActive = false;
     m_weddingPhase = 0;
     m_autoDuckingActive = false;
+    m_autoDuckStartFactor = 1.0f;
+    m_autoDuckTimer = 0.0f;
     m_autoTransitionToPhase2 = false;
     m_transitionToNormalMusicAfterWedding = false;
+    m_phase1State = WeddingPhase1State::IDLE;
+    m_phase1DuckTimer = 0.0f;
+}
 
-    spdlog::info("All music stopped via Bluetooth");
+void UIManager::StopAllMusic()
+{
+    PlaylistManager::GetInstance().Stop("");
+    AudioManager::GetInstance().StopAllSoundsWithFadeOut();
+    StopWeddingMode();
+
+    spdlog::info("All music stopped.");
+}
+
+void UIManager::ResetSessionState()
+{
+    StopWeddingMode();
+    m_weddingEntranceFilePath.clear();
+    m_weddingCeremonyFilePath.clear();
+    m_weddingExitFilePath.clear();
+    m_normalPlaylistAfterWedding = "playlist_PostShow";
+    m_playlistName = "playlist_sample";
+    m_originalDuckFactor = 1.0f;
+    m_targetDuckFactor = 0.3f;
+    m_crossfadeDuration = 10.0f;
 }
 
 }

@@ -1,0 +1,4 @@
+{"id":"ping","command":"system.ping","params":{}}
+{"id":"mixer","command":"mixer.set","params":{"master":0.75,"music":0.6}}
+{"id":"status","command":"system.status","params":{}}
+{"id":"shutdown","command":"system.shutdown","params":{}}

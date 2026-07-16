@@ -15,4 +15,6 @@ Expected files:
 - `external/fmod/lib/x64/fmod_vc.lib` and `fmod.dll`
 - `external/fmod/lib/x64/fmodL_vc.lib` and `fmodL.dll`
 
-The SDK is intentionally ignored by Git because its license does not allow redistribution.
+The SDK is intentionally ignored by Git because it is proprietary and supplied
+separately. Review the license included with your FMOD SDK before distributing
+its runtime DLLs or a packaged application.

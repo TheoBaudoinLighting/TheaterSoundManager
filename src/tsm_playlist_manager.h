@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 #include <vector>
 #include <random>
@@ -20,6 +21,25 @@ struct PlaylistOptions
     bool randomSegment = false;  
     float segmentDuration = DefaultSegmentDuration;
     bool loopPlaylist = false;  
+};
+
+// Durable, implementation-independent snapshot used to resume music after an
+// orderly restart or an unexpected power loss. Channel pointers are
+// intentionally excluded: they are only valid for the current FMOD session.
+struct PlaybackState
+{
+    bool isPlaying = false;
+    std::string playlistName;
+    std::string trackId;
+    int trackIndex = -1;
+    std::uint32_t positionMs = 0;
+    PlaylistOptions options;
+    float crossfadeDuration = 10.0f;
+    std::vector<int> randomPermutation;
+    int randomPermutationIndex = -1;
+    bool segmentActive = false;
+    std::uint32_t segmentStartMs = 0;
+    std::uint32_t segmentElapsedMs = 0;
 };
 
 class PlaylistManager
@@ -46,6 +66,9 @@ public:
 
     void Play(const std::string& playlistName, const PlaylistOptions& options);
     void Stop(const std::string& playlistName);
+    PlaybackState CapturePlaybackState() const;
+    bool ResumePlaybackState(const PlaybackState& state, std::string& errorMessage);
+    void AbortImmediately();
 
     void Update(float deltaTime);
 
@@ -96,6 +119,8 @@ private:
 
         FMOD::Channel* currentChannel = nullptr;
         FMOD::Channel* nextChannel = nullptr;
+        FMOD::Sound* expectedCurrentSound = nullptr;
+        FMOD::Sound* expectedNextSound = nullptr;
 
         float crossfadeDuration = 10.0f;
         float activeCrossfadeDuration = 10.0f;
@@ -125,6 +150,11 @@ private:
     int FindNextEligibleIndex(const Playlist& plist, int currentIndex, bool allowWrap) const;
     bool HasNextTrack(const Playlist& plist) const;
     void FinishPlaylist(Playlist& plist);
+    static bool IsOwnedChannel(FMOD::Channel* channel, FMOD::Sound* expectedSound);
+    static bool IsOwnedChannelPlaying(FMOD::Channel* channel, FMOD::Sound* expectedSound);
+    static void StopOwnedChannelWithFade(FMOD::Channel* channel, FMOD::Sound* expectedSound);
+    static void StopOwnedChannelImmediately(FMOD::Channel* channel, FMOD::Sound* expectedSound);
+    static void ClearLogicalPlaybackState(Playlist& plist);
 
     std::vector<Playlist> m_playlists;
     std::mt19937 m_rng;
