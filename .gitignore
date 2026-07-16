@@ -1,53 +1,27 @@
-# Prerequisites
-*.d
+# The only supported, disposable build tree
+/build/
 
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
+# Local CMake and IDE state
+CMakeUserPresets.json
+/.vs/
 
-# Precompiled Headers
-*.gch
-*.pch
+# Proprietary SDK (see the tracked instructions)
+/external/*
+!/external/README.md
 
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
+# Runtime state written in the repository root
+/imgui.ini
+/tsm.log
+/loudness_cache.json
+/playlists.json
+/playlist_single.json
 
-# Fortran module files
-*.mod
-*.smod
+# Locally supplied media
+/assets/**/*.mp3
+/assets/**/*.mp4
+/assets/**/*.srt
+/assets/**/*.wav
 
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
-
-# Executables
-*.exe
-*.out
-*.app
-
-#custom
-*.vs
-*.mp3
-*.wav
-*.mp4
-*.srt
-
-TheaterSoundManager/external*
-TheaterSoundManager/out*
-TheaterSoundManager/x64/*
-TheaterSoundManager/TheaterS.*
-
-TheaterSoundManager_Tests/x64/*
-x64/*
-packages/*
-*.log
-*.ini
-
-*.json
-!TheaterSoundManager/config/tsm_config.json
+# Operating-system metadata
+.DS_Store
+Thumbs.db

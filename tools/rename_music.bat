@@ -1,5 +1,6 @@
 @echo off
-cd assets\musics\PreShowMariage
+setlocal
+cd /d "%~dp0..\assets\musics\PreShowMariage"
 
 ren "Bon Entendeur vs Françoise Hardy - Le temps de l'amour (Clip officiel).mp3" "01_Bon_Entendeur_Le_temps_de_l_amour.mp3"
 ren "Bon Entendeur vs Nicoletta - Fio Maravilha (Clip officiel).mp3" "02_Bon_Entendeur_Fio_Maravilha.mp3"
@@ -12,4 +13,4 @@ ren "Charles Aznavour Emmenez moi ( house remix JAXX official ).mp3" "08_Charles
 ren "Charles Aznavour   La Bohème Boubou Remix.mp3" "09_Charles_Aznavour_La_Boheme_Remix.mp3"
 ren "Bon Entendeur vs Mouloudji - L'amour.mp3" "10_Bon_Entendeur_L_amour.mp3"
 ren "Edith Piaf  - La Foule (D33pSoul Remix).mp3" "11_Edith_Piaf_La_Foule_Remix.mp3"
-ren "Mariage d'Amour - Paul de Senneville  Jacob's Piano.mp3" "12_Paul_de_Senneville_Mariage_d_Amour.mp3" 
+ren "Mariage d'Amour - Paul de Senneville  Jacob's Piano.mp3" "12_Paul_de_Senneville_Mariage_d_Amour.mp3"

@@ -1,0 +1,57 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "CMake: configure",
+      "type": "shell",
+      "command": "cmake",
+      "args": ["--preset", "default"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "CMake: build Debug",
+      "type": "shell",
+      "command": "cmake",
+      "args": ["--build", "--preset", "debug"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "dependsOn": "CMake: configure",
+      "problemMatcher": "$msCompile",
+      "group": { "kind": "build", "isDefault": true }
+    },
+    {
+      "label": "CMake: build Release",
+      "type": "shell",
+      "command": "cmake",
+      "args": ["--build", "--preset", "release"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "dependsOn": "CMake: configure",
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "CMake: test Debug",
+      "type": "shell",
+      "command": "ctest",
+      "args": ["--preset", "debug"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "dependsOn": "CMake: build Debug",
+      "problemMatcher": []
+    },
+    {
+      "label": "CMake: validate all",
+      "type": "shell",
+      "command": "cmake",
+      "args": ["--workflow", "--preset", "validate"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "CMake: delete build",
+      "type": "shell",
+      "command": "cmake",
+      "args": ["-E", "remove_directory", "build"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    }
+  ]
+}

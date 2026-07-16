@@ -1563,10 +1563,8 @@ void UIManager::RenderPlaylistControls()
             }
         }
 
-        if (PlaylistManager::GetInstance().IsInCrossfade())
+        if (isInCrossfade)
         {
-            float crossfadeProgress = PlaylistManager::GetInstance().GetCrossfadeProgress();
-            
             char crossfadeText[32];
             snprintf(crossfadeText, sizeof(crossfadeText), "Crossfade: %.1f%%", crossfadeProgress * 100.0f);
             
@@ -2765,7 +2763,6 @@ void UIManager::RenderWeddingModeTab()
         }
     }
 
-    float deltaTime = ImGui::GetIO().DeltaTime;
     CheckWeddingPhaseTransition();
 }
 

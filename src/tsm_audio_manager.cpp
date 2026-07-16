@@ -5,7 +5,7 @@
 #include <fmod_dsp_effects.h>
 
 #include <spdlog/spdlog.h>
-#include <json/json.hpp>
+#include <nlohmann/json.hpp>
 #include <algorithm>
 #include <cmath>
 #include <filesystem>

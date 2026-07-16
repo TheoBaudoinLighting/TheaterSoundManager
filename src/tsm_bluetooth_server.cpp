@@ -105,7 +105,7 @@ ULONGLONG GetLocalBluetoothAddress()
     return btAddr;
 }
 
-int RegisterBluetoothService(SOCKET sock, SOCKADDR_BTH* localBthAddr)
+int RegisterBluetoothService(SOCKADDR_BTH* localBthAddr)
 {
     CSADDR_INFO csAddrInfo;
     ZeroMemory(&csAddrInfo, sizeof(csAddrInfo));
@@ -290,7 +290,7 @@ void BluetoothServerLoop()
     }
     spdlog::info("Server listening on RFCOMM port: {}.", localAddr.port);
     
-    if (RegisterBluetoothService(serverSocket, &localAddr) != 0)
+    if (RegisterBluetoothService(&localAddr) != 0)
     {
         spdlog::error("Failed to register service.");
         ReleaseTrackedSocket(serverSocket, false);
