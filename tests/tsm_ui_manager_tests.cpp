@@ -67,18 +67,18 @@ namespace TSM {
             ASSERT_FLOAT_EQ(manager.GetDuckFactor(), 1.0f);
         }
 
-        TEST_F(UIManagerTests, PlaylistControlsAlwaysResolveToAnExistingPlaylist) {
+        TEST_F(UIManagerTests, PlaylistControlsDefaultToNoPlaylist) {
             auto& playlists = PlaylistManager::GetInstance();
             auto& manager = UIManager::GetInstance();
 
             playlists.CreatePlaylist("playlist_PostShow");
             playlists.CreatePlaylist("playlist_PreShow");
             manager.RefreshPlaylistSelection();
-            EXPECT_EQ(manager.GetSelectedPlaylistName(), "playlist_PreShow");
+            EXPECT_TRUE(manager.GetSelectedPlaylistName().empty());
 
             playlists.DeletePlaylist("playlist_PreShow");
             manager.RefreshPlaylistSelection();
-            EXPECT_EQ(manager.GetSelectedPlaylistName(), "playlist_PostShow");
+            EXPECT_TRUE(manager.GetSelectedPlaylistName().empty());
 
             playlists.DeletePlaylist("playlist_PostShow");
             manager.RefreshPlaylistSelection();

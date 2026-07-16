@@ -52,15 +52,7 @@
       ]
     }
   ],
-  "wedding": {
-    "entrance": "assets/wedding/Entree_RunrigHeartsOfOldenGlory.mp3",
-    "ceremony": "assets/wedding/Loop_PortOrleanAmbience.mp3",
-    "exit": "assets/musics/PreShowMariage/MariagedAmour_PauldeSennevilleJacobsPiano.mp3",
-    "transitionSfx": {
-      "id": "sfx_shine",
-      "path": "assets/sfx/DisneyShine_SFX.mp3"
-    }
-  },
+  "wedding": {},
   "announcements": [
     { "id": "announce_bienvenue_01", "path": "assets/annonces/Both/bienvenue_01.mp3", "hour": 12, "minute": 0 },
     { "id": "announce_15min_cl", "path": "assets/annonces/Both/15min_cl.mp3", "hour": 12, "minute": 15 },

@@ -325,28 +325,11 @@ bool UIManager::SelectPlaylist(const std::string& playlistName)
 void UIManager::RefreshPlaylistSelection()
 {
     auto& playlists = PlaylistManager::GetInstance();
-    if (!m_playlistName.empty() && playlists.GetPlaylistByName(m_playlistName)) return;
+    if (m_playlistName.empty() || playlists.GetPlaylistByName(m_playlistName)) return;
 
     m_playlistName.clear();
-    const std::vector<std::string> names = playlists.GetPlaylistNames();
-    if (names.empty()) return;
-
-    if (const auto* active = playlists.GetActivePlaylist();
-        active && active->isPlaying && SelectPlaylist(active->name))
-        return;
-
-    const auto isPlayable = [&](const std::string& name) {
-        const auto* playlist = playlists.GetPlaylistByName(name);
-        return playlist && !playlist->tracks.empty();
-    };
-    const auto preShow = std::find(names.begin(), names.end(), "playlist_PreShow");
-    if (preShow != names.end() && isPlayable(*preShow) && SelectPlaylist(*preShow))
-        return;
-
-    const auto firstPlayable = std::find_if(names.begin(), names.end(), isPlayable);
-    if (firstPlayable != names.end() && SelectPlaylist(*firstPlayable)) return;
-    if (preShow != names.end() && SelectPlaylist(*preShow)) return;
-    (void)SelectPlaylist(names.front());
+    m_playlistFeedback.clear();
+    m_playlistFeedbackIsError = false;
 }
 
 bool UIManager::Init(
@@ -1558,10 +1541,20 @@ void UIManager::RenderPlaylistControls()
     ImGui::TextUnformatted("Programme playback");
     ImGui::SetNextItemWidth(360.0f);
     const char* preview = m_playlistName.empty()
-        ? "No playlist available"
+        ? "No playlist"
         : m_playlistName.c_str();
     if (ImGui::BeginCombo("Playlist", preview))
     {
+        const bool noPlaylistSelected = m_playlistName.empty();
+        if (ImGui::Selectable("No playlist", noPlaylistSelected))
+        {
+            m_playlistName.clear();
+            m_playlistFeedback.clear();
+            m_playlistFeedbackIsError = false;
+        }
+        if (noPlaylistSelected) ImGui::SetItemDefaultFocus();
+
+        if (!playlistNames.empty()) ImGui::Separator();
         for (const std::string& playlistName : playlistNames)
         {
             const bool selected = playlistName == m_playlistName;
@@ -1592,9 +1585,18 @@ void UIManager::RenderPlaylistControls()
     }
     else
     {
-        ImGui::TextColored(
-            ImVec4(1.0f, 0.65f, 0.25f, 1.0f),
-            "No playlist is configured. Import or create one in the audio library.");
+        if (playlistNames.empty())
+        {
+            ImGui::TextColored(
+                ImVec4(1.0f, 0.65f, 0.25f, 1.0f),
+                "No playlist is configured. Import or create one in the audio library.");
+        }
+        else
+        {
+            ImGui::TextColored(
+                ImVec4(0.65f, 0.65f, 0.65f, 1.0f),
+                "Select a playlist to enable programme playback.");
+        }
     }
 
     if (playbackBlocked)

@@ -290,6 +290,32 @@ TEST(ConfigTests, ShippedCinemaExampleValidatesAndParses)
     EXPECT_EQ(config.cinema.safety.evacuationAnnouncementId, "evacuation_fr");
 }
 
+TEST(ConfigTests, ShippedDefaultKeepsWeddingAssetsOptIn)
+{
+    const std::filesystem::path path = FindRepositoryFile("config/tsm_config.json");
+    ASSERT_FALSE(path.empty());
+
+    AppConfig config;
+    std::vector<ConfigValidationIssue> issues;
+    std::string error;
+    ASSERT_TRUE(LoadValidatedAppConfig(path.string(), config, issues, error)) << error;
+    EXPECT_TRUE(issues.empty());
+
+    const auto hasPlaylist = [&](const std::string& name)
+    {
+        return std::any_of(config.playlists.begin(), config.playlists.end(),
+            [&](const ConfiguredPlaylist& playlist) { return playlist.name == name; });
+    };
+    EXPECT_TRUE(hasPlaylist("playlist_PreShow"));
+    EXPECT_TRUE(hasPlaylist("playlist_PostShow"));
+    EXPECT_FALSE(config.announcements.empty());
+    EXPECT_TRUE(config.wedding.entrance.empty());
+    EXPECT_TRUE(config.wedding.ceremony.empty());
+    EXPECT_TRUE(config.wedding.exit.empty());
+    EXPECT_TRUE(config.wedding.transitionSfx.id.empty());
+    EXPECT_TRUE(config.wedding.transitionSfx.path.empty());
+}
+
 TEST(ConfigTests, CinemaValidationHandlesWrongJsonTypesWithoutThrowing)
 {
     nlohmann::json document = MinimalCinemaDocument();

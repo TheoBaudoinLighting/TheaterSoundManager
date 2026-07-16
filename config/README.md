@@ -10,7 +10,8 @@ licensed deployment that supplies the referenced media.
 - `loudnessTargetLufs`: perceived loudness target, normally between `-24` and `-10`.
 - `playlists[].options.segmentDuration`: default segment duration in seconds.
 - `playlists[].tracks`: music IDs and paths loaded into the playlist.
-- `wedding`: entrance, ceremony, exit, and transition SFX paths.
+- `wedding`: optional entrance, ceremony, exit, and transition SFX paths. Keep
+  it as `{}` to leave wedding mode disabled and load no wedding media at startup.
 - `announcements`: announcement paths and optional `hour` / `minute` schedule.
 - `cinema.schedules`: deterministic date/period-to-playlist calendars.
 - `cinema.resume`: atomic crash-checkpoint policy and maximum checkpoint age.
