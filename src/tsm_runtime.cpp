@@ -416,31 +416,6 @@ bool ApplicationRuntime::LoadConfiguration(
             loadedPlaylist->options = playlist.options;
     }
 
-    const auto loadWedding = [&](int phase, const std::string& configuredPath, const char* id) {
-        if (configuredPath.empty()) return;
-        const std::string path = ResolveAssetPath(configuredPath, resourceRoot);
-        if (audioManager.LoadWeddingPhaseSound(phase, path))
-            ++m_loadReport.sounds;
-        else
-            m_loadReport.failures.push_back({id, path, "Unable to load wedding asset."});
-    };
-    loadWedding(1, config.wedding.entrance, "wedding_entrance_sound");
-    loadWedding(2, config.wedding.ceremony, "wedding_ceremony_sound");
-    loadWedding(3, config.wedding.exit, "wedding_exit_sound");
-
-    if (!config.wedding.transitionSfx.id.empty() &&
-        !config.wedding.transitionSfx.path.empty())
-    {
-        const std::string path = ResolveAssetPath(config.wedding.transitionSfx.path, resourceRoot);
-        if (audioManager.LoadSound(
-                config.wedding.transitionSfx.id, path, false,
-                AudioManager::SoundKind::SoundEffect))
-            ++m_loadReport.sounds;
-        else
-            m_loadReport.failures.push_back(
-                {config.wedding.transitionSfx.id, path, "Unable to load transition SFX."});
-    }
-
     for (const auto& announcement : config.announcements)
     {
         const std::string path = ResolveAssetPath(announcement.path, resourceRoot);
@@ -520,7 +495,6 @@ bool ApplicationRuntime::LoadConfiguration(
     }
 
     UIManager::GetInstance().RefreshPlaylistSelection();
-    UIManager::GetInstance().UpdateWeddingFilePaths();
     if (!m_loadReport.failures.empty())
     {
         spdlog::warn(
@@ -551,7 +525,6 @@ void ApplicationRuntime::Tick(float deltaTime)
     {
         AnnouncementManager::GetInstance().Update(deltaTime);
         PlaylistManager::GetInstance().Update(deltaTime);
-        UIManager::GetInstance().UpdateWeddingMode(deltaTime);
     }
 }
 

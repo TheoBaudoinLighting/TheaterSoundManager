@@ -7,6 +7,7 @@
 #include <spdlog/spdlog.h>
 #include <nlohmann/json.hpp>
 #include <algorithm>
+#include <chrono>
 #include <random>
 #include <ctime>
 #include <cmath>
@@ -21,6 +22,36 @@ namespace TSM
 
 namespace
 {
+std::int64_t CurrentEpochSeconds()
+{
+    return std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
+float CurrentNormalizationGain(FMOD::Channel* channel)
+{
+    const float gain = AudioManager::GetInstance()
+        .GetNormalizationGainForChannel(channel);
+    return std::isfinite(gain) &&
+            gain > (std::numeric_limits<float>::epsilon)()
+        ? gain
+        : 1.0f;
+}
+
+float ScaleCapturedChannelVolume(
+    float capturedVolume,
+    float capturedNormalizationGain,
+    FMOD::Channel* channel)
+{
+    if (!std::isfinite(capturedNormalizationGain) ||
+        capturedNormalizationGain <= (std::numeric_limits<float>::epsilon)())
+    {
+        return capturedVolume;
+    }
+    return capturedVolume *
+        CurrentNormalizationGain(channel) / capturedNormalizationGain;
+}
+
 std::filesystem::path PathFromUtf8(const std::string& value)
 {
     const auto* begin = reinterpret_cast<const char8_t*>(value.data());
@@ -40,6 +71,110 @@ std::string ResolveImportedTrackPath(
     if (path.is_relative())
         path = PathFromUtf8(playlistFilePath).parent_path() / path;
     return PathToUtf8(path.lexically_normal());
+}
+
+bool AreSegmentDurationsValid(const PlaylistOptions& options)
+{
+    const auto valid = [](float value) {
+        return std::isfinite(value) && value >= 0.001f && value <= 86400.0f;
+    };
+    return valid(options.segmentDuration) &&
+        valid(options.minSegmentDuration) &&
+        valid(options.maxSegmentDuration) &&
+        options.minSegmentDuration <= options.maxSegmentDuration;
+}
+
+bool SamePlaylistOptions(
+    const PlaylistOptions& left,
+    const PlaylistOptions& right)
+{
+    return left.randomOrder == right.randomOrder &&
+        left.randomSegment == right.randomSegment &&
+        left.segmentDuration == right.segmentDuration &&
+        left.automaticSegmentDuration == right.automaticSegmentDuration &&
+        left.minSegmentDuration == right.minSegmentDuration &&
+        left.maxSegmentDuration == right.maxSegmentDuration &&
+        left.loopPlaylist == right.loopPlaylist;
+}
+
+constexpr std::size_t MaximumSmartTrackShortlistSize = 32u;
+constexpr std::size_t SmartFineCandidatesPerKind = 128u;
+constexpr std::size_t MaximumCoarseEntrySamples = 8u;
+constexpr std::size_t CoarseFatigueSamplesPerWindow = 5u;
+
+float UnitScore(float value, float fallback = 0.0f)
+{
+    return std::isfinite(value)
+        ? std::clamp(value, 0.0f, 1.0f)
+        : std::clamp(fallback, 0.0f, 1.0f);
+}
+
+double CoarseFatigueDecay(
+    const ListeningHeatmap::State& state,
+    std::int64_t selectionEpochSeconds)
+{
+    if (selectionEpochSeconds <= state.referenceEpochSeconds) return 1.0;
+    if (!std::isfinite(state.dailyDecayFactor) ||
+        state.dailyDecayFactor < 0.0 || state.dailyDecayFactor > 1.0)
+        return 1.0;
+    const double elapsedDays = static_cast<double>(
+        selectionEpochSeconds - state.referenceEpochSeconds) / 86400.0;
+    return std::clamp(
+        std::pow(state.dailyDecayFactor, elapsedDays), 0.0, 1.0);
+}
+
+// This intentionally samples a fixed number of heatmap cells. The precise
+// prefix-sum scoring remains in ChooseSegment, but coarse track shortlisting
+// must never copy or scan a multi-hour heatmap on the audio control thread.
+float CoarseExplorationScore(
+    const ListeningHeatmap::State* state,
+    float startSeconds,
+    float durationSeconds,
+    std::int64_t selectionEpochSeconds)
+{
+    if (!state || state->bucketFatigue.empty() ||
+        !std::isfinite(state->bucketDurationSeconds) ||
+        state->bucketDurationSeconds <= 0.0)
+        return 1.0f;
+
+    const double trackDuration = std::max(
+        std::isfinite(state->trackDurationSeconds)
+            ? state->trackDurationSeconds
+            : 0.0,
+        0.0);
+    const double start = std::clamp(
+        static_cast<double>(std::isfinite(startSeconds) ? startSeconds : 0.0f),
+        0.0, trackDuration);
+    const double end = std::clamp(
+        start + static_cast<double>(
+            std::isfinite(durationSeconds)
+                ? std::max(durationSeconds, 0.0f)
+                : 0.0f),
+        start, trackDuration);
+    if (end <= start) return 1.0f;
+
+    const double decay = CoarseFatigueDecay(*state, selectionEpochSeconds);
+    double fatigue = 0.0;
+    for (std::size_t sample = 0u;
+         sample < CoarseFatigueSamplesPerWindow;
+         ++sample)
+    {
+        const double fraction =
+            (static_cast<double>(sample) + 0.5) /
+            static_cast<double>(CoarseFatigueSamplesPerWindow);
+        const double time = start + (end - start) * fraction;
+        const std::size_t bucket = std::min(
+            static_cast<std::size_t>(
+                std::floor(time / state->bucketDurationSeconds)),
+            state->bucketFatigue.size() - 1u);
+        const double value = state->bucketFatigue[bucket];
+        fatigue += std::isfinite(value)
+            ? std::clamp(value, 0.0, 1.0) * decay
+            : 0.0;
+    }
+    const double mean = fatigue /
+        static_cast<double>(CoarseFatigueSamplesPerWindow);
+    return static_cast<float>(std::clamp(1.0 - mean, 0.0, 1.0));
 }
 
 struct ImportedTrack
@@ -142,14 +277,31 @@ bool ParseImportedPlaylist(
             !ReadBooleanOption(
                 options, "randomSegment", imported.options.randomSegment, errorMessage) ||
             !ReadBooleanOption(
+                options, "automaticSegmentDuration",
+                imported.options.automaticSegmentDuration, errorMessage) ||
+            !ReadBooleanOption(
                 options, "loopPlaylist", imported.options.loopPlaylist, errorMessage) ||
             !ReadDurationOption(
                 options, "segmentDuration", 0.0, false, 86400.0,
                 imported.options.segmentDuration, errorMessage) ||
             !ReadDurationOption(
+                options, "minSegmentDuration", 0.0, false, 86400.0,
+                imported.options.minSegmentDuration, errorMessage) ||
+            !ReadDurationOption(
+                options, "maxSegmentDuration", 0.0, false, 86400.0,
+                imported.options.maxSegmentDuration, errorMessage) ||
+            !ReadDurationOption(
                 options, "crossfadeDuration", 0.0, true, 3600.0,
                 imported.crossfadeDuration, errorMessage))
         {
+            return false;
+        }
+        if (imported.options.minSegmentDuration >
+            imported.options.maxSegmentDuration)
+        {
+            errorMessage =
+                "Playlist option 'minSegmentDuration' cannot exceed "
+                "'maxSegmentDuration'.";
             return false;
         }
     }
@@ -539,6 +691,12 @@ bool PlaylistManager::ExportPlaylist(const std::string& playlistName, const std:
         j["options"]["randomOrder"] = it->options.randomOrder;
         j["options"]["randomSegment"] = it->options.randomSegment;
         j["options"]["segmentDuration"] = it->options.segmentDuration;
+        j["options"]["automaticSegmentDuration"] =
+            it->options.automaticSegmentDuration;
+        j["options"]["minSegmentDuration"] =
+            it->options.minSegmentDuration;
+        j["options"]["maxSegmentDuration"] =
+            it->options.maxSegmentDuration;
         j["options"]["loopPlaylist"] = it->options.loopPlaylist;
         j["options"]["crossfadeDuration"] = it->crossfadeDuration;
         j["tracks"] = json::array();
@@ -780,6 +938,12 @@ bool PlaylistManager::SavePlaylistsToFile(const std::string& filePath)
             playlistJson["options"]["randomOrder"] = playlist.options.randomOrder;
             playlistJson["options"]["randomSegment"] = playlist.options.randomSegment;
             playlistJson["options"]["segmentDuration"] = playlist.options.segmentDuration;
+            playlistJson["options"]["automaticSegmentDuration"] =
+                playlist.options.automaticSegmentDuration;
+            playlistJson["options"]["minSegmentDuration"] =
+                playlist.options.minSegmentDuration;
+            playlistJson["options"]["maxSegmentDuration"] =
+                playlist.options.maxSegmentDuration;
             playlistJson["options"]["loopPlaylist"] = playlist.options.loopPlaylist;
             playlistJson["options"]["crossfadeDuration"] = playlist.crossfadeDuration;
             playlistJson["tracks"] = json::array();
@@ -974,10 +1138,12 @@ void PlaylistManager::ClearLogicalPlaybackState(Playlist& plist)
     plist.expectedNextSound = nullptr;
     plist.isCrossfading = false;
     plist.crossfadeTimer = 0.0f;
-    plist.segmentTimer = 0.0f;
-    plist.segmentMaxDuration = 0.0f;
-    plist.segmentModeActive = false;
-    plist.chosenStartTime = 0.0f;
+    plist.currentSegment = {};
+    plist.nextSegment = {};
+    plist.lastSmartCandidatePoolSize = 0u;
+    plist.lastSmartShortlistSize = 0u;
+    plist.lastSmartFineEvaluationCount = 0u;
+    plist.lastSmartFineCandidateBudgetPerKind = 0u;
     plist.secondsUntilTransition = (std::numeric_limits<float>::max)();
     plist.lastTransitionReason = TransitionLogic::Reason::None;
 }
@@ -995,15 +1161,36 @@ PlaybackState PlaylistManager::CapturePlaybackState() const
     FMOD::Channel* channel = nullptr;
     FMOD::Sound* expectedSound = nullptr;
     int trackIndex = -1;
-    if (playlist->isCrossfading &&
-        IsOwnedChannelPlaying(playlist->nextChannel, playlist->expectedNextSound))
+    bool capturedNextChannel = false;
+    const bool currentPlaying = IsOwnedChannelPlaying(
+        playlist->currentChannel, playlist->expectedCurrentSound);
+    const bool nextPlaying = playlist->isCrossfading &&
+        IsOwnedChannelPlaying(
+            playlist->nextChannel, playlist->expectedNextSound);
+    bool nextIsDominant = nextPlaying && !currentPlaying;
+    if (currentPlaying && nextPlaying)
+    {
+        // FMOD channel volumes include each track's loudness-normalization
+        // gain. Comparing those raw values can therefore select the quieter
+        // programme side even when its crossfade envelope is dominant. The
+        // equal-power progression is the source of truth for recovery.
+        const float progress = playlist->activeCrossfadeDuration <= 0.0f
+            ? 1.0f
+            : playlist->crossfadeTimer /
+                playlist->activeCrossfadeDuration;
+        const TransitionLogic::EqualPowerGains gains =
+            TransitionLogic::CalculateEqualPowerGains(progress);
+        nextIsDominant = gains.incoming >= gains.outgoing;
+    }
+
+    if (nextIsDominant)
     {
         channel = playlist->nextChannel;
         expectedSound = playlist->expectedNextSound;
         trackIndex = playlist->nextIndex;
+        capturedNextChannel = true;
     }
-    else if (IsOwnedChannelPlaying(
-                 playlist->currentChannel, playlist->expectedCurrentSound))
+    else if (currentPlaying)
     {
         channel = playlist->currentChannel;
         expectedSound = playlist->expectedCurrentSound;
@@ -1024,7 +1211,10 @@ PlaybackState PlaylistManager::CapturePlaybackState() const
     state.positionMs = positionMs;
     state.options = playlist->options;
     state.crossfadeDuration = playlist->crossfadeDuration;
-    state.segmentActive = playlist->segmentModeActive;
+    const Playlist::SegmentRuntime& capturedSegment = capturedNextChannel
+        ? playlist->nextSegment
+        : playlist->currentSegment;
+    state.segmentActive = capturedSegment.active;
 
     const auto secondsToMilliseconds = [](float seconds) {
         if (!std::isfinite(seconds) || seconds <= 0.0f) return std::uint32_t{0};
@@ -1035,8 +1225,10 @@ PlaybackState PlaylistManager::CapturePlaybackState() const
     };
     if (state.segmentActive)
     {
-        state.segmentStartMs = secondsToMilliseconds(playlist->chosenStartTime);
-        state.segmentElapsedMs = secondsToMilliseconds(playlist->segmentTimer);
+        state.segmentStartMs = secondsToMilliseconds(capturedSegment.startSeconds);
+        state.segmentElapsedMs = secondsToMilliseconds(capturedSegment.elapsedSeconds);
+        state.segmentDurationMs =
+            secondsToMilliseconds(capturedSegment.durationSeconds);
     }
 
     if (state.options.randomOrder)
@@ -1086,6 +1278,17 @@ bool PlaylistManager::ResumePlaybackState(
         errorMessage = "The saved segment duration is outside the supported range.";
         return false;
     }
+    if (!std::isfinite(state.options.minSegmentDuration) ||
+        state.options.minSegmentDuration <= 0.0f ||
+        state.options.minSegmentDuration > 86400.0f ||
+        !std::isfinite(state.options.maxSegmentDuration) ||
+        state.options.maxSegmentDuration <= 0.0f ||
+        state.options.maxSegmentDuration > 86400.0f ||
+        state.options.minSegmentDuration > state.options.maxSegmentDuration)
+    {
+        errorMessage = "The saved automatic segment range is invalid.";
+        return false;
+    }
     if (!std::isfinite(state.crossfadeDuration) ||
         state.crossfadeDuration < 0.0f || state.crossfadeDuration > 3600.0f)
     {
@@ -1110,15 +1313,38 @@ bool PlaylistManager::ResumePlaybackState(
 
     if (state.segmentActive)
     {
-        const double durationMs = static_cast<double>(state.options.segmentDuration) * 1000.0;
+        const std::uint64_t segmentEndMs =
+            static_cast<std::uint64_t>(state.segmentStartMs) +
+            static_cast<std::uint64_t>(state.segmentDurationMs);
         if (state.segmentStartMs >= lengthMs ||
-            static_cast<double>(state.segmentElapsedMs) > durationMs)
+            state.segmentDurationMs == 0 ||
+            state.segmentElapsedMs > state.segmentDurationMs ||
+            segmentEndMs > static_cast<std::uint64_t>(lengthMs) + 2u)
         {
             errorMessage = "The saved random segment position is invalid.";
             return false;
         }
+
+        const std::uint64_t expectedPositionMs =
+            static_cast<std::uint64_t>(state.segmentStartMs) +
+            static_cast<std::uint64_t>(state.segmentElapsedMs);
+        const std::uint64_t actualPositionMs = state.positionMs;
+        const std::uint64_t positionDifferenceMs =
+            expectedPositionMs > actualPositionMs
+                ? expectedPositionMs - actualPositionMs
+                : actualPositionMs - expectedPositionMs;
+        // Checkpoints are produced on a periodic control tick and the FMOD
+        // cursor can lag logical time briefly. Larger disagreement indicates
+        // a corrupt or mismatched checkpoint rather than scheduler jitter.
+        if (positionDifferenceMs > 2000u)
+        {
+            errorMessage =
+                "The saved audio position does not match its segment progress.";
+            return false;
+        }
     }
-    else if (state.segmentStartMs != 0 || state.segmentElapsedMs != 0)
+    else if (state.segmentStartMs != 0 || state.segmentElapsedMs != 0 ||
+             state.segmentDurationMs != 0)
     {
         errorMessage = "A non-segmented playback state contains segment progress.";
         return false;
@@ -1160,14 +1386,14 @@ bool PlaylistManager::ResumePlaybackState(
     {
         const std::uint64_t segmentEndMs =
             static_cast<std::uint64_t>(state.segmentStartMs) +
-            static_cast<std::uint64_t>(state.options.segmentDuration * 1000.0f);
+            static_cast<std::uint64_t>(state.segmentDurationMs);
         const unsigned int maximumSegmentPosition = static_cast<unsigned int>(
             std::min<std::uint64_t>(lengthMs - 1u, segmentEndMs));
         clampedPositionMs = std::clamp(
             clampedPositionMs, state.segmentStartMs, maximumSegmentPosition);
     }
     FMOD::Channel* stagedChannel = AudioManager::GetInstance().PlayMusic(
-        state.trackId, false, 1.0f);
+        state.trackId, false, 0.0f);
     if (!stagedChannel)
     {
         errorMessage = "Unable to create a channel for the saved track.";
@@ -1186,6 +1412,17 @@ bool PlaylistManager::ResumePlaybackState(
     FMOD_RESULT result = stagedChannel->setPaused(true);
     if (result == FMOD_OK)
         result = stagedChannel->setPosition(clampedPositionMs, FMOD_TIMEUNIT_MS);
+    if (result == FMOD_OK)
+    {
+        // PlayMusic creates its FMOD channel paused internally, but normally
+        // releases it before returning. Keeping the public staging call at
+        // zero volume guarantees that no sample can escape before this seek.
+        // Restore the normalized programme gain while it is paused, then make
+        // the fully configured channel audible in one final step.
+        result = stagedChannel->setVolume(
+            AudioManager::GetInstance().GetNormalizationGainForChannel(
+                stagedChannel));
+    }
     if (result == FMOD_OK) result = stagedChannel->setPaused(false);
     if (result != FMOD_OK)
     {
@@ -1223,12 +1460,46 @@ bool PlaylistManager::ResumePlaybackState(
     playlist->randomIndexPos = state.options.randomOrder
         ? state.randomPermutationIndex
         : 0;
-    playlist->segmentModeActive = state.segmentActive;
-    playlist->segmentMaxDuration = state.segmentActive
-        ? state.options.segmentDuration
-        : 0.0f;
-    playlist->chosenStartTime = state.segmentStartMs / 1000.0f;
-    playlist->segmentTimer = state.segmentElapsedMs / 1000.0f;
+    playlist->currentSegment.active = state.segmentActive;
+    playlist->currentSegment.durationSeconds = state.segmentActive
+        ? state.segmentDurationMs / 1000.0f
+        : lengthMs / 1000.0f;
+    playlist->currentSegment.startSeconds = state.segmentStartMs / 1000.0f;
+    playlist->currentSegment.elapsedSeconds = state.segmentActive
+        ? state.segmentElapsedMs / 1000.0f
+        : clampedPositionMs / 1000.0f;
+    if (state.segmentActive)
+    {
+        SegmentDecisionInfo& decision = playlist->currentSegment.decision;
+        decision.active = true;
+        decision.mode = "restored_checkpoint";
+        decision.startSeconds = playlist->currentSegment.startSeconds;
+        decision.durationSeconds = playlist->currentSegment.durationSeconds;
+        decision.endSeconds = decision.startSeconds + decision.durationSeconds;
+        decision.reasons = {"restored from durable playback checkpoint"};
+
+        if (const auto* analysis =
+                AudioManager::GetInstance().GetMusicAnalysis(state.trackId);
+            analysis && !analysis->frames.empty())
+        {
+            const float exitTime = decision.endSeconds;
+            const auto frame = std::lower_bound(
+                analysis->frames.begin(), analysis->frames.end(), exitTime,
+                [](const MusicAnalysis::Frame& candidate, float time) {
+                    return candidate.timeSeconds < time;
+                });
+            const std::size_t index = frame == analysis->frames.end()
+                ? analysis->frames.size() - 1u
+                : static_cast<std::size_t>(
+                      std::distance(analysis->frames.begin(), frame));
+            playlist->currentSegment.exitProfile =
+                MusicAnalysis::BuildBoundaryProfile(
+                    analysis->frames,
+                    index,
+                    MusicAnalysis::CandidateKind::Exit);
+        }
+    }
+    playlist->nextSegment = {};
     playlist->isPlaying = true;
     m_activePlaylistName = state.playlistName;
     return true;
@@ -1266,6 +1537,120 @@ void PlaylistManager::Play(const std::string& playlistName, const PlaylistOption
     (void)StartPlayback(*it, options);
 }
 
+bool PlaylistManager::ConfigurePlaylistPlayback(
+    const std::string& playlistName,
+    const PlaylistOptions& options,
+    float crossfadeDuration,
+    bool restartIfPlaying)
+{
+    if (!AreSegmentDurationsValid(options) ||
+        !std::isfinite(crossfadeDuration) ||
+        crossfadeDuration < 0.0f || crossfadeDuration > 3600.0f)
+        return false;
+
+    Playlist* playlist = GetPlaylistByName(playlistName);
+    if (!playlist) return false;
+    const bool wasPlaying = playlist->isPlaying;
+    const bool runtimeOptionsChanged =
+        !SamePlaylistOptions(playlist->options, options);
+    if (wasPlaying && runtimeOptionsChanged && !restartIfPlaying)
+        return false;
+
+    if (wasPlaying && runtimeOptionsChanged)
+    {
+        // Preserve the complete live runtime until the replacement has
+        // actually opened a valid FMOD channel. Stop() only schedules its
+        // owned channels to fade, so a failed restart can cancel those fades
+        // and restore the exact programme state instead of leaving silence.
+        const Playlist previousRuntime = *playlist;
+        const std::string previousActivePlaylist = m_activePlaylistName;
+        const PlaybackState previousCheckpoint = CapturePlaybackState();
+        float previousCurrentVolume = 0.0f;
+        float previousNextVolume = 0.0f;
+        const bool hadCurrentVolume = previousRuntime.currentChannel &&
+            previousRuntime.currentChannel->getVolume(
+                &previousCurrentVolume) == FMOD_OK;
+        const bool hadNextVolume = previousRuntime.nextChannel &&
+            previousRuntime.nextChannel->getVolume(&previousNextVolume) == FMOD_OK;
+
+        Stop(playlistName);
+        playlist = GetPlaylistByName(playlistName);
+        if (!playlist) return false;
+        playlist->crossfadeDuration = crossfadeDuration;
+        if (!StartPlayback(*playlist, options))
+        {
+            playlist = GetPlaylistByName(playlistName);
+            if (!playlist) return false;
+            StopOwnedChannelImmediately(
+                playlist->currentChannel, playlist->expectedCurrentSound);
+            StopOwnedChannelImmediately(
+                playlist->nextChannel, playlist->expectedNextSound);
+            *playlist = previousRuntime;
+            m_activePlaylistName = previousActivePlaylist;
+
+            const bool currentSurvived = IsOwnedChannelPlaying(
+                playlist->currentChannel, playlist->expectedCurrentSound);
+            const bool nextSurvived = IsOwnedChannelPlaying(
+                playlist->nextChannel, playlist->expectedNextSound);
+            if (currentSurvived || nextSurvived)
+            {
+                if (currentSurvived)
+                {
+                    AudioManager::GetInstance().SetChannelVolume(
+                        playlist->currentChannel,
+                        hadCurrentVolume
+                            ? previousCurrentVolume
+                            : AudioManager::GetInstance()
+                                .GetNormalizationGainForChannel(
+                                    playlist->currentChannel));
+                    if (!playlist->isCrossfading)
+                    {
+                        AudioManager::GetInstance().ReconcileMusicChannelVolume(
+                            playlist->currentChannel);
+                    }
+                }
+                if (nextSurvived)
+                {
+                    AudioManager::GetInstance().SetChannelVolume(
+                        playlist->nextChannel,
+                        hadNextVolume ? previousNextVolume : 0.0f);
+                }
+                spdlog::error(
+                    "Unable to apply playback options for '{}'; the previous "
+                    "live programme state was restored.",
+                    playlistName);
+                return false;
+            }
+
+            std::string restoreError;
+            if (previousCheckpoint.isPlaying &&
+                ResumePlaybackState(previousCheckpoint, restoreError))
+            {
+                spdlog::error(
+                    "Unable to apply playback options for '{}'; playback was "
+                    "restored from its checkpoint.",
+                    playlistName);
+                return false;
+            }
+            ClearLogicalPlaybackState(*playlist);
+            m_activePlaylistName.clear();
+            spdlog::critical(
+                "Unable to apply playback options for '{}' or restore its "
+                "previous channel: {}",
+                playlistName,
+                restoreError.empty() ? "no valid recovery checkpoint" : restoreError);
+            return false;
+        }
+    }
+    else
+    {
+        playlist->options = options;
+        playlist->crossfadeDuration = crossfadeDuration;
+    }
+    NotifyPlaylistChanged();
+    return true;
+}
+
 bool PlaylistManager::PlayLibrary(
     const PlaylistOptions& options, float crossfadeDuration)
 {
@@ -1289,14 +1674,19 @@ bool PlaylistManager::StartPlayback(
         spdlog::error("Playback source '{}' is empty.", plist.name);
         return false;
     }
+    if (!AreSegmentDurationsValid(options))
+    {
+        spdlog::error(
+            "Playback source '{}' has invalid segment duration settings.",
+            plist.name);
+        return false;
+    }
 
     if (GetActivePlaylist()) Stop(m_activePlaylistName);
     
     plist.options = options;
-    plist.segmentModeActive = options.randomSegment;
-    plist.segmentMaxDuration = std::max(options.segmentDuration, 0.0f);
-    plist.segmentTimer = 0.0f;
-    plist.chosenStartTime = 0.0f;
+    plist.currentSegment = {};
+    plist.nextSegment = {};
 
     if (options.randomOrder)
     {
@@ -1409,7 +1799,20 @@ void PlaylistManager::UpdatePlayback(Playlist& plist, float deltaTime)
 
         if (plist.isCrossfading)
         {
-            plist.crossfadeTimer += deltaTime;
+            auto& audioManager = AudioManager::GetInstance();
+            const float safeDeltaTime = std::max(deltaTime, 0.0f);
+            const float previousCurrentElapsed =
+                plist.currentSegment.elapsedSeconds;
+            const float previousNextElapsed = plist.nextSegment.elapsedSeconds;
+            if (plist.currentSegment.durationSeconds > 0.0f)
+                plist.currentSegment.elapsedSeconds = std::min(
+                    plist.currentSegment.elapsedSeconds + safeDeltaTime,
+                    plist.currentSegment.durationSeconds);
+            if (plist.nextSegment.durationSeconds > 0.0f)
+                plist.nextSegment.elapsedSeconds = std::min(
+                    plist.nextSegment.elapsedSeconds + safeDeltaTime,
+                    plist.nextSegment.durationSeconds);
+            plist.crossfadeTimer += safeDeltaTime;
             float t = plist.activeCrossfadeDuration <= 0.0f
                 ? 1.0f
                 : plist.crossfadeTimer / plist.activeCrossfadeDuration;
@@ -1425,24 +1828,85 @@ void PlaylistManager::UpdatePlayback(Playlist& plist, float deltaTime)
                     plist.currentChannel, plist.expectedCurrentSound))
             {
                 currentChannelValid = true;
-                const float normalizationGain = AudioManager::GetInstance()
-                    .GetNormalizationGainForChannel(plist.currentChannel);
-                float volOld = gains.outgoing * baseMusicVol * normalizationGain;
-                plist.currentChannel->setVolume(volOld);
+                // Scale from the volume that was actually audible at the
+                // transition boundary. This prevents a jump if a transition
+                // begins while another controlled gain change is settling.
+                const float volOld = gains.outgoing * ScaleCapturedChannelVolume(
+                    plist.oldChannelVolume,
+                    plist.oldChannelNormalizationGain,
+                    plist.currentChannel);
+                audioManager.SetChannelVolume(plist.currentChannel, volOld);
+                if (safeDeltaTime > 0.0f && plist.currentIndex >= 0 &&
+                    plist.currentIndex < static_cast<int>(plist.tracks.size()))
+                {
+                    audioManager.RecordListeningCoverage(
+                        plist.tracks[plist.currentIndex],
+                        plist.currentSegment.startSeconds + previousCurrentElapsed,
+                        plist.currentSegment.startSeconds +
+                            plist.currentSegment.elapsedSeconds,
+                        gains.outgoing * gains.outgoing,
+                        CurrentEpochSeconds());
+                }
             }
 
             if (IsOwnedChannelPlaying(plist.nextChannel, plist.expectedNextSound))
             {
                 nextChannelValid = true;
-                const float normalizationGain = AudioManager::GetInstance()
-                    .GetNormalizationGainForChannel(plist.nextChannel);
-                float volNext = gains.incoming * baseMusicVol * normalizationGain;
-                plist.nextChannel->setVolume(volNext);
+                const float volNext = gains.incoming * baseMusicVol *
+                    CurrentNormalizationGain(plist.nextChannel);
+                audioManager.SetChannelVolume(plist.nextChannel, volNext);
+                if (safeDeltaTime > 0.0f && plist.nextIndex >= 0 &&
+                    plist.nextIndex < static_cast<int>(plist.tracks.size()))
+                {
+                    audioManager.RecordListeningCoverage(
+                        plist.tracks[plist.nextIndex],
+                        plist.nextSegment.startSeconds + previousNextElapsed,
+                        plist.nextSegment.startSeconds +
+                            plist.nextSegment.elapsedSeconds,
+                        gains.incoming * gains.incoming,
+                        CurrentEpochSeconds());
+                }
             }
 
+            if (!currentChannelValid && nextChannelValid)
+            {
+                // The prepared channel is already the only audible survivor;
+                // promote it immediately instead of stretching a fade from
+                // silence for the remainder of the configured overlap.
+                audioManager.SetChannelVolume(
+                    plist.nextChannel,
+                    CurrentNormalizationGain(plist.nextChannel));
+                FinishCrossfade(plist);
+                return;
+            }
+            if (currentChannelValid && !nextChannelValid)
+            {
+                // Keep programme audio continuous when the staged channel
+                // fails. The next boundary may attempt another transition,
+                // but the current track is restored now without a silent gap.
+                StopOwnedChannelImmediately(
+                    plist.nextChannel, plist.expectedNextSound);
+                plist.nextChannel = nullptr;
+                plist.expectedNextSound = nullptr;
+                plist.nextIndex = -1;
+                plist.nextSegment = {};
+                plist.isCrossfading = false;
+                plist.crossfadeTimer = 0.0f;
+                plist.lastTransitionReason =
+                    TransitionLogic::Reason::PlaybackFailure;
+                // The staged programme disappeared. Restore the surviving
+                // track to its current normalized target immediately; the
+                // captured boundary volume may legitimately be zero when an
+                // operator skips during the initial fade-in.
+                audioManager.SetChannelVolume(
+                    plist.currentChannel,
+                    CurrentNormalizationGain(plist.currentChannel));
+                return;
+            }
             if (t >= 1.0f || (!currentChannelValid && !nextChannelValid))
             {
                 FinishCrossfade(plist);
+                return;
             }
         }
         else if (plist.currentChannel)
@@ -1485,16 +1949,41 @@ void PlaylistManager::UpdatePlayback(Playlist& plist, float deltaTime)
             }
 
             float segmentRemaining = std::numeric_limits<float>::max();
-            if (plist.segmentModeActive)
+            const float previousElapsed = plist.currentSegment.elapsedSeconds;
+            const float safeDeltaTime = std::max(deltaTime, 0.0f);
+            if (plist.currentSegment.durationSeconds > 0.0f)
             {
-                plist.segmentTimer += deltaTime;
+                plist.currentSegment.elapsedSeconds = std::min(
+                    plist.currentSegment.elapsedSeconds + safeDeltaTime,
+                    plist.currentSegment.durationSeconds);
+            }
+            if (plist.currentSegment.active)
+            {
                 segmentRemaining = std::max(
-                    plist.segmentMaxDuration - plist.segmentTimer, 0.0f);
+                    plist.currentSegment.durationSeconds -
+                        plist.currentSegment.elapsedSeconds,
+                    0.0f);
+            }
+            if (safeDeltaTime > 0.0f && plist.currentIndex >= 0 &&
+                plist.currentIndex < static_cast<int>(plist.tracks.size()))
+            {
+                AudioManager::GetInstance().RecordListeningCoverage(
+                    plist.tracks[plist.currentIndex],
+                    plist.currentSegment.startSeconds + previousElapsed,
+                    plist.currentSegment.startSeconds +
+                        plist.currentSegment.elapsedSeconds,
+                    1.0,
+                    CurrentEpochSeconds());
             }
 
             const TransitionLogic::Decision decision = TransitionLogic::Evaluate(
-                trackRemaining, segmentRemaining, plist.segmentModeActive,
-                plist.crossfadeDuration, HasNextTrack(plist), isPlaying);
+                trackRemaining, segmentRemaining, plist.currentSegment.active,
+                plist.currentSegment.active
+                    ? std::min(
+                          plist.crossfadeDuration,
+                          plist.currentSegment.durationSeconds * 0.25f)
+                    : plist.crossfadeDuration,
+                HasNextTrack(plist), isPlaying);
             plist.secondsUntilTransition = decision.secondsUntilBoundary;
             if (decision.shouldTransition)
             {
@@ -1544,23 +2033,35 @@ float PlaylistManager::GetTrackProgress() const
 float PlaylistManager::GetSegmentProgress() const
 {
     auto* activePlaylist = GetActivePlaylist();
-    if (!activePlaylist || !activePlaylist->segmentModeActive) return 0.0f;
-    if (activePlaylist->segmentMaxDuration <= 0.0f) return 0.0f;
-    return std::clamp(activePlaylist->segmentTimer / activePlaylist->segmentMaxDuration, 0.0f, 1.0f);
+    if (!activePlaylist || !activePlaylist->currentSegment.active) return 0.0f;
+    if (activePlaylist->currentSegment.durationSeconds <= 0.0f) return 0.0f;
+    return std::clamp(
+        activePlaylist->currentSegment.elapsedSeconds /
+            activePlaylist->currentSegment.durationSeconds,
+        0.0f, 1.0f);
 }
 
 float PlaylistManager::GetSegmentDuration() const
 {
     const auto* activePlaylist = GetActivePlaylist();
-    if (!activePlaylist || !activePlaylist->segmentModeActive) return 0.0f;
-    return std::max(activePlaylist->segmentMaxDuration, 0.0f);
+    if (!activePlaylist || !activePlaylist->currentSegment.active) return 0.0f;
+    return std::max(activePlaylist->currentSegment.durationSeconds, 0.0f);
 }
 
 float PlaylistManager::GetSegmentRemainingTime() const
 {
     const auto* activePlaylist = GetActivePlaylist();
-    if (!activePlaylist || !activePlaylist->segmentModeActive) return 0.0f;
-    return std::max(activePlaylist->segmentMaxDuration - activePlaylist->segmentTimer, 0.0f);
+    if (!activePlaylist || !activePlaylist->currentSegment.active) return 0.0f;
+    return std::max(
+        activePlaylist->currentSegment.durationSeconds -
+            activePlaylist->currentSegment.elapsedSeconds,
+        0.0f);
+}
+
+SegmentDecisionInfo PlaylistManager::GetSegmentDecisionInfo() const
+{
+    const Playlist* playlist = GetActivePlaylist();
+    return playlist ? playlist->currentSegment.decision : SegmentDecisionInfo{};
 }
 
 void PlaylistManager::SetCrossfadeDuration(float duration)
@@ -1675,6 +2176,7 @@ void PlaylistManager::StartNextTrack(Playlist& plist, float transitionDuration,
                                      TransitionLogic::Reason reason)
 {
     int nextIndex = -1;
+    std::optional<MusicAnalysis::SegmentDecision> plannedDecision;
     if (plist.options.randomOrder)
     {
         if (plist.randomIndices.empty())
@@ -1683,17 +2185,27 @@ void PlaylistManager::StartNextTrack(Playlist& plist, float transitionDuration,
             return;
         }
 
-        plist.randomIndexPos++;
-        if (plist.randomIndexPos >= (int)plist.randomIndices.size())
+        int nextPosition = plist.randomIndexPos + 1;
+        if (nextPosition >= static_cast<int>(plist.randomIndices.size()))
         {
             if (plist.options.loopPlaylist) {
-                plist.randomIndexPos = 0;
+                nextPosition = 0;
             } else {
                 FinishPlaylist(plist);
                 return;
             }
         }
-        nextIndex = plist.randomIndices[plist.randomIndexPos];
+        if (plist.options.randomSegment &&
+            plist.options.automaticSegmentDuration)
+        {
+            nextIndex = SelectCompatibleRandomTrack(
+                plist, nextPosition, plannedDecision);
+        }
+        else
+        {
+            nextIndex = plist.randomIndices[nextPosition];
+        }
+        plist.randomIndexPos = nextPosition;
     }
     else
     {
@@ -1710,18 +2222,20 @@ void PlaylistManager::StartNextTrack(Playlist& plist, float transitionDuration,
     plist.crossfadeTimer  = 0.0f;
     plist.activeCrossfadeDuration = transitionDuration >= 0.0f
         ? std::min(transitionDuration, std::max(plist.crossfadeDuration, 0.0f))
-        : std::max(plist.crossfadeDuration, 0.0f);
+        : (reason == TransitionLogic::Reason::ManualSkip
+               ? std::min(std::max(plist.crossfadeDuration, 0.0f), 2.0f)
+               : std::max(plist.crossfadeDuration, 0.0f));
 
     plist.oldChannelVolume = 1.0f;
+    plist.oldChannelNormalizationGain = 1.0f;
     if (IsOwnedChannelPlaying(plist.currentChannel, plist.expectedCurrentSound))
     {
         float vol = 1.0f;
         plist.currentChannel->getVolume(&vol);
         plist.oldChannelVolume = vol;
+        plist.oldChannelNormalizationGain =
+            CurrentNormalizationGain(plist.currentChannel);
     }
-
-    constexpr float userVolume = 1.0f;
-    plist.nextTargetVolume = userVolume;
 
     std::string nextTrack = plist.tracks[nextIndex];
     FMOD::Sound* expectedSound = AudioManager::GetInstance().GetSound(nextTrack);
@@ -1730,7 +2244,24 @@ void PlaylistManager::StartNextTrack(Playlist& plist, float transitionDuration,
     {
         StopOwnedChannelImmediately(ch, expectedSound);
         spdlog::error("Failed to start next track '{}' in playlist '{}'.", nextTrack, plist.name);
-        FinishPlaylist(plist);
+        plist.nextIndex = -1;
+        plist.nextSegment = {};
+        plist.isCrossfading = false;
+        plist.crossfadeTimer = 0.0f;
+        plist.lastTransitionReason = TransitionLogic::Reason::PlaybackFailure;
+        if (IsOwnedChannelPlaying(
+                plist.currentChannel, plist.expectedCurrentSound))
+        {
+            // Staging failed before the playlist took ownership of the
+            // outgoing envelope. Preserve (or resume) its existing fade-in
+            // instead of cancelling it at a possibly silent captured volume.
+            AudioManager::GetInstance().ReconcileMusicChannelVolume(
+                plist.currentChannel);
+        }
+        else
+        {
+            FinishPlaylist(plist);
+        }
         return;
     }
     plist.nextChannel = ch;
@@ -1738,24 +2269,37 @@ void PlaylistManager::StartNextTrack(Playlist& plist, float transitionDuration,
 
     plist.nextIndex = nextIndex;
 
-    plist.segmentTimer = 0.0f;
-    if (plist.segmentModeActive && ch)
+    plist.nextSegment = PrepareRandomSegment(
+        plist, nextTrack, ch, expectedSound, plannedDecision,
+        plist.currentSegment.exitProfile);
+
+    // Complete the overlap in the first half of the incoming material. This
+    // guarantees that even a very short track or selected segment reaches its
+    // normalized programme level before its own boundary. Unknown, invalid or
+    // effectively empty durations are promoted immediately instead of risking
+    // a fade whose staged channel has already ended.
+    constexpr float MinimumIncomingDurationSeconds = 0.001f;
+    const float incomingAvailable =
+        plist.nextSegment.durationSeconds - plist.nextSegment.elapsedSeconds;
+    if (!std::isfinite(incomingAvailable) ||
+        incomingAvailable <= MinimumIncomingDurationSeconds)
     {
-        FMOD::Sound* sound = expectedSound;
-        if (sound)
-        {
-            unsigned int lengthMs = 0;
-            sound->getLength(&lengthMs, FMOD_TIMEUNIT_MS);
-            float lengthSec = lengthMs / 1000.0f;
-
-            float maxStart = (lengthSec > plist.segmentMaxDuration)
-                             ? (lengthSec - plist.segmentMaxDuration)
-                             : 0.0f;
-            std::uniform_real_distribution<float> dist(0.0f, maxStart);
-            plist.chosenStartTime = dist(m_rng);
-
-            ch->setPosition((unsigned int)(plist.chosenStartTime * 1000.0f), FMOD_TIMEUNIT_MS);
-        }
+        plist.activeCrossfadeDuration = 0.0f;
+    }
+    else
+    {
+        plist.activeCrossfadeDuration = std::min(
+            plist.activeCrossfadeDuration,
+            incomingAvailable * 0.5f);
+    }
+    if (plist.activeCrossfadeDuration <= 0.0f)
+    {
+        // A zero-length transition is a hard handoff, not a one-frame fade
+        // from silence. Make the prepared channel audible before promotion.
+        AudioManager::GetInstance().SetChannelVolume(
+            plist.nextChannel,
+            CurrentNormalizationGain(plist.nextChannel));
+        FinishCrossfade(plist);
     }
 }
 
@@ -1793,39 +2337,460 @@ void PlaylistManager::StartTrackAtIndex(Playlist& plist, int index)
         return;
     }
 
-    plist.segmentTimer = 0.0f;
-    
-    if (plist.options.randomSegment && ch)
-    {
-        plist.segmentModeActive = true;
-        
-        FMOD::Sound* sound = expectedSound;
-        if (sound)
-        {
-            unsigned int lengthMs = 0;
-            sound->getLength(&lengthMs, FMOD_TIMEUNIT_MS);
-            float lengthSec = lengthMs / 1000.0f;
+    plist.currentSegment = PrepareRandomSegment(
+        plist, track, ch, expectedSound);
+}
 
-            float maxStart = (lengthSec > plist.options.segmentDuration)
-                             ? (lengthSec - plist.options.segmentDuration)
-                             : 0.0f;
-            
-            std::uniform_real_distribution<float> dist(0.0f, maxStart);
-            plist.chosenStartTime = dist(m_rng);
-            
-            ch->setPosition((unsigned int)(plist.chosenStartTime * 1000.0f), FMOD_TIMEUNIT_MS);
-            
-            plist.segmentMaxDuration = plist.options.segmentDuration;
+PlaylistManager::Playlist::SegmentRuntime PlaylistManager::PrepareRandomSegment(
+    Playlist& plist, const std::string& trackId,
+    FMOD::Channel* channel, FMOD::Sound* expectedSound,
+    const std::optional<MusicAnalysis::SegmentDecision>& plannedDecision,
+    const std::optional<MusicAnalysis::Profile>& outgoingExit)
+{
+    Playlist::SegmentRuntime segment;
+
+    if (!channel || !expectedSound) return segment;
+    if (!AreSegmentDurationsValid(plist.options))
+    {
+        spdlog::error(
+            "Playback source '{}' has invalid segment duration settings.",
+            plist.name);
+        return segment;
+    }
+
+    unsigned int lengthMs = 0;
+    if (expectedSound->getLength(&lengthMs, FMOD_TIMEUNIT_MS) != FMOD_OK ||
+        lengthMs == 0)
+    {
+        spdlog::warn(
+            "Unable to determine track duration for random segment playback in '{}'.",
+            plist.name);
+        return segment;
+    }
+
+    const float lengthSeconds = lengthMs / 1000.0f;
+    segment.durationSeconds = lengthSeconds;
+    if (!plist.options.randomSegment) return segment;
+    float requestedDuration = plist.options.segmentDuration;
+    if (plist.options.automaticSegmentDuration)
+    {
+        const bool decisionWasPlanned = plannedDecision.has_value();
+        std::optional<MusicAnalysis::SegmentDecision> smartDecision =
+            plannedDecision;
+        if (!smartDecision)
+        {
+            if (const auto* analysis =
+                    AudioManager::GetInstance().GetMusicAnalysis(trackId))
+            {
+                MusicAnalysis::SegmentSelectionOptions selection;
+                selection.minDurationSeconds = plist.options.minSegmentDuration;
+                selection.targetDurationSeconds = std::clamp(
+                    plist.options.segmentDuration,
+                    plist.options.minSegmentDuration,
+                    plist.options.maxSegmentDuration);
+                selection.maxDurationSeconds = plist.options.maxSegmentDuration;
+                selection.listeningFatigue =
+                    AudioManager::GetInstance().GetListeningFatigue(trackId);
+                selection.selectionEpochSeconds = CurrentEpochSeconds();
+                selection.maxCandidatesPerKind =
+                    SmartFineCandidatesPerKind;
+                smartDecision = MusicAnalysis::ChooseSegment(
+                    *analysis, selection, m_rng, outgoingExit);
+            }
+        }
+
+        if (smartDecision && !decisionWasPlanned && outgoingExit &&
+            plist.currentIndex >= 0 &&
+            plist.currentIndex < static_cast<int>(plist.tracks.size()))
+        {
+            smartDecision->transitionDiversityScore = static_cast<float>(
+                AudioManager::GetInstance().GetTransitionDiversityScore(
+                    plist.tracks[plist.currentIndex],
+                    trackId,
+                    CurrentEpochSeconds()));
+            smartDecision->score = std::clamp(
+                0.80f * smartDecision->score +
+                    0.20f * smartDecision->transitionDiversityScore,
+                0.0f, 1.0f);
+            if (smartDecision->transitionDiversityScore >= 0.70f)
+            {
+                smartDecision->reasons.push_back(
+                    MusicAnalysis::SegmentReason::FreshTransitionPair);
+            }
+        }
+
+        if (smartDecision && smartDecision->durationSeconds > 0.0f &&
+            smartDecision->startSeconds >= 0.0f &&
+            smartDecision->endSeconds <= lengthSeconds + 0.01f)
+        {
+            segment.startSeconds = std::clamp(
+                smartDecision->startSeconds, 0.0f,
+                std::max(lengthSeconds - 0.001f, 0.0f));
+            segment.durationSeconds = std::min(
+                smartDecision->durationSeconds,
+                lengthSeconds - segment.startSeconds);
+            segment.active = segment.durationSeconds > 0.0f;
+            segment.exitProfile = smartDecision->selectedExit.profile;
+            segment.decision.active = segment.active;
+            segment.decision.smartAnalysis = true;
+            segment.decision.mode = "smart";
+            segment.decision.fullTrack = smartDecision->fullTrack;
+            segment.decision.startSeconds = segment.startSeconds;
+            segment.decision.endSeconds =
+                segment.startSeconds + segment.durationSeconds;
+            segment.decision.durationSeconds = segment.durationSeconds;
+            segment.decision.entryScore = smartDecision->selectedEntry.score;
+            segment.decision.exitScore = smartDecision->selectedExit.score;
+            segment.decision.totalScore = smartDecision->score;
+            segment.decision.explorationScore =
+                smartDecision->explorationScore;
+            segment.decision.transitionDiversityScore =
+                smartDecision->transitionDiversityScore;
+            if (outgoingExit)
+            {
+                segment.decision.transitionScore =
+                    MusicAnalysis::ScoreCompatibility(
+                        *outgoingExit,
+                        smartDecision->selectedEntry.profile).total;
+            }
+            for (const MusicAnalysis::SegmentReason reason : smartDecision->reasons)
+                segment.decision.reasons.emplace_back(MusicAnalysis::ToString(reason));
+        }
+        else
+        {
+            const float maximumDuration = std::min(
+                plist.options.maxSegmentDuration, lengthSeconds);
+            const float minimumDuration = std::min(
+                plist.options.minSegmentDuration, maximumDuration);
+            std::uniform_real_distribution<float> durationDistribution(
+                minimumDuration, maximumDuration);
+            requestedDuration = durationDistribution(m_rng);
+            segment.durationSeconds = std::min(requestedDuration, lengthSeconds);
+            segment.active = true;
+            const float maximumStart =
+                std::max(lengthSeconds - segment.durationSeconds, 0.0f);
+            std::uniform_real_distribution<float> startDistribution(
+                0.0f, maximumStart);
+            segment.startSeconds = startDistribution(m_rng);
+            segment.decision.active = true;
+            segment.decision.mode = "bounded_random_fallback";
+            segment.decision.startSeconds = segment.startSeconds;
+            segment.decision.endSeconds =
+                segment.startSeconds + segment.durationSeconds;
+            segment.decision.durationSeconds = segment.durationSeconds;
+            segment.decision.fullTrack =
+                segment.startSeconds <= 0.001f &&
+                segment.durationSeconds + 0.001f >= lengthSeconds;
+            segment.decision.reasons = {
+                "analysis unavailable: bounded random fallback"};
         }
     }
     else
     {
-        plist.segmentModeActive = false;
+        segment.durationSeconds = std::min(requestedDuration, lengthSeconds);
+        segment.active = true;
+        const float maximumStart =
+            std::max(lengthSeconds - segment.durationSeconds, 0.0f);
+        std::uniform_real_distribution<float> startDistribution(0.0f, maximumStart);
+        segment.startSeconds = startDistribution(m_rng);
+        segment.decision.active = true;
+        segment.decision.mode = "fixed_random_entry";
+        segment.decision.startSeconds = segment.startSeconds;
+        segment.decision.endSeconds =
+            segment.startSeconds + segment.durationSeconds;
+        segment.decision.durationSeconds = segment.durationSeconds;
+        segment.decision.fullTrack =
+            segment.startSeconds <= 0.001f &&
+            segment.durationSeconds + 0.001f >= lengthSeconds;
+        segment.decision.reasons = {"fixed duration with random entry"};
     }
+
+    const auto startMs = static_cast<unsigned int>(std::min(
+        static_cast<double>(lengthMs - 1u),
+        static_cast<double>(segment.startSeconds) * 1000.0));
+    if (channel->setPosition(startMs, FMOD_TIMEUNIT_MS) != FMOD_OK)
+    {
+        spdlog::warn(
+            "Unable to seek to a random segment in playback source '{}'.",
+            plist.name);
+        return {};
+    }
+    return segment;
+}
+
+int PlaylistManager::SelectCompatibleRandomTrack(
+    Playlist& plist, int firstCandidatePosition,
+    std::optional<MusicAnalysis::SegmentDecision>& selectedDecision)
+{
+    struct CoarseTrack
+    {
+        int permutationPosition = -1;
+        int trackIndex = -1;
+        const MusicAnalysis::TrackAnalysis* analysis = nullptr;
+        float entryQuality = 0.0f;
+        float acousticCompatibility = 0.5f;
+        float transitionDiversity = 1.0f;
+        float exploration = 1.0f;
+        float combinedScore = 0.0f;
+    };
+
+    struct RankedTrack
+    {
+        int permutationPosition = -1;
+        int trackIndex = -1;
+        MusicAnalysis::SegmentDecision decision;
+    };
+
+    selectedDecision.reset();
+    plist.lastSmartCandidatePoolSize = 0u;
+    plist.lastSmartShortlistSize = 0u;
+    plist.lastSmartFineEvaluationCount = 0u;
+    plist.lastSmartFineCandidateBudgetPerKind = 0u;
+    if (firstCandidatePosition < 0 ||
+        firstCandidatePosition >= static_cast<int>(plist.randomIndices.size()))
+        return plist.currentIndex;
+
+    const std::optional<MusicAnalysis::Profile> outgoing =
+        plist.currentSegment.exitProfile;
+    MusicAnalysis::SegmentSelectionOptions selection;
+    selection.minDurationSeconds = plist.options.minSegmentDuration;
+    selection.targetDurationSeconds = std::clamp(
+        plist.options.segmentDuration,
+        plist.options.minSegmentDuration,
+        plist.options.maxSegmentDuration);
+    selection.maxDurationSeconds = plist.options.maxSegmentDuration;
+    selection.selectionEpochSeconds = CurrentEpochSeconds();
+    selection.maxCandidatesPerKind = SmartFineCandidatesPerKind;
+    plist.lastSmartFineCandidateBudgetPerKind =
+        selection.maxCandidatesPerKind;
+
+    AudioManager& audioManager = AudioManager::GetInstance();
+    std::vector<CoarseTrack> candidatePool;
+    candidatePool.reserve(
+        plist.randomIndices.size() -
+        static_cast<std::size_t>(firstCandidatePosition));
+    int fallbackPosition = -1;
+
+    for (int position = firstCandidatePosition;
+         position < static_cast<int>(plist.randomIndices.size()); ++position)
+    {
+        const int index = plist.randomIndices[position];
+        if (plist.randomIndices.size() > 1u && index == plist.currentIndex) continue;
+        if (fallbackPosition < 0) fallbackPosition = position;
+        const auto* analysis = audioManager.GetMusicAnalysis(plist.tracks[index]);
+        if (!analysis) continue;
+
+        CoarseTrack candidate;
+        candidate.permutationPosition = position;
+        candidate.trackIndex = index;
+        candidate.analysis = analysis;
+        const ListeningHeatmap::State* fatigue =
+            audioManager.GetListeningFatigue(plist.tracks[index]);
+
+        const std::size_t entryCount = analysis->entryCandidates.size();
+        const std::size_t sampleCount = std::min(
+            entryCount, MaximumCoarseEntrySamples);
+        candidate.exploration = fatigue ? 0.0f : 1.0f;
+        for (std::size_t sample = 0u; sample < sampleCount; ++sample)
+        {
+            const std::size_t entryIndex = sampleCount <= 1u
+                ? 0u
+                : sample * (entryCount - 1u) / (sampleCount - 1u);
+            const MusicAnalysis::Candidate& entry =
+                analysis->entryCandidates[entryIndex];
+            candidate.entryQuality = std::max(
+                candidate.entryQuality, UnitScore(entry.score));
+            if (outgoing)
+            {
+                candidate.acousticCompatibility = std::max(
+                    sample == 0u ? 0.0f : candidate.acousticCompatibility,
+                    UnitScore(MusicAnalysis::ScoreCompatibility(
+                        *outgoing, entry.profile).total));
+            }
+            candidate.exploration = std::max(
+                candidate.exploration,
+                CoarseExplorationScore(
+                    fatigue,
+                    entry.timeSeconds,
+                    selection.targetDurationSeconds,
+                    selection.selectionEpochSeconds));
+        }
+        if (sampleCount == 0u)
+        {
+            candidate.exploration = CoarseExplorationScore(
+                fatigue, 0.0f, selection.targetDurationSeconds,
+                selection.selectionEpochSeconds);
+        }
+
+        if (plist.currentIndex >= 0 &&
+            plist.currentIndex < static_cast<int>(plist.tracks.size()))
+        {
+            candidate.transitionDiversity = UnitScore(static_cast<float>(
+                audioManager.GetTransitionDiversityScore(
+                    plist.tracks[plist.currentIndex],
+                    plist.tracks[index],
+                    selection.selectionEpochSeconds)),
+                1.0f);
+        }
+        candidate.combinedScore = outgoing
+            ? 0.35f * candidate.acousticCompatibility +
+                0.20f * candidate.entryQuality +
+                0.25f * candidate.transitionDiversity +
+                0.20f * candidate.exploration
+            : 0.30f * candidate.entryQuality +
+                0.30f * candidate.transitionDiversity +
+                0.40f * candidate.exploration;
+        candidate.combinedScore = UnitScore(candidate.combinedScore);
+        candidatePool.push_back(candidate);
+    }
+
+    plist.lastSmartCandidatePoolSize = candidatePool.size();
+    std::vector<const CoarseTrack*> shortlist;
+    shortlist.reserve(std::min(
+        candidatePool.size(), MaximumSmartTrackShortlistSize));
+    const auto alreadySelected = [&](const CoarseTrack& candidate) {
+        return std::any_of(
+            shortlist.begin(), shortlist.end(), [&](const CoarseTrack* selected) {
+                return selected->permutationPosition ==
+                    candidate.permutationPosition;
+            });
+    };
+    const auto appendBest = [&](std::size_t quota, const auto& score) {
+        std::vector<const CoarseTrack*> best;
+        best.reserve(quota);
+        const auto better = [&](const CoarseTrack* left, const CoarseTrack* right) {
+            const float leftScore = UnitScore(score(*left));
+            const float rightScore = UnitScore(score(*right));
+            if (std::fabs(leftScore - rightScore) > 0.000001f)
+                return leftScore > rightScore;
+            return left->permutationPosition < right->permutationPosition;
+        };
+        for (const CoarseTrack& candidate : candidatePool)
+        {
+            if (alreadySelected(candidate)) continue;
+            const auto insertion = std::find_if(
+                best.begin(), best.end(), [&](const CoarseTrack* existing) {
+                    return better(&candidate, existing);
+                });
+            best.insert(insertion, &candidate);
+            if (best.size() > quota) best.pop_back();
+        }
+        for (const CoarseTrack* candidate : best)
+        {
+            if (shortlist.size() >= MaximumSmartTrackShortlistSize) break;
+            shortlist.push_back(candidate);
+        }
+    };
+
+    // Acoustic/quality winners form the core, while explicit quotas prevent
+    // frequently excellent transitions from starving fresh pairings or
+    // underexplored tracks. Remaining slots follow the already-shuffled
+    // permutation, preserving seeded/checkpointed random order without an
+    // additional unbounded RNG pass.
+    appendBest(16u, [](const CoarseTrack& candidate) {
+        return candidate.combinedScore;
+    });
+    appendBest(8u, [](const CoarseTrack& candidate) {
+        return candidate.transitionDiversity;
+    });
+    appendBest(4u, [](const CoarseTrack& candidate) {
+        return candidate.exploration;
+    });
+    for (const CoarseTrack& candidate : candidatePool)
+    {
+        if (shortlist.size() >= MaximumSmartTrackShortlistSize) break;
+        if (!alreadySelected(candidate)) shortlist.push_back(&candidate);
+    }
+    plist.lastSmartShortlistSize = shortlist.size();
+
+    if (shortlist.empty())
+    {
+        const int position = fallbackPosition >= 0
+            ? fallbackPosition
+            : firstCandidatePosition;
+        std::swap(
+            plist.randomIndices[firstCandidatePosition],
+            plist.randomIndices[position]);
+        return plist.randomIndices[firstCandidatePosition];
+    }
+
+    std::vector<RankedTrack> ranked;
+    ranked.reserve(shortlist.size());
+    for (const CoarseTrack* candidate : shortlist)
+    {
+        selection.listeningFatigue = audioManager.GetListeningFatigue(
+            plist.tracks[candidate->trackIndex]);
+        ++plist.lastSmartFineEvaluationCount;
+        MusicAnalysis::SegmentDecision decision = MusicAnalysis::ChooseSegment(
+            *candidate->analysis, selection, m_rng, outgoing);
+        decision.transitionDiversityScore = static_cast<float>(
+            audioManager.GetTransitionDiversityScore(
+                plist.tracks[plist.currentIndex],
+                plist.tracks[candidate->trackIndex],
+                selection.selectionEpochSeconds));
+        decision.transitionDiversityScore = UnitScore(
+            decision.transitionDiversityScore, 1.0f);
+        decision.score = UnitScore(
+            0.80f * decision.score +
+                0.20f * decision.transitionDiversityScore);
+        if (decision.transitionDiversityScore >= 0.70f)
+        {
+            decision.reasons.push_back(
+                MusicAnalysis::SegmentReason::FreshTransitionPair);
+        }
+        if (decision.durationSeconds > 0.0f)
+        {
+            ranked.push_back({
+                candidate->permutationPosition,
+                candidate->trackIndex,
+                std::move(decision)});
+        }
+    }
+
+    if (ranked.empty())
+    {
+        std::swap(
+            plist.randomIndices[firstCandidatePosition],
+            plist.randomIndices[shortlist.front()->permutationPosition]);
+        return plist.randomIndices[firstCandidatePosition];
+    }
+    std::sort(ranked.begin(), ranked.end(), [](const auto& left, const auto& right) {
+        if (left.decision.score != right.decision.score)
+            return left.decision.score > right.decision.score;
+        return left.trackIndex < right.trackIndex;
+    });
+    if (ranked.size() > 10u) ranked.resize(10u);
+
+    const float bestScore = ranked.front().decision.score;
+    std::vector<double> weights;
+    weights.reserve(ranked.size());
+    for (const RankedTrack& candidate : ranked)
+        weights.push_back(std::exp(
+            static_cast<double>(candidate.decision.score - bestScore) / 0.2));
+    std::discrete_distribution<std::size_t> distribution(
+        weights.begin(), weights.end());
+    RankedTrack chosen = std::move(ranked[distribution(m_rng)]);
+
+    std::swap(
+        plist.randomIndices[firstCandidatePosition],
+        plist.randomIndices[chosen.permutationPosition]);
+    selectedDecision = std::move(chosen.decision);
+    return chosen.trackIndex;
 }
 
 void PlaylistManager::FinishCrossfade(Playlist& plist)
 {
+    const bool incomingSurvived = IsOwnedChannelPlaying(
+        plist.nextChannel, plist.expectedNextSound);
+    if (incomingSurvived && plist.currentIndex >= 0 && plist.nextIndex >= 0 &&
+        plist.currentIndex < static_cast<int>(plist.tracks.size()) &&
+        plist.nextIndex < static_cast<int>(plist.tracks.size()))
+    {
+        AudioManager::GetInstance().RecordMusicTransition(
+            plist.tracks[plist.currentIndex],
+            plist.tracks[plist.nextIndex],
+            CurrentEpochSeconds());
+    }
     StopOwnedChannelImmediately(plist.currentChannel, plist.expectedCurrentSound);
     plist.currentChannel = nullptr;
     plist.expectedCurrentSound = nullptr;
@@ -1835,6 +2800,8 @@ void PlaylistManager::FinishCrossfade(Playlist& plist)
     plist.nextChannel    = nullptr;
     plist.expectedNextSound = nullptr;
     if (plist.nextIndex >= 0) plist.currentIndex = plist.nextIndex;
+    plist.currentSegment = plist.nextSegment;
+    plist.nextSegment = {};
     plist.nextIndex = -1;
     plist.isCrossfading  = false;
     plist.crossfadeTimer = 0.0f;
@@ -1848,6 +2815,14 @@ void PlaylistManager::FinishCrossfade(Playlist& plist)
             plist.currentChannel = nullptr;
             plist.expectedCurrentSound = nullptr;
             StartNextTrack(plist, 0.0f, TransitionLogic::Reason::PlaybackFailure);
+        }
+        else
+        {
+            // The playlist owned the channel envelope for the whole overlap.
+            // Hand it back to the loudness controller with a gentle reconcile
+            // so an analysis result cannot cause a post-crossfade jump.
+            AudioManager::GetInstance().ReconcileMusicChannelVolume(
+                plist.currentChannel);
         }
     }
 }
@@ -1976,15 +2951,21 @@ void PlaylistManager::PlayFromIndex(const std::string& playlistName, int index)
 
     Playlist& plist = *it;
     if (index < 0 || index >= (int)plist.tracks.size()) return;
+    if (!AreSegmentDurationsValid(plist.options))
+    {
+        spdlog::error(
+            "Playlist '{}' has invalid segment duration settings.",
+            playlistName);
+        return;
+    }
 
     if (plist.isPlaying)
     {
         Stop(playlistName);
     }
 
-    plist.segmentModeActive = plist.options.randomSegment;
-    plist.segmentMaxDuration = std::max(plist.options.segmentDuration, 0.0f);
-    plist.segmentTimer = 0.0f;
+    plist.currentSegment = {};
+    plist.nextSegment = {};
 
     int selectedIndex = index;
     if (!IsTrackEligibleForPlayback(plist, selectedIndex))

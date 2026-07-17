@@ -78,7 +78,7 @@ execute_process(
     TIMEOUT 10
 )
 if(NOT version_exit EQUAL 0 OR NOT version_error STREQUAL "" OR
-   NOT version_output MATCHES "\"cliApiVersion\":\"1\\.0\"")
+   NOT version_output MATCHES "\"cliApiVersion\":\"2\\.0\"")
     message(FATAL_ERROR
         "Installed version smoke failed (${version_exit})\n${version_output}\n${version_error}")
 endif()
@@ -127,7 +127,7 @@ if(NOT actual_resource_root STREQUAL expected_resource_root)
         "expected=${expected_resource_root}\nactual=${actual_resource_root}")
 endif()
 
-if(TSM_EXPECT_EMPTY_CONFIG)
+if(TSM_EXPECT_NO_MEDIA)
     string(JSON playlist_count ERROR_VARIABLE playlist_json_error GET
         "${status_output}" data playlists)
     string(JSON sound_count ERROR_VARIABLE sound_json_error GET
@@ -135,13 +135,13 @@ if(TSM_EXPECT_EMPTY_CONFIG)
     string(JSON announcement_count ERROR_VARIABLE announcement_json_error GET
         "${status_output}" data runtime load announcements)
     if(playlist_json_error OR sound_json_error OR announcement_json_error OR
-       NOT playlist_count EQUAL 0 OR NOT sound_count EQUAL 0 OR
+       NOT playlist_count EQUAL 2 OR NOT sound_count EQUAL 0 OR
        NOT announcement_count EQUAL 0)
         message(FATAL_ERROR
-            "Asset-free install did not use its empty production config: ${status_output}")
+            "Asset-free install did not use its no-media production config: ${status_output}")
     endif()
 
-    foreach(media_directory musics annonces announce sfx wedding)
+    foreach(media_directory musics annonces announce sfx)
         if(EXISTS "${TSM_INSTALL_DIR}/assets/${media_directory}")
             message(FATAL_ERROR
                 "Asset-free install unexpectedly contains assets/${media_directory}")

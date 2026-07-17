@@ -6,7 +6,6 @@
 #include "tsm_fmod_wrapper.h"
 #include "tsm_mixer.h"
 #include "tsm_playlist_manager.h"
-#include "tsm_ui_manager.h"
 
 #include <algorithm>
 #include <charconv>
@@ -24,9 +23,6 @@ namespace TSM
 {
 namespace
 {
-
-constexpr int CliSchemaVersion = 1;
-constexpr std::string_view CliApiVersion = "1.0";
 
 #ifndef TSM_VERSION
 #define TSM_VERSION "dev"
@@ -311,11 +307,10 @@ AudioManager::SoundKind ParseSoundKind(const std::string& value)
     if (value == "sfx" || value == "sound-effect") return AudioManager::SoundKind::SoundEffect;
     if (value == "music") return AudioManager::SoundKind::Music;
     if (value == "announcement") return AudioManager::SoundKind::Announcement;
-    if (value == "wedding") return AudioManager::SoundKind::Wedding;
     throw CommandError(
         CliExitCode::InvalidArgument,
         "invalid_sound_kind",
-        "Sound kind must be one of: sfx, music, announcement, wedding.",
+        "Sound kind must be one of: sfx, sound-effect, music, announcement.",
         {{"kind", value}});
 }
 
@@ -397,11 +392,32 @@ nlohmann::json SoundToJson(
             {"status", AudioManager::LoudnessStatusToString(sound.loudnessStatus)},
             {"integratedLufs", JsonFloat(sound.integratedLufs)},
             {"truePeakDb", JsonFloat(sound.truePeakDb)},
-            {"gainDb", JsonFloat(sound.normalizationGainDb)}
+            {"gainDb", JsonFloat(sound.normalizationGainDb)},
+            {"musicAnalysisReady", sound.musicAnalysisReady}
         }}
     };
     if (includeChannels) result["channels"] = std::move(channels);
     return result;
+}
+
+nlohmann::json SegmentDecisionToJson(const SegmentDecisionInfo& decision)
+{
+    if (!decision.active) return nullptr;
+    return {
+        {"mode", decision.mode},
+        {"fullTrack", decision.fullTrack},
+        {"startSeconds", JsonFloat(decision.startSeconds)},
+        {"endSeconds", JsonFloat(decision.endSeconds)},
+        {"durationSeconds", JsonFloat(decision.durationSeconds)},
+        {"entryScore", JsonFloat(decision.entryScore)},
+        {"exitScore", JsonFloat(decision.exitScore)},
+        {"transitionScore", JsonFloat(decision.transitionScore)},
+        {"explorationScore", JsonFloat(decision.explorationScore)},
+        {"transitionDiversityScore",
+         JsonFloat(decision.transitionDiversityScore)},
+        {"totalScore", JsonFloat(decision.totalScore)},
+        {"reasons", decision.reasons}
+    };
 }
 
 template <typename PlaylistType>
@@ -418,6 +434,10 @@ nlohmann::json PlaylistToJson(const PlaylistType& playlist)
             {"randomOrder", playlist.options.randomOrder},
             {"randomSegment", playlist.options.randomSegment},
             {"segmentDuration", JsonFloat(playlist.options.segmentDuration)},
+            {"automaticSegmentDuration",
+             playlist.options.automaticSegmentDuration},
+            {"minSegmentDuration", JsonFloat(playlist.options.minSegmentDuration)},
+            {"maxSegmentDuration", JsonFloat(playlist.options.maxSegmentDuration)},
             {"loop", playlist.options.loopPlaylist},
             {"crossfadeDuration", JsonFloat(playlist.crossfadeDuration)}
         }}
@@ -445,6 +465,9 @@ nlohmann::json MusicLibraryToJson(
             {"randomOrder", options.randomOrder},
             {"randomSegment", options.randomSegment},
             {"segmentDuration", JsonFloat(options.segmentDuration)},
+            {"automaticSegmentDuration", options.automaticSegmentDuration},
+            {"minSegmentDuration", JsonFloat(options.minSegmentDuration)},
+            {"maxSegmentDuration", JsonFloat(options.maxSegmentDuration)},
             {"loop", options.loopPlaylist},
             {"crossfadeDuration", JsonFloat(manager.GetLibraryCrossfadeDuration())}
         }}
@@ -454,6 +477,12 @@ nlohmann::json MusicLibraryToJson(
     {
         result["trackProgress"] = JsonFloat(manager.GetTrackProgress());
         result["segmentProgress"] = JsonFloat(manager.GetSegmentProgress());
+        result["activeSegmentDuration"] =
+            JsonFloat(manager.GetSegmentDuration());
+        result["segmentRemainingSeconds"] =
+            JsonFloat(manager.GetSegmentRemainingTime());
+        result["segmentDecision"] = SegmentDecisionToJson(
+            manager.GetSegmentDecisionInfo());
         result["crossfadeProgress"] = JsonFloat(manager.GetCrossfadeProgress());
         result["secondsUntilTransition"] = JsonFloat(
             manager.GetSecondsUntilTransition());
@@ -707,7 +736,6 @@ nlohmann::json StatusToJson(const ApplicationRuntime& runtime)
 {
     auto& playlistManager = PlaylistManager::GetInstance();
     auto& announcementManager = AnnouncementManager::GetInstance();
-    auto& uiManager = UIManager::GetInstance();
 
     nlohmann::json activePlaylist = nullptr;
     if (!playlistManager.IsLibraryPlaying())
@@ -719,6 +747,8 @@ nlohmann::json StatusToJson(const ApplicationRuntime& runtime)
             activePlaylist["nextTrack"] = playlistManager.GetNextTrackName();
             activePlaylist["trackProgress"] = JsonFloat(playlistManager.GetTrackProgress());
             activePlaylist["segmentProgress"] = JsonFloat(playlistManager.GetSegmentProgress());
+            activePlaylist["segmentDecision"] = SegmentDecisionToJson(
+                playlistManager.GetSegmentDecisionInfo());
             activePlaylist["crossfadeProgress"] = JsonFloat(playlistManager.GetCrossfadeProgress());
             activePlaylist["transitionReason"] = playlistManager.GetLastTransitionReason();
             activePlaylist["secondsUntilTransition"] = JsonFloat(
@@ -742,6 +772,16 @@ nlohmann::json StatusToJson(const ApplicationRuntime& runtime)
             {"configPath", runtime.GetConfigPath()},
             {"resourceRoot", runtime.GetResourceRoot()},
             {"stateDirectory", runtime.GetStateDirectory()},
+            {"playbackMemory", {
+                {"persistent", AudioManager::GetInstance()
+                    .IsPlaybackMemoryPersistent()},
+                {"path", AudioManager::GetInstance().GetPlaybackMemoryPath()},
+                {"error", AudioManager::GetInstance()
+                    .GetPlaybackMemoryError().empty()
+                    ? nlohmann::json(nullptr)
+                    : nlohmann::json(AudioManager::GetInstance()
+                        .GetPlaybackMemoryError())}
+            }},
             {"load", LoadReportToJson(runtime.GetLoadReport())}
         }},
         {"mixer", MixerToJson()},
@@ -758,11 +798,6 @@ nlohmann::json StatusToJson(const ApplicationRuntime& runtime)
             {"progress", JsonFloat(announcementManager.GetAnnouncementProgress())},
             {"schedules", announcementManager.GetScheduledAnnouncements().size()}
         }},
-        {"wedding", {
-            {"active", uiManager.IsWeddingModeActive()},
-            {"phase", uiManager.GetWeddingPhase()},
-            {"state", uiManager.GetWeddingStateString()}
-        }},
         {"cinema", std::move(cinema)}
     };
 }
@@ -777,6 +812,27 @@ void ValidateRange(std::string_view name, double value, double minimum, double m
             "Parameter '" + std::string(name) + "' must be between " +
                 std::to_string(minimum) + " and " + std::to_string(maximum) + ".",
             {{"parameter", name}, {"minimum", minimum}, {"maximum", maximum}, {"value", value}});
+    }
+}
+
+void ValidateSegmentOptions(const PlaylistOptions& options)
+{
+    const auto durationIsValid = [](float value) {
+        return std::isfinite(value) && value >= 0.001f && value <= 86400.0f;
+    };
+    if (!durationIsValid(options.segmentDuration) ||
+        !durationIsValid(options.minSegmentDuration) ||
+        !durationIsValid(options.maxSegmentDuration) ||
+        options.minSegmentDuration > options.maxSegmentDuration)
+    {
+        throw CommandError(
+            CliExitCode::InvalidArgument,
+            "invalid_segment_duration_range",
+            "Segment durations must be between 0.001 and 86400 seconds, and "
+            "the minimum cannot exceed the maximum.",
+            {{"segmentDuration", options.segmentDuration},
+             {"minSegmentDuration", options.minSegmentDuration},
+             {"maxSegmentDuration", options.maxSegmentDuration}});
     }
 }
 
@@ -889,15 +945,6 @@ nlohmann::json FindSoundReferences(
         announcementManager.GetCurrentAnnouncementName() == id)
         references["activeAnnouncement"] = true;
 
-    const bool fixedWeddingAsset =
-        id == "wedding_entrance_sound" || id == "wedding_ceremony_sound" ||
-        id == "wedding_exit_sound";
-    if (fixedWeddingAsset)
-    {
-        references["weddingAsset"] = true;
-        if (UIManager::GetInstance().IsWeddingModeActive())
-            references["activeWedding"] = true;
-    }
     return references;
 }
 
@@ -935,8 +982,7 @@ CliResult CliCommandProcessor::Execute(
         static const std::set<std::string_view> normalPlaybackCommands = {
             "sound.play", "sound.resume", "playlist.play",
             "playlist.play-index", "playlist.next", "library.play", "library.next",
-            "announcement.play",
-            "wedding.phase", "wedding.next"};
+            "announcement.play"};
         if (normalPlaybackCommands.contains(command))
         {
             RequireRuntime(m_runtime);
@@ -966,8 +1012,11 @@ CliResult CliCommandProcessor::Execute(
             const bool bluetoothDegraded = m_runtime.GetBluetoothState() == "failed";
             const bool playbackInhibited = runtimeReady &&
                 !m_runtime.CanPlayNormalAudio();
+            const bool playbackMemoryPersistent = runtimeReady &&
+                AudioManager::GetInstance().IsPlaybackMemoryPersistent();
             const bool degraded = !m_runtime.GetLoadReport().failures.empty() ||
-                                  bluetoothDegraded;
+                                  bluetoothDegraded ||
+                                  (runtimeReady && !playbackMemoryPersistent);
             return CliResult::Success({
                 {"status", !runtimeReady ? "unavailable"
                     : playbackInhibited ? "critical"
@@ -975,6 +1024,12 @@ CliResult CliCommandProcessor::Execute(
                 {"runtimeReady", runtimeReady},
                 {"safeToPlay", runtimeReady && m_runtime.CanPlayNormalAudio()},
                 {"failedAssets", m_runtime.GetLoadReport().failures.size()},
+                {"playbackMemoryPersistent", playbackMemoryPersistent},
+                {"playbackMemoryError", AudioManager::GetInstance()
+                    .GetPlaybackMemoryError().empty()
+                    ? nlohmann::json(nullptr)
+                    : nlohmann::json(AudioManager::GetInstance()
+                        .GetPlaybackMemoryError())},
                 {"bluetoothState", m_runtime.GetBluetoothState()},
                 {"bluetoothError", m_runtime.GetBluetoothError().empty()
                     ? nlohmann::json(nullptr)
@@ -1033,10 +1088,6 @@ CliResult CliCommandProcessor::Execute(
                 for (const auto& playlist : config.playlists)
                     for (const auto& track : playlist.tracks) check(track.path);
                 for (const auto& announcement : config.announcements) check(announcement.path);
-                check(config.wedding.entrance);
-                check(config.wedding.ceremony);
-                check(config.wedding.exit);
-                check(config.wedding.transitionSfx.path);
             }
             if (!missingFiles.empty())
             {
@@ -1343,8 +1394,7 @@ CliResult CliCommandProcessor::Execute(
             const bool loop = parameters.Boolean("loop", false);
             const bool fade = parameters.Boolean("fade_in", false);
             FMOD::Channel* channel = nullptr;
-            const bool music = soundIt->second.kind == AudioManager::SoundKind::Music ||
-                               soundIt->second.kind == AudioManager::SoundKind::Wedding;
+            const bool music = soundIt->second.kind == AudioManager::SoundKind::Music;
             if (music)
                 channel = fade
                     ? audioManager.PlayMusicWithFadeIn(id, loop, volume, pitch)
@@ -1385,12 +1435,6 @@ CliResult CliCommandProcessor::Execute(
                     CliExitCode::Conflict,
                     "sound_managed_by_announcement",
                     "Use announcement.stop to stop the active announcement.");
-            if (UIManager::GetInstance().IsWeddingModeActive() &&
-                (it->second.kind == AudioManager::SoundKind::Wedding || id == "sfx_shine"))
-                throw CommandError(
-                    CliExitCode::Conflict,
-                    "sound_managed_by_wedding",
-                    "Use wedding.stop to stop a wedding sequence channel.");
             if (parameters.Boolean("fade", false)) audioManager.StopSoundWithFadeOut(id);
             else audioManager.StopSound(id);
             return CliResult::Success({{"id", id}, {"stopped", true}});
@@ -1401,7 +1445,6 @@ CliResult CliCommandProcessor::Execute(
             RequireRuntime(m_runtime);
             PlaylistManager::GetInstance().Stop("");
             AnnouncementManager::GetInstance().StopAnnouncement();
-            UIManager::GetInstance().StopWeddingMode();
             if (parameters.Boolean("fade", false))
                 AudioManager::GetInstance().StopAllSoundsWithFadeOut();
             else
@@ -1674,7 +1717,9 @@ CliResult CliCommandProcessor::Execute(
         if (command == "playlist.options")
         {
             parameters.Allow({
-                "name", "random_order", "random_segment", "segment_duration", "loop", "crossfade"});
+                "name", "random_order", "random_segment", "segment_duration",
+                "automatic_segment_duration", "min_segment_duration",
+                "max_segment_duration", "loop", "crossfade"});
             RequireRuntime(m_runtime);
             const std::string name = parameters.String("name");
             auto* playlist = PlaylistManager::GetInstance().GetPlaylistByName(name);
@@ -1689,6 +1734,9 @@ CliResult CliCommandProcessor::Execute(
                 updatedOptions.randomOrder = parameters.Boolean("random_order", false);
             if (parameters.Has("random_segment"))
                 updatedOptions.randomSegment = parameters.Boolean("random_segment", false);
+            if (parameters.Has("automatic_segment_duration"))
+                updatedOptions.automaticSegmentDuration =
+                    parameters.Boolean("automatic_segment_duration", false);
             if (parameters.Has("loop"))
                 updatedOptions.loopPlaylist = parameters.Boolean("loop", false);
             if (parameters.Has("segment_duration"))
@@ -1697,15 +1745,52 @@ CliResult CliCommandProcessor::Execute(
                 ValidateRange("segment_duration", duration, 0.001, 86400.0);
                 updatedOptions.segmentDuration = static_cast<float>(duration);
             }
+            if (parameters.Has("min_segment_duration"))
+            {
+                const double duration = parameters.Number("min_segment_duration");
+                ValidateRange("min_segment_duration", duration, 0.001, 86400.0);
+                updatedOptions.minSegmentDuration = static_cast<float>(duration);
+            }
+            if (parameters.Has("max_segment_duration"))
+            {
+                const double duration = parameters.Number("max_segment_duration");
+                ValidateRange("max_segment_duration", duration, 0.001, 86400.0);
+                updatedOptions.maxSegmentDuration = static_cast<float>(duration);
+            }
+            ValidateSegmentOptions(updatedOptions);
             if (parameters.Has("crossfade"))
             {
                 const double duration = parameters.Number("crossfade");
                 ValidateRange("crossfade", duration, 0.0, 3600.0);
                 updatedCrossfade = static_cast<float>(duration);
             }
-            playlist->options = updatedOptions;
-            playlist->crossfadeDuration = updatedCrossfade;
-            return CliResult::Success({{"playlist", PlaylistToJson(*playlist)}});
+            const PlaylistOptions previousOptions = playlist->options;
+            const bool wasPlaying = playlist->isPlaying;
+            const bool runtimeOptionsChanged =
+                previousOptions.randomOrder != updatedOptions.randomOrder ||
+                previousOptions.randomSegment != updatedOptions.randomSegment ||
+                previousOptions.segmentDuration != updatedOptions.segmentDuration ||
+                previousOptions.automaticSegmentDuration !=
+                    updatedOptions.automaticSegmentDuration ||
+                previousOptions.minSegmentDuration !=
+                    updatedOptions.minSegmentDuration ||
+                previousOptions.maxSegmentDuration !=
+                    updatedOptions.maxSegmentDuration ||
+                previousOptions.loopPlaylist != updatedOptions.loopPlaylist;
+            auto& manager = PlaylistManager::GetInstance();
+            if (!manager.ConfigurePlaylistPlayback(
+                    name, updatedOptions, updatedCrossfade, true))
+            {
+                throw CommandError(
+                    CliExitCode::Conflict,
+                    "playlist_options_apply_failed",
+                    "Playlist options could not be applied safely.");
+            }
+            playlist = manager.GetPlaylistByName(name);
+            return CliResult::Success({
+                {"playlist", PlaylistToJson(*playlist)},
+                {"restarted", wasPlaying && runtimeOptionsChanged}
+            });
         }
         if (command == "playlist.import")
         {
@@ -1762,7 +1847,9 @@ CliResult CliCommandProcessor::Execute(
         if (command == "playlist.play")
         {
             parameters.Allow({
-                "name", "random_order", "random_segment", "segment_duration", "loop", "crossfade"});
+                "name", "random_order", "random_segment", "segment_duration",
+                "automatic_segment_duration", "min_segment_duration",
+                "max_segment_duration", "loop", "crossfade"});
             RequireRuntime(m_runtime);
             const std::string name = parameters.String("name");
             auto& manager = PlaylistManager::GetInstance();
@@ -1789,6 +1876,9 @@ CliResult CliCommandProcessor::Execute(
                 options.randomOrder = parameters.Boolean("random_order", false);
             if (parameters.Has("random_segment"))
                 options.randomSegment = parameters.Boolean("random_segment", false);
+            if (parameters.Has("automatic_segment_duration"))
+                options.automaticSegmentDuration =
+                    parameters.Boolean("automatic_segment_duration", false);
             if (parameters.Has("loop")) options.loopPlaylist = parameters.Boolean("loop", false);
             if (parameters.Has("segment_duration"))
             {
@@ -1796,6 +1886,19 @@ CliResult CliCommandProcessor::Execute(
                 ValidateRange("segment_duration", duration, 0.001, 86400.0);
                 options.segmentDuration = static_cast<float>(duration);
             }
+            if (parameters.Has("min_segment_duration"))
+            {
+                const double duration = parameters.Number("min_segment_duration");
+                ValidateRange("min_segment_duration", duration, 0.001, 86400.0);
+                options.minSegmentDuration = static_cast<float>(duration);
+            }
+            if (parameters.Has("max_segment_duration"))
+            {
+                const double duration = parameters.Number("max_segment_duration");
+                ValidateRange("max_segment_duration", duration, 0.001, 86400.0);
+                options.maxSegmentDuration = static_cast<float>(duration);
+            }
+            ValidateSegmentOptions(options);
             if (parameters.Has("crossfade"))
             {
                 const double duration = parameters.Number("crossfade");
@@ -1892,6 +1995,12 @@ CliResult CliCommandProcessor::Execute(
                 status["nextTrack"] = manager.GetNextTrackName();
                 status["trackProgress"] = JsonFloat(manager.GetTrackProgress());
                 status["segmentProgress"] = JsonFloat(manager.GetSegmentProgress());
+                status["activeSegmentDuration"] =
+                    JsonFloat(manager.GetSegmentDuration());
+                status["segmentRemainingSeconds"] =
+                    JsonFloat(manager.GetSegmentRemainingTime());
+                status["segmentDecision"] = SegmentDecisionToJson(
+                    manager.GetSegmentDecisionInfo());
                 status["crossfadeProgress"] = JsonFloat(manager.GetCrossfadeProgress());
                 status["secondsUntilTransition"] = JsonFloat(
                     manager.GetSecondsUntilTransition());
@@ -1903,6 +2012,9 @@ CliResult CliCommandProcessor::Execute(
                 status["nextTrack"] = nullptr;
                 status["trackProgress"] = 0.0;
                 status["segmentProgress"] = 0.0;
+                status["activeSegmentDuration"] = 0.0;
+                status["segmentRemainingSeconds"] = 0.0;
+                status["segmentDecision"] = nullptr;
                 status["crossfadeProgress"] = 0.0;
                 status["secondsUntilTransition"] = 0.0;
                 status["transitionReason"] = nullptr;
@@ -1913,7 +2025,9 @@ CliResult CliCommandProcessor::Execute(
         if (command == "library.play")
         {
             parameters.Allow({
-                "random_order", "random_segment", "segment_duration", "loop", "crossfade"});
+                "random_order", "random_segment", "segment_duration",
+                "automatic_segment_duration", "min_segment_duration",
+                "max_segment_duration", "loop", "crossfade"});
             RequireRuntime(m_runtime);
             auto& manager = PlaylistManager::GetInstance();
             PlaylistOptions options = manager.GetLibraryOptions();
@@ -1922,6 +2036,9 @@ CliResult CliCommandProcessor::Execute(
                 options.randomOrder = parameters.Boolean("random_order", false);
             if (parameters.Has("random_segment"))
                 options.randomSegment = parameters.Boolean("random_segment", false);
+            if (parameters.Has("automatic_segment_duration"))
+                options.automaticSegmentDuration =
+                    parameters.Boolean("automatic_segment_duration", false);
             if (parameters.Has("loop"))
                 options.loopPlaylist = parameters.Boolean("loop", false);
             if (parameters.Has("segment_duration"))
@@ -1930,6 +2047,19 @@ CliResult CliCommandProcessor::Execute(
                 ValidateRange("segment_duration", duration, 0.001, 86400.0);
                 options.segmentDuration = static_cast<float>(duration);
             }
+            if (parameters.Has("min_segment_duration"))
+            {
+                const double duration = parameters.Number("min_segment_duration");
+                ValidateRange("min_segment_duration", duration, 0.001, 86400.0);
+                options.minSegmentDuration = static_cast<float>(duration);
+            }
+            if (parameters.Has("max_segment_duration"))
+            {
+                const double duration = parameters.Number("max_segment_duration");
+                ValidateRange("max_segment_duration", duration, 0.001, 86400.0);
+                options.maxSegmentDuration = static_cast<float>(duration);
+            }
+            ValidateSegmentOptions(options);
             if (parameters.Has("crossfade"))
             {
                 const double duration = parameters.Number("crossfade");
@@ -1970,6 +2100,126 @@ CliResult CliCommandProcessor::Execute(
             RequireRuntime(m_runtime);
             return CliResult::Success({
                 {"library", MusicLibraryToJson(PlaylistManager::GetInstance())}});
+        }
+        if (command == "library.history")
+        {
+            parameters.Allow({"id", "include_buckets"});
+            RequireRuntime(m_runtime);
+            auto& audioManager = AudioManager::GetInstance();
+            const std::optional<std::string> requestedId = parameters.Has("id")
+                ? std::optional<std::string>(parameters.String("id"))
+                : std::nullopt;
+            const bool includeBuckets =
+                parameters.Boolean("include_buckets", false);
+            if (includeBuckets && !requestedId)
+            {
+                throw CommandError(
+                    CliExitCode::Usage,
+                    "track_required_for_buckets",
+                    "include_buckets requires a music track id.");
+            }
+
+            const std::int64_t now =
+                std::chrono::duration_cast<std::chrono::seconds>(
+                    std::chrono::system_clock::now().time_since_epoch()).count();
+            nlohmann::json tracks = nlohmann::json::array();
+            bool found = false;
+            for (const auto& diagnostic :
+                 audioManager.GetPlaybackMemoryDiagnostics(now))
+            {
+                if (requestedId && diagnostic.soundName != *requestedId) continue;
+                found = true;
+                nlohmann::json track = {
+                    {"id", diagnostic.soundName},
+                    {"bucketCount", diagnostic.bucketCount},
+                    {"coverage", diagnostic.coverage},
+                    {"meanFatigue", diagnostic.meanFatigue},
+                    {"maxFatigue", diagnostic.maxFatigue}
+                };
+                if (const auto* fatigue =
+                        audioManager.GetListeningFatigue(diagnostic.soundName))
+                {
+                    ListeningHeatmap::State snapshot =
+                        ListeningHeatmap::ExportState(*fatigue);
+                    ListeningHeatmap::DecayTo(snapshot, now);
+                    track["bucketDurationSeconds"] =
+                        snapshot.bucketDurationSeconds;
+                    track["dailyDecayFactor"] = snapshot.dailyDecayFactor;
+                    track["referenceEpochSeconds"] =
+                        snapshot.referenceEpochSeconds;
+                    if (includeBuckets)
+                        track["bucketFatigue"] = snapshot.bucketFatigue;
+                }
+
+                nlohmann::json transitions = nlohmann::json::array();
+                for (const auto& [toId, toSound] : audioManager.GetAllSounds())
+                {
+                    if (toSound.kind != AudioManager::SoundKind::Music) continue;
+                    const auto transition = audioManager.GetTransitionMemory(
+                        diagnostic.soundName, toId, now);
+                    if (!transition) continue;
+                    transitions.push_back({
+                        {"to", toId},
+                        {"totalCount", transition->totalCount},
+                        {"fatigue", transition->fatigue},
+                        {"diversityScore", 1.0 - transition->fatigue},
+                        {"referenceEpochSeconds",
+                         transition->referenceEpochSeconds}
+                    });
+                }
+                track["outgoingTransitions"] = std::move(transitions);
+                tracks.push_back(std::move(track));
+            }
+            if (requestedId && !found)
+            {
+                throw CommandError(
+                    CliExitCode::NotFound,
+                    "music_not_found",
+                    "Requested music track was not found.");
+            }
+            return CliResult::Success({
+                {"history", {
+                    {"persistent", audioManager.IsPlaybackMemoryPersistent()},
+                    {"path", audioManager.GetPlaybackMemoryPath()},
+                    {"error", audioManager.GetPlaybackMemoryError().empty()
+                        ? nlohmann::json(nullptr)
+                        : nlohmann::json(audioManager.GetPlaybackMemoryError())},
+                    {"tracks", std::move(tracks)}
+                }}
+            });
+        }
+        if (command == "library.clear-history")
+        {
+            parameters.Allow({"id"});
+            RequireRuntime(m_runtime);
+            const std::optional<std::string> id = parameters.Has("id")
+                ? std::optional<std::string>(parameters.String("id"))
+                : std::nullopt;
+            if (id)
+            {
+                const auto sound =
+                    AudioManager::GetInstance().GetAllSounds().find(*id);
+                if (sound == AudioManager::GetInstance().GetAllSounds().end() ||
+                    sound->second.kind != AudioManager::SoundKind::Music)
+                {
+                    throw CommandError(
+                        CliExitCode::NotFound,
+                        "music_not_found",
+                        "Requested music track was not found.");
+                }
+            }
+            std::string clearError;
+            if (!AudioManager::GetInstance().ClearPlaybackMemory(id, clearError))
+            {
+                throw CommandError(
+                    CliExitCode::InputOutput,
+                    "playback_memory_clear_failed",
+                    clearError);
+            }
+            return CliResult::Success({
+                {"cleared", true},
+                {"id", id ? nlohmann::json(*id) : nlohmann::json(nullptr)}
+            });
         }
 
         if (command == "announcement.list")
@@ -2213,94 +2463,6 @@ CliResult CliCommandProcessor::Execute(
             return CliResult::Success({{"mixer", MixerToJson()}});
         }
 
-        if (command == "wedding.status")
-        {
-            parameters.Allow({});
-            RequireRuntime(m_runtime);
-            const auto& ui = UIManager::GetInstance();
-            return CliResult::Success({
-                {"active", ui.IsWeddingModeActive()},
-                {"phase", ui.GetWeddingPhase()},
-                {"state", ui.GetWeddingStateString()}
-            });
-        }
-        if (command == "wedding.asset")
-        {
-            parameters.Allow({"phase", "path"});
-            RequireRuntime(m_runtime);
-            const int phase = parameters.Integer("phase");
-            if (phase < 1 || phase > 3)
-                throw CommandError(
-                    CliExitCode::InvalidArgument,
-                    "invalid_wedding_phase",
-                    "Wedding phase must be 1, 2, or 3.");
-            if (UIManager::GetInstance().IsWeddingModeActive())
-                throw CommandError(
-                    CliExitCode::Conflict,
-                    "wedding_active",
-                    "Stop the wedding sequence before replacing one of its assets.");
-            const std::string path = ResolvePath(
-                parameters.String("path"), m_runtime.GetResourceRoot());
-            if (!AudioManager::GetInstance().LoadWeddingPhaseSound(phase, path))
-                throw CommandError(
-                    CliExitCode::AudioEngine,
-                    "wedding_asset_load_failed",
-                    "Unable to load wedding asset.",
-                    {{"phase", phase}, {"path", path}});
-            UIManager::GetInstance().UpdateWeddingFilePaths();
-            return CliResult::Success({{"phase", phase}, {"path", path}, {"loaded", true}});
-        }
-        if (command == "wedding.phase")
-        {
-            parameters.Allow({"phase", "transition_to_normal", "post_playlist"});
-            RequireRuntime(m_runtime);
-            const int phase = parameters.Integer("phase");
-            if (phase < 1 || phase > 3)
-                throw CommandError(
-                    CliExitCode::InvalidArgument,
-                    "invalid_wedding_phase",
-                    "Wedding phase must be 1, 2, or 3.");
-            const char* soundId = phase == 1
-                ? "wedding_entrance_sound"
-                : phase == 2 ? "wedding_ceremony_sound" : "wedding_exit_sound";
-            if (!AudioManager::GetInstance().GetAllSounds().contains(soundId))
-                throw CommandError(
-                    CliExitCode::NotFound,
-                    "wedding_asset_not_found",
-                    "Wedding phase asset is not loaded.",
-                    {{"phase", phase}, {"soundId", soundId}});
-            const bool transition = parameters.Boolean("transition_to_normal", false);
-            auto& ui = UIManager::GetInstance();
-            if (phase == 1) ui.StartWeddingPhase1(transition);
-            else if (phase == 2) ui.StartWeddingPhase2(transition);
-            else ui.StartWeddingPhase3(
-                transition, parameters.String("post_playlist", false));
-            return CliResult::Success({
-                {"active", ui.IsWeddingModeActive()},
-                {"phase", ui.GetWeddingPhase()},
-                {"state", ui.GetWeddingStateString()}
-            });
-        }
-        if (command == "wedding.next")
-        {
-            parameters.Allow({});
-            RequireRuntime(m_runtime);
-            auto& ui = UIManager::GetInstance();
-            ui.NextWeddingPhase();
-            return CliResult::Success({
-                {"active", ui.IsWeddingModeActive()},
-                {"phase", ui.GetWeddingPhase()},
-                {"state", ui.GetWeddingStateString()}
-            });
-        }
-        if (command == "wedding.stop")
-        {
-            parameters.Allow({});
-            RequireRuntime(m_runtime);
-            UIManager::GetInstance().StopWeddingMode();
-            return CliResult::Success({{"stopped", true}});
-        }
-
         if (command == "loudness.status")
         {
             parameters.Allow({"id"});
@@ -2314,12 +2476,11 @@ CliResult CliCommandProcessor::Execute(
                         CliExitCode::NotFound,
                         "sound_not_found",
                         "Sound '" + id + "' was not found.");
-                if (sound->second.kind != AudioManager::SoundKind::Music &&
-                    sound->second.kind != AudioManager::SoundKind::Wedding)
+                if (sound->second.kind != AudioManager::SoundKind::Music)
                     throw CommandError(
                         CliExitCode::Conflict,
                         "sound_not_analyzable",
-                        "Loudness analysis is only available for music and wedding assets.");
+                        "Loudness analysis is only available for music.");
             }
             nlohmann::json diagnostics = nlohmann::json::array();
             for (const auto& diagnostic : AudioManager::GetInstance().GetLoudnessDiagnostics())
@@ -2332,7 +2493,8 @@ CliResult CliCommandProcessor::Execute(
                     {"integratedLufs", JsonFloat(diagnostic.integratedLufs)},
                     {"truePeakDb", JsonFloat(diagnostic.truePeakDb)},
                     {"gainDb", JsonFloat(diagnostic.gainDb)},
-                    {"queuePosition", diagnostic.queuePosition}
+                    {"queuePosition", diagnostic.queuePosition},
+                    {"musicAnalysisReady", diagnostic.musicAnalysisReady}
                 });
             }
             return CliResult::Success({
@@ -2353,12 +2515,11 @@ CliResult CliCommandProcessor::Execute(
                 if (it == audioManager.GetAllSounds().end())
                     throw CommandError(
                         CliExitCode::NotFound, "sound_not_found", "Sound '" + id + "' was not found.");
-                if (it->second.kind != AudioManager::SoundKind::Music &&
-                    it->second.kind != AudioManager::SoundKind::Wedding)
+                if (it->second.kind != AudioManager::SoundKind::Music)
                     throw CommandError(
                         CliExitCode::Conflict,
                         "sound_not_analyzable",
-                        "Loudness analysis is only available for music and wedding assets.");
+                        "Loudness analysis is only available for music.");
                 audioManager.QueueLoudnessAnalysis(id);
                 queued = 1;
             }
@@ -2366,8 +2527,7 @@ CliResult CliCommandProcessor::Execute(
             {
                 for (const auto& [soundId, sound] : audioManager.GetAllSounds())
                 {
-                    if (sound.kind == AudioManager::SoundKind::Music ||
-                        sound.kind == AudioManager::SoundKind::Wedding)
+                    if (sound.kind == AudioManager::SoundKind::Music)
                     {
                         audioManager.QueueLoudnessAnalysis(soundId);
                         ++queued;
@@ -2509,7 +2669,7 @@ nlohmann::json CliCommandProcessor::GetSchema()
     Json soundKind = {
         {"type", "string"},
         {"enum", Json::array({
-            "sfx", "sound-effect", "music", "announcement", "wedding"})}
+            "sfx", "sound-effect", "music", "announcement"})}
     };
     Json soundLoadKind = soundKind;
     soundLoadKind["default"] = "sfx";
@@ -2518,7 +2678,7 @@ nlohmann::json CliCommandProcessor::GetSchema()
         {"parameter", "kind"},
         {"values", {
             {"sfx", false}, {"sound-effect", false}, {"music", true},
-            {"announcement", true}, {"wedding", true}
+            {"announcement", true}
         }}
     };
 
@@ -2547,6 +2707,9 @@ nlohmann::json CliCommandProcessor::GetSchema()
         {"random_order", omitted(flag(), "preserve")},
         {"random_segment", omitted(flag(), "preserve")},
         {"segment_duration", omitted(number(0.001, 86400.0), "preserve")},
+        {"automatic_segment_duration", omitted(flag(), "preserve")},
+        {"min_segment_duration", omitted(number(0.001, 86400.0), "preserve")},
+        {"max_segment_duration", omitted(number(0.001, 86400.0), "preserve")},
         {"loop", omitted(flag(), "preserve")},
         {"crossfade", omitted(number(0.0, 3600.0), "preserve")}
     };
@@ -2555,6 +2718,9 @@ nlohmann::json CliCommandProcessor::GetSchema()
         {"random_order", omitted(flag(), "inheritPlaylist")},
         {"random_segment", omitted(flag(), "inheritPlaylist")},
         {"segment_duration", omitted(number(0.001, 86400.0), "inheritPlaylist")},
+        {"automatic_segment_duration", omitted(flag(), "inheritPlaylist")},
+        {"min_segment_duration", omitted(number(0.001, 86400.0), "inheritPlaylist")},
+        {"max_segment_duration", omitted(number(0.001, 86400.0), "inheritPlaylist")},
         {"loop", omitted(flag(), "inheritPlaylist")},
         {"crossfade", omitted(number(0.0, 3600.0), "inheritPlaylist")}
     };
@@ -2562,6 +2728,9 @@ nlohmann::json CliCommandProcessor::GetSchema()
         {"random_order", omitted(flag(), "preserveLibrary")},
         {"random_segment", omitted(flag(), "preserveLibrary")},
         {"segment_duration", omitted(number(0.001, 86400.0), "preserveLibrary")},
+        {"automatic_segment_duration", omitted(flag(), "preserveLibrary")},
+        {"min_segment_duration", omitted(number(0.001, 86400.0), "preserveLibrary")},
+        {"max_segment_duration", omitted(number(0.001, 86400.0), "preserveLibrary")},
         {"loop", omitted(flag(), "preserveLibrary")},
         {"crossfade", omitted(number(0.0, 3600.0), "preserveLibrary")}
     };
@@ -2617,12 +2786,6 @@ nlohmann::json CliCommandProcessor::GetSchema()
         Json{{"required", Json::array({"sfx"})}},
         Json{{"required", Json::array({"duck"})}}
     });
-
-    const Json weddingPhase = {
-        {"type", "integer"}, {"enum", Json::array({1, 2, 3})}
-    };
-    Json postPlaylist = text();
-    postPlaylist["x-tsm-appliesWhen"] = {{"phase", 3}};
 
     Json cinemaLocalDateTime = text();
     cinemaLocalDateTime["pattern"] =
@@ -2798,6 +2961,14 @@ nlohmann::json CliCommandProcessor::GetSchema()
                 emptyParams, positions({})),
             command("library.status", false, "Return music-library playback status.",
                 emptyParams, positions({})),
+            command("library.history", false, "Inspect durable exploration memory.",
+                params({
+                    {"id", omitted(text(), "allMusic")},
+                    {"include_buckets", flagWithDefault(false)}}, {}),
+                positions({"id"})),
+            command("library.clear-history", true, "Clear exploration memory.",
+                params({{"id", omitted(text(), "allMusic")}}, {}),
+                positions({"id"})),
             command("announcement.list", false, "List announcements.", emptyParams, positions({})),
             command("announcement.load", true, "Load an announcement.",
                 params({{"id", text()}, {"path", path()}}, {"id", "path"}),
@@ -2825,20 +2996,6 @@ nlohmann::json CliCommandProcessor::GetSchema()
                 emptyParams, positions({})),
             command("mixer.get", false, "Return mixer values.", emptyParams, positions({})),
             command("mixer.set", true, "Update mixer values.", mixerSetParams, positions({})),
-            command("wedding.status", false, "Return wedding sequence state.",
-                emptyParams, positions({})),
-            command("wedding.asset", true, "Load a wedding phase asset.",
-                params({{"phase", weddingPhase}, {"path", path()}}, {"phase", "path"}),
-                    positions({"phase", "path"})),
-            command("wedding.phase", true, "Start wedding phase 1, 2, or 3.",
-                params({
-                    {"phase", weddingPhase},
-                    {"transition_to_normal", flagWithDefault(false)},
-                    {"post_playlist", postPlaylist}}, {"phase"}), positions({"phase"})),
-            command("wedding.next", true, "Advance the wedding sequence.",
-                emptyParams, positions({})),
-            command("wedding.stop", true, "Stop the wedding sequence.",
-                emptyParams, positions({})),
             command("loudness.status", false, "Return LUFS diagnostics.",
                 params({{"id", omitted(text(), "allAnalyzableSounds")}}, {}), positions({"id"})),
             command("loudness.analyze", true, "Queue LUFS analysis.",

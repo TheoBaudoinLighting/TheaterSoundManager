@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <sstream>
 
+#include <nlohmann/json.hpp>
+
 namespace TSM::Tests
 {
 namespace
@@ -184,7 +186,13 @@ TEST_F(CinemaManagerTests, CalendarStartsOnceAndPersistsCleanShutdown)
         stateDirectory / "playback_state.json");
     ASSERT_TRUE(state.IsSuccess()) << state.error;
     EXPECT_TRUE(state.document.at("cleanShutdown").get<bool>());
-    EXPECT_EQ(state.document.at("schemaVersion"), 1);
+    EXPECT_EQ(state.document.at("schemaVersion"), 2);
+    const auto& playback = state.document.at("playback");
+    EXPECT_TRUE(playback.contains("segmentDurationMs"));
+    const auto& options = playback.at("options");
+    EXPECT_TRUE(options.contains("automaticSegmentDuration"));
+    EXPECT_TRUE(options.contains("minSegmentDuration"));
+    EXPECT_TRUE(options.contains("maxSegmentDuration"));
 }
 
 TEST_F(CinemaManagerTests, ManualLibraryPlaybackTemporarilyOverridesCalendar)
@@ -454,6 +462,80 @@ TEST_F(CinemaManagerTests, DirtyFreshCheckpointResumesAutomaticallyAfterPowerLos
         steadyEpoch + std::chrono::seconds(3));
     EXPECT_FALSE(status.resume.pending);
     EXPECT_EQ(status.resume.status, "resumed_automatically");
+}
+
+TEST_F(CinemaManagerTests, LegacyV1CheckpointResumesWithoutOperationalInhibit)
+{
+    CreatePlaylist();
+    auto* playlist =
+        PlaylistManager::GetInstance().GetPlaylistByName("cinema_playlist");
+    ASSERT_NE(playlist, nullptr);
+    playlist->options.randomSegment = true;
+    playlist->options.segmentDuration = 5.0f;
+
+    const std::filesystem::path checkpoint =
+        stateDirectory / "playback_state.json";
+    nlohmann::json legacyCheckpoint;
+    {
+        CinemaManager first;
+        ASSERT_TRUE(first.Initialize(
+            BaseCinemaConfig(), stateDirectory, "fingerprint-legacy-v1", error,
+            systemEpoch, steadyEpoch)) << error;
+        first.Tick(
+            systemEpoch + std::chrono::seconds(2),
+            steadyEpoch + std::chrono::seconds(2));
+
+        const JsonFileReadResult current = ReadJsonFileStrict(checkpoint);
+        ASSERT_TRUE(current.IsSuccess()) << current.error;
+        ASSERT_EQ(current.document.at("schemaVersion"), 2);
+        legacyCheckpoint = current.document;
+        legacyCheckpoint["schemaVersion"] = 1;
+        auto& playback = legacyCheckpoint["playback"];
+        ASSERT_TRUE(playback.at("segmentActive").get<bool>());
+        ASSERT_EQ(playback.at("segmentDurationMs"), 5000u);
+        playback.erase("segmentDurationMs");
+        auto& options = playback["options"];
+        options.erase("automaticSegmentDuration");
+        options.erase("minSegmentDuration");
+        options.erase("maxSegmentDuration");
+
+        first.Shutdown(systemEpoch + std::chrono::seconds(2));
+    }
+    PlaylistManager::GetInstance().AbortImmediately();
+    {
+        std::ofstream output(checkpoint, std::ios::binary | std::ios::trunc);
+        ASSERT_TRUE(output.is_open());
+        output << legacyCheckpoint.dump(2);
+        ASSERT_TRUE(output.good());
+    }
+
+    CinemaManager restarted;
+    ASSERT_TRUE(restarted.Initialize(
+        BaseCinemaConfig(), stateDirectory, "fingerprint-legacy-v1", error,
+        systemEpoch + std::chrono::seconds(3),
+        steadyEpoch + std::chrono::seconds(3))) << error;
+
+    EXPECT_TRUE(restarted.CanPlayNormalAudio());
+    EXPECT_TRUE(
+        PlaylistManager::GetInstance().IsPlaylistPlaying("cinema_playlist"));
+    const CinemaStatus status = restarted.GetStatus(
+        systemEpoch + std::chrono::seconds(3),
+        steadyEpoch + std::chrono::seconds(3));
+    EXPECT_FALSE(status.operationalInhibit);
+    EXPECT_FALSE(status.resume.pending);
+    EXPECT_EQ(status.resume.status, "resumed_automatically");
+
+    const PlaybackState resumed =
+        PlaylistManager::GetInstance().CapturePlaybackState();
+    ASSERT_TRUE(resumed.segmentActive);
+    EXPECT_FALSE(resumed.options.automaticSegmentDuration);
+    EXPECT_FLOAT_EQ(
+        resumed.options.minSegmentDuration,
+        PlaylistOptions::DefaultMinimumSegmentDuration);
+    EXPECT_FLOAT_EQ(
+        resumed.options.maxSegmentDuration,
+        PlaylistOptions::DefaultMaximumSegmentDuration);
+    EXPECT_EQ(resumed.segmentDurationMs, 5000u);
 }
 
 } // namespace TSM::Tests

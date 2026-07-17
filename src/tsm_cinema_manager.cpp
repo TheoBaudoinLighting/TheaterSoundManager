@@ -3,7 +3,6 @@
 #include "tsm_announcement_manager.h"
 #include "tsm_atomic_file.h"
 #include "tsm_audio_manager.h"
-#include "tsm_ui_manager.h"
 
 #include <algorithm>
 #include <cmath>
@@ -20,7 +19,7 @@ namespace TSM
 namespace
 {
 
-constexpr int PlaybackStateSchemaVersion = 1;
+constexpr int PlaybackStateSchemaVersion = 2;
 constexpr std::size_t MaximumStateBytes = 1024U * 1024U;
 constexpr std::size_t MaximumIdentityLength = 256;
 constexpr std::size_t MaximumRandomPermutationSize = 10000;
@@ -136,6 +135,9 @@ nlohmann::json SerializePlaybackState(const PlaybackState& state)
             {"randomOrder", state.options.randomOrder},
             {"randomSegment", state.options.randomSegment},
             {"segmentDuration", state.options.segmentDuration},
+            {"automaticSegmentDuration", state.options.automaticSegmentDuration},
+            {"minSegmentDuration", state.options.minSegmentDuration},
+            {"maxSegmentDuration", state.options.maxSegmentDuration},
             {"loopPlaylist", state.options.loopPlaylist}
         }},
         {"crossfadeDuration", state.crossfadeDuration},
@@ -143,23 +145,34 @@ nlohmann::json SerializePlaybackState(const PlaybackState& state)
         {"randomPermutationIndex", state.randomPermutationIndex},
         {"segmentActive", state.segmentActive},
         {"segmentStartMs", state.segmentStartMs},
-        {"segmentElapsedMs", state.segmentElapsedMs}
+        {"segmentElapsedMs", state.segmentElapsedMs},
+        {"segmentDurationMs", state.segmentDurationMs}
     };
 }
 
 bool ParsePlaybackState(
     const nlohmann::json& value,
+    int schemaVersion,
     PlaybackState& state,
     std::string& errorMessage)
 {
-    if (!HasExactKeys(
-            value,
-            {"isPlaying", "playlistName", "trackId", "trackIndex", "positionMs",
-             "options", "crossfadeDuration", "randomPermutation",
-             "randomPermutationIndex", "segmentActive", "segmentStartMs",
-             "segmentElapsedMs"}))
+    const bool fieldsMatch = schemaVersion == 1
+        ? HasExactKeys(
+              value,
+              {"isPlaying", "playlistName", "trackId", "trackIndex", "positionMs",
+               "options", "crossfadeDuration", "randomPermutation",
+               "randomPermutationIndex", "segmentActive", "segmentStartMs",
+               "segmentElapsedMs"})
+        : HasExactKeys(
+              value,
+              {"isPlaying", "playlistName", "trackId", "trackIndex", "positionMs",
+               "options", "crossfadeDuration", "randomPermutation",
+               "randomPermutationIndex", "segmentActive", "segmentStartMs",
+               "segmentElapsedMs", "segmentDurationMs"});
+    if (!fieldsMatch)
     {
-        errorMessage = "Playback state fields do not match schema version 1.";
+        errorMessage = "Playback state fields do not match schema version " +
+            std::to_string(schemaVersion) + ".";
         return false;
     }
     if (!value["isPlaying"].is_boolean() ||
@@ -170,7 +183,9 @@ bool ParsePlaybackState(
         !ReadFiniteFloat(value["crossfadeDuration"], 0.0f, 3600.0f, state.crossfadeDuration) ||
         !value["segmentActive"].is_boolean() ||
         !ReadUnsigned32(value["segmentStartMs"], state.segmentStartMs) ||
-        !ReadUnsigned32(value["segmentElapsedMs"], state.segmentElapsedMs))
+        !ReadUnsigned32(value["segmentElapsedMs"], state.segmentElapsedMs) ||
+        (schemaVersion >= 2 &&
+         !ReadUnsigned32(value["segmentDurationMs"], state.segmentDurationMs)))
     {
         errorMessage = "Playback state contains an invalid scalar value.";
         return false;
@@ -179,15 +194,30 @@ bool ParsePlaybackState(
     state.segmentActive = value["segmentActive"].get<bool>();
 
     const auto& options = value["options"];
-    if (!HasExactKeys(
-            options,
-            {"randomOrder", "randomSegment", "segmentDuration", "loopPlaylist"}) ||
+    const bool optionFieldsMatch = schemaVersion == 1
+        ? HasExactKeys(
+              options,
+              {"randomOrder", "randomSegment", "segmentDuration", "loopPlaylist"})
+        : HasExactKeys(
+              options,
+              {"randomOrder", "randomSegment", "segmentDuration",
+               "automaticSegmentDuration", "minSegmentDuration",
+               "maxSegmentDuration", "loopPlaylist"});
+    if (!optionFieldsMatch ||
         !options["randomOrder"].is_boolean() ||
         !options["randomSegment"].is_boolean() ||
         !options["loopPlaylist"].is_boolean() ||
         !ReadFiniteFloat(
             options["segmentDuration"], 0.001f, 86400.0f,
-            state.options.segmentDuration))
+            state.options.segmentDuration) ||
+        (schemaVersion >= 2 &&
+         (!options["automaticSegmentDuration"].is_boolean() ||
+          !ReadFiniteFloat(
+              options["minSegmentDuration"], 0.001f, 86400.0f,
+              state.options.minSegmentDuration) ||
+          !ReadFiniteFloat(
+              options["maxSegmentDuration"], 0.001f, 86400.0f,
+              state.options.maxSegmentDuration))))
     {
         errorMessage = "Playback options are invalid.";
         return false;
@@ -195,6 +225,28 @@ bool ParsePlaybackState(
     state.options.randomOrder = options["randomOrder"].get<bool>();
     state.options.randomSegment = options["randomSegment"].get<bool>();
     state.options.loopPlaylist = options["loopPlaylist"].get<bool>();
+    if (schemaVersion >= 2)
+    {
+        state.options.automaticSegmentDuration =
+            options["automaticSegmentDuration"].get<bool>();
+        if (state.options.minSegmentDuration > state.options.maxSegmentDuration)
+        {
+            errorMessage = "Playback automatic segment range is invalid.";
+            return false;
+        }
+    }
+    else
+    {
+        state.options.automaticSegmentDuration = false;
+        state.options.minSegmentDuration =
+            PlaylistOptions::DefaultMinimumSegmentDuration;
+        state.options.maxSegmentDuration =
+            PlaylistOptions::DefaultMaximumSegmentDuration;
+        state.segmentDurationMs = state.segmentActive
+            ? static_cast<std::uint32_t>(std::llround(
+                  static_cast<double>(state.options.segmentDuration) * 1000.0))
+            : 0;
+    }
 
     const auto& permutation = value["randomPermutation"];
     if (!permutation.is_array() ||
@@ -232,6 +284,16 @@ bool ParsePlaybackState(
         errorMessage = "Inactive playback contains an active track identity.";
         return false;
     }
+    if ((!state.segmentActive &&
+         (state.segmentStartMs != 0 || state.segmentElapsedMs != 0 ||
+          state.segmentDurationMs != 0)) ||
+        (state.segmentActive &&
+         (state.segmentDurationMs == 0 ||
+          state.segmentElapsedMs > state.segmentDurationMs)))
+    {
+        errorMessage = "Playback segment progress is invalid.";
+        return false;
+    }
     return true;
 }
 
@@ -261,14 +323,19 @@ bool ParseCheckpoint(
             value,
             {"schemaVersion", "generation", "cleanShutdown", "capturedAtUnixMs",
              "configFingerprint", "playback"}) ||
-        !value["schemaVersion"].is_number_integer() ||
-        value["schemaVersion"].get<int>() != PlaybackStateSchemaVersion ||
+        !value["schemaVersion"].is_number_integer())
+    {
+        errorMessage = "Playback checkpoint header is invalid.";
+        return false;
+    }
+    const int schemaVersion = value["schemaVersion"].get<int>();
+    if ((schemaVersion != 1 && schemaVersion != PlaybackStateSchemaVersion) ||
         !ReadUnsigned64(value["generation"], result.generation) ||
         !value["cleanShutdown"].is_boolean() ||
         !value["capturedAtUnixMs"].is_number_integer() ||
         !ReadBoundedString(value["configFingerprint"], result.configFingerprint, false))
     {
-        errorMessage = "Playback checkpoint header does not match schema version 1.";
+        errorMessage = "Playback checkpoint header uses an unsupported schema.";
         return false;
     }
     result.cleanShutdown = value["cleanShutdown"].get<bool>();
@@ -278,7 +345,8 @@ bool ParseCheckpoint(
         errorMessage = "Playback checkpoint timestamp is invalid.";
         return false;
     }
-    return ParsePlaybackState(value["playback"], result.playback, errorMessage);
+    return ParsePlaybackState(
+        value["playback"], schemaVersion, result.playback, errorMessage);
 }
 
 bool CauseStartsWith(const std::string& persistedCause, std::string_view expected)
@@ -599,7 +667,6 @@ void CinemaManager::ApplyContainment(
         audio.SetNormalPlaybackBlocked(true);
         PlaylistManager::GetInstance().AbortImmediately();
         AnnouncementManager::GetInstance().StopAnnouncement();
-        UIManager::GetInstance().StopWeddingMode();
         audio.StopAllNonEmergencyImmediately();
         EnsureEmergencyState(steadyNow);
     }
@@ -904,7 +971,6 @@ void CinemaManager::SetOperationalInhibit(
     audio.SetNormalPlaybackBlocked(true);
     PlaylistManager::GetInstance().AbortImmediately();
     AnnouncementManager::GetInstance().StopAnnouncement();
-    UIManager::GetInstance().StopWeddingMode();
     audio.StopAllNonEmergencyImmediately();
 }
 

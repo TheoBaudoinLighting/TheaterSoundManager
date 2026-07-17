@@ -13,6 +13,28 @@ TEST(TransitionLogicTests, EqualPowerMaintainsConstantCombinedPower)
                 1.0f, 0.0001f);
 }
 
+TEST(TransitionLogicTests, EqualPowerCurveEasesInAndOutWithoutChangingPower)
+{
+    const auto start = TransitionLogic::CalculateEqualPowerGains(0.0f);
+    const auto quarter = TransitionLogic::CalculateEqualPowerGains(0.25f);
+    const auto threeQuarter = TransitionLogic::CalculateEqualPowerGains(0.75f);
+    const auto end = TransitionLogic::CalculateEqualPowerGains(1.0f);
+
+    EXPECT_FLOAT_EQ(start.outgoing, 1.0f);
+    EXPECT_FLOAT_EQ(start.incoming, 0.0f);
+    EXPECT_NEAR(end.outgoing, 0.0f, 0.000001f);
+    EXPECT_FLOAT_EQ(end.incoming, 1.0f);
+
+    // Smoothstep makes the incoming track gentler than a raw linear-time
+    // equal-power fade during the first quarter, with a symmetric fade-out.
+    EXPECT_LT(quarter.incoming, 0.3f);
+    EXPECT_NEAR(quarter.incoming, threeQuarter.outgoing, 0.0001f);
+    EXPECT_NEAR(
+        quarter.outgoing * quarter.outgoing +
+            quarter.incoming * quarter.incoming,
+        1.0f, 0.0001f);
+}
+
 TEST(TransitionLogicTests, AnticipatesShortTrackEnd)
 {
     const auto decision = TransitionLogic::Evaluate(5.0f, 150.0f, true, 10.0f, true, true);

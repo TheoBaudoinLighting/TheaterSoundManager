@@ -76,6 +76,8 @@ const Positionals& CommandPositionals()
         {"library.stop", {}},
         {"library.next", {}},
         {"library.status", {}},
+        {"library.history", {"id"}},
+        {"library.clear-history", {"id"}},
         {"announcement.list", {}},
         {"announcement.load", {"id", "path"}},
         {"announcement.unload", {"id"}},
@@ -89,11 +91,6 @@ const Positionals& CommandPositionals()
         {"schedule.reset", {}},
         {"mixer.get", {}},
         {"mixer.set", {}},
-        {"wedding.status", {}},
-        {"wedding.asset", {"phase", "path"}},
-        {"wedding.phase", {"phase"}},
-        {"wedding.next", {}},
-        {"wedding.stop", {}},
         {"loudness.status", {"id"}},
         {"loudness.analyze", {"id"}},
         {"loudness.target", {}},
@@ -106,8 +103,8 @@ bool IsBooleanCommandOption(std::string_view key)
 {
     static const std::set<std::string_view> options = {
         "check_files", "stream", "loop", "fade_in", "fade",
-        "random_order", "random_segment", "sfx_before", "sfx_after",
-        "transition_to_normal", "play_evacuation"
+        "random_order", "random_segment", "automatic_segment_duration",
+        "sfx_before", "sfx_after", "include_buckets", "play_evacuation"
     };
     return options.contains(key);
 }

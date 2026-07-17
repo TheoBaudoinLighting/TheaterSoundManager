@@ -8,7 +8,9 @@
 #include <map>
 #include <functional>
 #include <limits>
+#include <optional>
 #include "tsm_transition_logic.h"
+#include "tsm_music_analysis.h"
 
 namespace TSM
 {
@@ -16,10 +18,15 @@ namespace TSM
 struct PlaylistOptions
 {
     static constexpr float DefaultSegmentDuration = 150.0f;
+    static constexpr float DefaultMinimumSegmentDuration = 45.0f;
+    static constexpr float DefaultMaximumSegmentDuration = 240.0f;
 
     bool randomOrder = false;   
     bool randomSegment = false;  
     float segmentDuration = DefaultSegmentDuration;
+    bool automaticSegmentDuration = false;
+    float minSegmentDuration = DefaultMinimumSegmentDuration;
+    float maxSegmentDuration = DefaultMaximumSegmentDuration;
     bool loopPlaylist = false;  
 };
 
@@ -40,6 +47,25 @@ struct PlaybackState
     bool segmentActive = false;
     std::uint32_t segmentStartMs = 0;
     std::uint32_t segmentElapsedMs = 0;
+    std::uint32_t segmentDurationMs = 0;
+};
+
+struct SegmentDecisionInfo
+{
+    bool active = false;
+    bool smartAnalysis = false;
+    bool fullTrack = false;
+    std::string mode = "fixed";
+    float startSeconds = 0.0f;
+    float endSeconds = 0.0f;
+    float durationSeconds = 0.0f;
+    float entryScore = 0.0f;
+    float exitScore = 0.0f;
+    float transitionScore = 0.0f;
+    float explorationScore = 0.0f;
+    float transitionDiversityScore = 1.0f;
+    float totalScore = 0.0f;
+    std::vector<std::string> reasons;
 };
 
 class PlaylistManager
@@ -65,6 +91,11 @@ public:
     bool ImportPlaylist(const std::string& filePath, const std::string& playlistName = "");
 
     void Play(const std::string& playlistName, const PlaylistOptions& options);
+    bool ConfigurePlaylistPlayback(
+        const std::string& playlistName,
+        const PlaylistOptions& options,
+        float crossfadeDuration,
+        bool restartIfPlaying = true);
     bool PlayLibrary(const PlaylistOptions& options, float crossfadeDuration);
     void Stop(const std::string& playlistName);
     void StopLibrary();
@@ -95,6 +126,7 @@ public:
     float GetSegmentProgress() const; 
     float GetSegmentDuration() const;
     float GetSegmentRemainingTime() const;
+    SegmentDecisionInfo GetSegmentDecisionInfo() const;
 
     void SetCrossfadeDuration(float duration);
 
@@ -116,6 +148,16 @@ private:
 
     struct Playlist
     {
+        struct SegmentRuntime
+        {
+            float elapsedSeconds = 0.0f;
+            float durationSeconds = 0.0f;
+            float startSeconds = 0.0f;
+            bool active = false;
+            SegmentDecisionInfo decision;
+            std::optional<MusicAnalysis::Profile> exitProfile;
+        };
+
         std::string name;
         std::vector<std::string> tracks;
         bool isPlaying = false;
@@ -138,14 +180,19 @@ private:
         bool isCrossfading = false;
 
         float oldChannelVolume = 1.0f;
-        float nextTargetVolume = 1.0f;
+        float oldChannelNormalizationGain = 1.0f;
 
-        float segmentTimer = 0.0f;
-        float segmentMaxDuration = 0.0f;
-        bool segmentModeActive = false;
-        float chosenStartTime = 0.0f;
+        SegmentRuntime currentSegment;
+        SegmentRuntime nextSegment;
         float secondsUntilTransition = (std::numeric_limits<float>::max)();
         TransitionLogic::Reason lastTransitionReason = TransitionLogic::Reason::None;
+
+        // Bounded-selection diagnostics. Kept with the runtime state so tests
+        // and future operator diagnostics can verify the real-time budget.
+        std::size_t lastSmartCandidatePoolSize = 0u;
+        std::size_t lastSmartShortlistSize = 0u;
+        std::size_t lastSmartFineEvaluationCount = 0u;
+        std::size_t lastSmartFineCandidateBudgetPerKind = 0u;
     };
 
     std::string m_activePlaylistName;
@@ -156,6 +203,16 @@ private:
                         TransitionLogic::Reason reason = TransitionLogic::Reason::None);
     bool StartPlayback(Playlist& plist, const PlaylistOptions& options);
     void StartTrackAtIndex(Playlist& plist, int index);
+    Playlist::SegmentRuntime PrepareRandomSegment(
+        Playlist& plist, const std::string& trackId,
+        FMOD::Channel* channel, FMOD::Sound* expectedSound,
+        const std::optional<MusicAnalysis::SegmentDecision>& plannedDecision =
+            std::nullopt,
+        const std::optional<MusicAnalysis::Profile>& outgoingExit =
+            std::nullopt);
+    int SelectCompatibleRandomTrack(
+        Playlist& plist, int firstCandidatePosition,
+        std::optional<MusicAnalysis::SegmentDecision>& selectedDecision);
     void UpdatePlayback(Playlist& plist, float deltaTime);
     void PrepareRandomOrder(Playlist& plist);
     void FinishCrossfade(Playlist& plist);

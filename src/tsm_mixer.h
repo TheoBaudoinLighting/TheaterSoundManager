@@ -14,7 +14,6 @@ public:
     float GetSfxVolume() const { return m_sfxVolume; }
     float GetDuckFactor() const { return m_userDuckFactor; }
     float GetAnnouncementDuckFactor() const { return m_announcementDuckFactor; }
-    float GetWeddingDuckFactor() const { return m_weddingDuckFactor; }
     float GetEffectiveDuckFactor() const;
 
     void SetMasterVolume(float volume);
@@ -23,7 +22,6 @@ public:
     void SetSfxVolume(float volume);
     void SetDuckFactor(float factor);
     void SetAnnouncementDuckFactor(float factor);
-    void SetWeddingDuckFactor(float factor);
 
     void ApplyAllVolumes() const;
     void Reset();
@@ -37,7 +35,6 @@ private:
     float m_sfxVolume = 3.0f;
     float m_userDuckFactor = 1.0f;
     float m_announcementDuckFactor = 1.0f;
-    float m_weddingDuckFactor = 1.0f;
 };
 
 } // namespace TSM

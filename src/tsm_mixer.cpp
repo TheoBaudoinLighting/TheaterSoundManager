@@ -43,14 +43,9 @@ void MixerState::SetAnnouncementDuckFactor(float factor)
     m_announcementDuckFactor = std::clamp(factor, 0.0f, 1.0f);
 }
 
-void MixerState::SetWeddingDuckFactor(float factor)
-{
-    m_weddingDuckFactor = std::clamp(factor, 0.0f, 1.0f);
-}
-
 float MixerState::GetEffectiveDuckFactor() const
 {
-    return m_userDuckFactor * m_announcementDuckFactor * m_weddingDuckFactor;
+    return m_userDuckFactor * m_announcementDuckFactor;
 }
 
 void MixerState::ApplyAllVolumes() const
@@ -71,7 +66,6 @@ void MixerState::Reset()
     m_sfxVolume = 3.0f;
     m_userDuckFactor = 1.0f;
     m_announcementDuckFactor = 1.0f;
-    m_weddingDuckFactor = 1.0f;
     ApplyAllVolumes();
 }
 

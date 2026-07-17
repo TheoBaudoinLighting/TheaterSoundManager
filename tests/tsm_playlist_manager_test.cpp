@@ -177,7 +177,7 @@ namespace TSM {
             EXPECT_TRUE(manager.GetCurrentTrackName().empty());
         }
 
-        TEST_F(PlaylistManagerTests, CrossfadeDurationRoundTripsThroughPlaylistFiles) {
+        TEST_F(PlaylistManagerTests, SegmentOptionsRoundTripThroughPlaylistFiles) {
             auto& manager = PlaylistManager::GetInstance();
             manager.CreatePlaylist(m_playlistName);
 
@@ -187,6 +187,9 @@ namespace TSM {
             playlist->options.randomSegment = false;
             playlist->options.loopPlaylist = false;
             playlist->options.segmentDuration = 42.0f;
+            playlist->options.automaticSegmentDuration = true;
+            playlist->options.minSegmentDuration = 45.0f;
+            playlist->options.maxSegmentDuration = 240.0f;
             playlist->crossfadeDuration = 4.25f;
 
             const auto singlePlaylist = TemporaryPath("_single.json");
@@ -194,6 +197,9 @@ namespace TSM {
 
             playlist->options.randomOrder = true;
             playlist->options.segmentDuration = 99.0f;
+            playlist->options.automaticSegmentDuration = false;
+            playlist->options.minSegmentDuration = 10.0f;
+            playlist->options.maxSegmentDuration = 20.0f;
             playlist->crossfadeDuration = 0.5f;
             ASSERT_TRUE(manager.ImportPlaylist(singlePlaylist.string(), m_playlistName));
 
@@ -201,19 +207,95 @@ namespace TSM {
             ASSERT_NE(playlist, nullptr);
             EXPECT_FALSE(playlist->options.randomOrder);
             EXPECT_FLOAT_EQ(playlist->options.segmentDuration, 42.0f);
+            EXPECT_TRUE(playlist->options.automaticSegmentDuration);
+            EXPECT_FLOAT_EQ(playlist->options.minSegmentDuration, 45.0f);
+            EXPECT_FLOAT_EQ(playlist->options.maxSegmentDuration, 240.0f);
             EXPECT_FLOAT_EQ(playlist->crossfadeDuration, 4.25f);
 
             const auto allPlaylists = TemporaryPath("_all.json");
             ASSERT_TRUE(manager.SavePlaylistsToFile(allPlaylists.string()));
 
             playlist->options.randomSegment = true;
+            playlist->options.automaticSegmentDuration = false;
+            playlist->options.minSegmentDuration = 1.0f;
+            playlist->options.maxSegmentDuration = 2.0f;
             playlist->crossfadeDuration = 1.0f;
             ASSERT_TRUE(manager.LoadPlaylistsFromFile(allPlaylists.string()));
 
             playlist = manager.GetPlaylistByName(m_playlistName);
             ASSERT_NE(playlist, nullptr);
             EXPECT_FALSE(playlist->options.randomSegment);
+            EXPECT_TRUE(playlist->options.automaticSegmentDuration);
+            EXPECT_FLOAT_EQ(playlist->options.minSegmentDuration, 45.0f);
+            EXPECT_FLOAT_EQ(playlist->options.maxSegmentDuration, 240.0f);
             EXPECT_FLOAT_EQ(playlist->crossfadeDuration, 4.25f);
+        }
+
+        TEST_F(PlaylistManagerTests, LegacyPlaylistImportUsesAutomaticSegmentDefaults) {
+            auto& manager = PlaylistManager::GetInstance();
+            manager.CreatePlaylist(m_playlistName);
+
+            const auto legacyPlaylist = TemporaryPath("_legacy.json");
+            const nlohmann::json document = {
+                {"name", m_playlistName},
+                {"options", {
+                    {"randomSegment", true},
+                    {"segmentDuration", 42.0}
+                }},
+                {"tracks", nlohmann::json::array()}
+            };
+            {
+                std::ofstream output(legacyPlaylist);
+                ASSERT_TRUE(output.is_open());
+                output << document.dump(2);
+            }
+
+            ASSERT_TRUE(manager.ImportPlaylist(
+                legacyPlaylist.string(), m_playlistName));
+
+            const auto* playlist = manager.GetPlaylistByName(m_playlistName);
+            ASSERT_NE(playlist, nullptr);
+            EXPECT_TRUE(playlist->options.randomSegment);
+            EXPECT_FLOAT_EQ(playlist->options.segmentDuration, 42.0f);
+            EXPECT_FALSE(playlist->options.automaticSegmentDuration);
+            EXPECT_FLOAT_EQ(playlist->options.minSegmentDuration, 45.0f);
+            EXPECT_FLOAT_EQ(playlist->options.maxSegmentDuration, 240.0f);
+        }
+
+        TEST_F(PlaylistManagerTests, RejectsReversedAutomaticSegmentRangeOnImport) {
+            auto& manager = PlaylistManager::GetInstance();
+            manager.CreatePlaylist(m_playlistName);
+
+            auto* playlist = manager.GetPlaylistByName(m_playlistName);
+            ASSERT_NE(playlist, nullptr);
+            playlist->options.automaticSegmentDuration = false;
+            playlist->options.minSegmentDuration = 60.0f;
+            playlist->options.maxSegmentDuration = 120.0f;
+
+            const auto invalidPlaylist = TemporaryPath("_invalid_range.json");
+            const nlohmann::json document = {
+                {"name", m_playlistName},
+                {"options", {
+                    {"automaticSegmentDuration", true},
+                    {"minSegmentDuration", 240.0},
+                    {"maxSegmentDuration", 45.0}
+                }},
+                {"tracks", nlohmann::json::array()}
+            };
+            {
+                std::ofstream output(invalidPlaylist);
+                ASSERT_TRUE(output.is_open());
+                output << document.dump(2);
+            }
+
+            EXPECT_FALSE(manager.ImportPlaylist(
+                invalidPlaylist.string(), m_playlistName));
+
+            playlist = manager.GetPlaylistByName(m_playlistName);
+            ASSERT_NE(playlist, nullptr);
+            EXPECT_FALSE(playlist->options.automaticSegmentDuration);
+            EXPECT_FLOAT_EQ(playlist->options.minSegmentDuration, 60.0f);
+            EXPECT_FLOAT_EQ(playlist->options.maxSegmentDuration, 120.0f);
         }
 
         TEST_F(PlaylistManagerTests, FailedImportPreservesPlaylistAndRollsBackSounds) {
@@ -293,10 +375,6 @@ namespace TSM {
             ASSERT_TRUE(audio.LoadSound(
                 "library_effect", wave.string(), false,
                 AudioManager::SoundKind::SoundEffect));
-            ASSERT_TRUE(audio.LoadSound(
-                "library_wedding", wave.string(), true,
-                AudioManager::SoundKind::Wedding));
-
             auto& manager = PlaylistManager::GetInstance();
             manager.CreatePlaylist(m_playlistName);
             manager.CreatePlaylist("second_library_reference");

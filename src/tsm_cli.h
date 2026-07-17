@@ -5,10 +5,14 @@
 #include <nlohmann/json.hpp>
 
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace TSM
 {
+
+inline constexpr int CliSchemaVersion = 1;
+inline constexpr std::string_view CliApiVersion = "2.0";
 
 enum class CliExitCode : int
 {

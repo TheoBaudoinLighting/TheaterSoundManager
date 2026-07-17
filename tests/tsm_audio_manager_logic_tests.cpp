@@ -28,23 +28,6 @@ namespace TSM {
             }
         };
 
-        TEST_F(AudioManagerLogicTests, LoadWeddingPhaseSound) {
-            auto& audioManager = AudioManager::GetInstance();
-
-            std::string testFilePath = "test_wedding_phase.mp3";
-            bool result = audioManager.LoadWeddingPhaseSound(1, testFilePath);
-
-            auto allSounds = GetAllLoadedSounds();
-            auto it = allSounds.find("wedding_entrance_sound");
-
-            if (result) {
-                ASSERT_NE(it, allSounds.end());
-                if (it != allSounds.end()) {
-                    ASSERT_EQ(it->second.filePath, testFilePath);
-                }
-            }
-        }
-
         TEST_F(AudioManagerLogicTests, LoadAnnouncement) {
             auto& audioManager = AudioManager::GetInstance();
 

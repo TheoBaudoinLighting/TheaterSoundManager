@@ -39,7 +39,7 @@ Global options:
 | --- | --- |
 | `--config PATH` | Configuration file. Auto-detected when omitted. |
 | `--no-config` | Start with an empty in-memory session. |
-| `--state-dir PATH` | Durable LUFS, playback-recovery, and safety-state directory. |
+| `--state-dir PATH` | Durable analysis, exploration, recovery, and safety-state directory. |
 | `--no-sound` | Use FMOD's no-sound backend for tests and automation. |
 | `--bluetooth` | Attempt to start the Bluetooth server in this process. |
 | `--wait SECONDS` | Keep a one-shot runtime alive for 0 to 86400 seconds. |
@@ -84,7 +84,7 @@ TheaterSoundManager.exe --cli serve --config config/tsm_config.json `
 The host writes exactly one `ready` event when initialization has completed:
 
 ```json
-{"schemaVersion":1,"apiVersion":"1.0","event":"ready","data":{"runtime":{},"mixer":{}}}
+{"schemaVersion":1,"apiVersion":"2.0","event":"ready","data":{"runtime":{},"mixer":{}}}
 ```
 
 Then send one UTF-8 JSON object per line:
@@ -101,7 +101,7 @@ Every request produces exactly one response in input order:
 ```json
 {
   "schemaVersion": 1,
-  "apiVersion": "1.0",
+  "apiVersion": "2.0",
   "id": "volume",
   "command": "mixer.set",
   "ok": true,
@@ -115,7 +115,7 @@ Errors use the same envelope:
 ```json
 {
   "schemaVersion": 1,
-  "apiVersion": "1.0",
+  "apiVersion": "2.0",
   "id": "play",
   "command": "playlist.play",
   "ok": false,
@@ -226,8 +226,8 @@ Consumers must ignore unknown annotations and unknown future commands.
 | `config reload [PATH]` | `config.reload` | `path` |
 
 `system.status` returns the runtime, mixer, load report, active playlist, global
-music-library playback, announcement sequence, schedules, wedding sequence,
-cinema calendar, recovery, and safety state in one snapshot. The
+music-library playback, announcement sequence, schedules, cinema calendar,
+recovery, and safety state in one snapshot. The
 runtime object exposes `bluetooth`, `bluetoothState` (`disabled`, `starting`,
 `running`, `failed`, or `stopped`), and a nullable `bluetoothError`; startup is
 never reported as successful before RFCOMM is actually listening.
@@ -288,17 +288,16 @@ requirements.
 | `sound resume ID` | `sound.resume` | `id` |
 | `sound seek ID POSITION_MS` | `sound.seek` | `id`, `position_ms` |
 
-Valid sound kinds are `sfx`, `music`, `announcement`, and `wedding`. Music and
-wedding sounds use normalization and ducking. Announcements and SFX use their
-dedicated mixer buses. `sound.play volume` and `sound.set volume` are local
+Valid sound kinds are `sfx`, `music`, and `announcement`. Music uses
+normalization and ducking. Announcements and SFX use their dedicated mixer
+buses. `sound.play volume` and `sound.set volume` are local
 per-channel gains; master/category/duck gains are applied independently through
 FMOD channel groups, so later mixer changes do not erase a channel override.
 `sound-effect` is accepted as a compatibility alias for `sfx`; new integrations
 should emit the canonical `sfx` value.
 
 `sound.unload` refuses active or referenced resources with `sound_in_use`.
-Remove playlist/schedule references and stop playback first. Wedding assets are
-replaced with `wedding.asset`, while the sequence is stopped.
+Remove playlist/schedule references and stop playback first.
 
 ### Global music library (`No playlist`)
 
@@ -308,21 +307,39 @@ replaced with `wedding.asset`, while the sequence is stopped.
 | `library stop` | `library.stop` | none |
 | `library next` | `library.next` | none |
 | `library status` | `library.status` | none |
+| `library history [ID]` | `library.history` | optional `id`; `include_buckets` requires it |
+| `library clear-history [ID]` | `library.clear-history` | optional `id`; omitted clears all |
 
 This is the GUI's `No playlist` mode. At each `library.play`, it takes a
 deterministic snapshot of every loaded sound classified as `music`, including
 tracks that belong to no playlist and without duplicating tracks referenced by
-multiple playlists. Announcements, SFX, wedding assets, and emergency audio are
-excluded. Music loaded after playback starts joins the next snapshot.
+multiple playlists. Announcements, SFX, and emergency audio are excluded. Music
+loaded after playback starts joins the next snapshot.
 While playback is active, `tracks` and `trackCount` describe that immutable
 snapshot; `availableTrackCount` reports the current number of loaded music
 tracks.
 
 The playback options are `random_order`, `random_segment`, `segment_duration`,
-`loop`, and `crossfade`. `library.play` accepts the persistent host or a positive
+`automatic_segment_duration`, `min_segment_duration`, `max_segment_duration`,
+`loop`, and `crossfade`. When automatic duration is enabled, Theater Sound
+Manager chooses analyzed entry and exit points inside the inclusive min/max
+range, prefers `segment_duration`, and favours acoustically compatible,
+underexplored regions and track pairs. Short tracks are played in full. Recent
+fatigue decays continuously at the equivalent of five percent per day.
+`segment_duration` remains the fixed duration when automatic mode is disabled
+and the preferred duration when smart selection is available. `library.play`
+accepts the persistent host or a positive
 `--wait` duration. `library.stop` and `library.next` must target the persistent
 host because a one-shot process does not own existing playback. All commands
 remain subject to the cinema safety gate.
+
+`library.history` reads the restart-persistent ten-second fatigue map and the
+directed outgoing-transition counters. Set `include_buckets=true` only with one
+track ID to return every cell. `library.clear-history` is the explicit
+commissioning/reset operation; with no ID it clears all segment and transition
+memory. Normal shutdown, configuration reload, LUFS cache maintenance, and
+application restart preserve this history. Clearing history must target the
+persistent host so an older in-memory snapshot cannot be written back later.
 
 ### Playlists
 
@@ -350,8 +367,11 @@ remain subject to the cinema safety gate.
 | `playlist status [NAME]` | `playlist.status` | optional `name` |
 
 Playback options are `random_order`, `random_segment`, `segment_duration`,
-`loop`, and `crossfade`. Only sounds classified as `music` can be added to a
-playlist.
+`automatic_segment_duration`, `min_segment_duration`, `max_segment_duration`,
+`loop`, and `crossfade`. The three automatic-duration values are applied
+atomically: all durations must be between `0.001` and `86400` seconds and the
+minimum cannot exceed the maximum. Only sounds classified as `music` can be
+added to a playlist.
 
 ### Announcements and daily schedules
 
@@ -374,22 +394,16 @@ session and automatically become eligible again on a new local calendar day.
 Provide either `at` or numeric fields, never both. `schedule.update` may change
 only `hour` or only `minute`; the other value is preserved.
 
-### Mixer and wedding sequence
+### Mixer
 
 | CLI | JSON command | Parameters |
 | --- | --- | --- |
 | `mixer get` | `mixer.get` | none |
 | `mixer set` | `mixer.set` | one or more of `master`, `music`, `announcement`, `sfx`, `duck` |
-| `wedding status` | `wedding.status` | none |
-| `wedding asset PHASE PATH` | `wedding.asset` | `phase`, `path` |
-| `wedding phase PHASE` | `wedding.phase` | `phase`, `transition_to_normal`, `post_playlist` |
-| `wedding next` | `wedding.next` | none |
-| `wedding stop` | `wedding.stop` | none |
 
 `master`, `music`, and `duck` range from 0 to 1. Announcement and SFX buses
-range from 0 to 3. Wedding phases are 1 (entrance), 2 (ceremony), and 3 (exit).
-Mixer responses also expose `effectiveDuck`, the product of independent user,
-announcement, and wedding duck layers.
+range from 0 to 3. Mixer responses also expose `effectiveDuck`, the product of
+the independent user and announcement duck layers.
 
 ### Loudness normalization
 
@@ -421,30 +435,30 @@ Paths passed to import/export/save/load resolve from the caller's working
 directory. Windows command-line arguments are read as Unicode and converted to
 UTF-8 before parsing.
 
-Reproducible installs omit local media by default and ship a valid empty
+Reproducible installs omit local media by default and ship a valid no-media
 configuration. `TSM_INSTALL_ASSETS=ON` is an explicit deployment choice that
-installs the source-tree media and populated configuration; callers are
-responsible for the corresponding FMOD and media redistribution rights.
+installs eligible source-tree media alongside the same configuration; callers
+are responsible for the corresponding FMOD and media redistribution rights.
 
-The LUFS cache, playback checkpoint, and safety latch are runtime state, not
-installation artifacts. They are stored below `--state-dir` when provided;
-otherwise TSM uses the current Windows user's local application-data directory
-under `TheaterSoundManager`. The operating-system temporary directory is used
-only if local application data is unavailable. Runtime state never falls back to
-the caller's working directory.
+The LUFS cache, music-analysis database, playback-exploration memory, playback
+checkpoint, and safety latch are runtime state, not installation artifacts. They
+are stored below `--state-dir` when provided; otherwise TSM uses the current
+Windows user's local application-data directory under `TheaterSoundManager`.
+The operating-system temporary directory is used only if local application data
+is unavailable. Runtime state never falls back to the caller's working directory.
 
 ## Compatibility policy
 
 - `schemaVersion` changes only when the JSON envelope becomes incompatible.
 - `apiVersion` changes when commands or command semantics evolve.
-- Existing fields and commands remain compatible within API major version 1.
+- Existing fields and commands remain compatible within API major version 2.
 - Consumers must ignore unknown response fields and use `system.capabilities`
   rather than assuming optional commands.
 - stderr is diagnostic-only and must not be parsed as protocol data.
 
 `--schema` and `system.capabilities` provide the versioned envelope, limits,
 exit codes, command catalog, positional mapping, and authoritative machine
-parameter schemas. This document adds the behavioral contract for API version 1.
+parameter schemas. This document adds the behavioral contract for API version 2.
 
 The bundled [Python client](../examples/cli_client.py) demonstrates the complete
 subprocess lifecycle without third-party packages. It serializes concurrent

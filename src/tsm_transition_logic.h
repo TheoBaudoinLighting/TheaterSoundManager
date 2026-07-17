@@ -36,7 +36,11 @@ inline EqualPowerGains CalculateEqualPowerGains(float progress)
 {
     constexpr float HalfPi = 1.57079632679f;
     const float t = std::clamp(progress, 0.0f, 1.0f);
-    return {std::cos(t * HalfPi), std::sin(t * HalfPi)};
+    // Ease the time axis before applying the equal-power law. The zero slope
+    // at both ends avoids an audible volume "grab" when the overlap starts or
+    // finishes, while cos² + sin² still keeps the combined power constant.
+    const float eased = t * t * (3.0f - 2.0f * t);
+    return {std::cos(eased * HalfPi), std::sin(eased * HalfPi)};
 }
 
 inline Decision Evaluate(float trackRemaining, float segmentRemaining,

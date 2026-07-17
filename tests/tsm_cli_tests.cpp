@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <thread>
+#include <winsqlite/winsqlite3.h>
 
 namespace TSM::Tests
 {
@@ -87,6 +88,30 @@ void WriteJson(const std::filesystem::path& path, const nlohmann::json& value)
     ASSERT_TRUE(output.is_open());
     output << value.dump(2);
     ASSERT_TRUE(output.good());
+}
+
+bool ExecuteSqlite(
+    const std::filesystem::path& path,
+    const char* statement)
+{
+    const std::u8string pathUtf8 = path.generic_u8string();
+    const std::string pathString(
+        reinterpret_cast<const char*>(pathUtf8.data()), pathUtf8.size());
+    sqlite3* database = nullptr;
+    if (sqlite3_open_v2(
+            pathString.c_str(), &database,
+            SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX,
+            nullptr) != SQLITE_OK)
+    {
+        if (database) sqlite3_close_v2(database);
+        return false;
+    }
+    char* sqliteMessage = nullptr;
+    const int result = sqlite3_exec(
+        database, statement, nullptr, nullptr, &sqliteMessage);
+    if (sqliteMessage) sqlite3_free(sqliteMessage);
+    sqlite3_close_v2(database);
+    return result == SQLITE_OK;
 }
 
 bool WaitForLoudnessStatus(
@@ -210,7 +235,12 @@ TEST(CliParserTests, ParsesGlobalMusicLibraryPlaybackOptions)
         "library",
         "play",
         "--random-order",
-        "--no-random-segment",
+        "--random-segment",
+        "--automatic-segment-duration",
+        "--min-segment-duration",
+        "45",
+        "--max-segment-duration",
+        "240",
         "--crossfade",
         "3.5",
         "--no-loop"
@@ -220,7 +250,10 @@ TEST(CliParserTests, ParsesGlobalMusicLibraryPlaybackOptions)
     EXPECT_EQ(parsed.invocation.mode, CliInvocation::Mode::Execute);
     EXPECT_EQ(parsed.invocation.command, "library.play");
     EXPECT_EQ(parsed.invocation.parameters.at("random_order"), true);
-    EXPECT_EQ(parsed.invocation.parameters.at("random_segment"), false);
+    EXPECT_EQ(parsed.invocation.parameters.at("random_segment"), true);
+    EXPECT_EQ(parsed.invocation.parameters.at("automatic_segment_duration"), true);
+    EXPECT_EQ(parsed.invocation.parameters.at("min_segment_duration"), "45");
+    EXPECT_EQ(parsed.invocation.parameters.at("max_segment_duration"), "240");
     EXPECT_EQ(parsed.invocation.parameters.at("crossfade"), "3.5");
     EXPECT_EQ(parsed.invocation.parameters.at("loop"), false);
 }
@@ -295,7 +328,7 @@ TEST(CliContractTests, BuildsStableSuccessAndErrorEnvelopes)
     const nlohmann::json success = BuildCliResponse(
         CliResult::Success({{"pong", true}}), "system.ping", "request-1");
     EXPECT_EQ(success.at("schemaVersion"), 1);
-    EXPECT_EQ(success.at("apiVersion"), "1.0");
+    EXPECT_EQ(success.at("apiVersion"), "2.0");
     EXPECT_EQ(success.at("id"), "request-1");
     EXPECT_TRUE(success.at("ok"));
     EXPECT_TRUE(success.at("data").at("pong"));
@@ -314,8 +347,13 @@ TEST(CliContractTests, BuildsStableSuccessAndErrorEnvelopes)
 TEST(CliContractTests, HelpPublishesGlobalMusicLibraryCommands)
 {
     const std::string help = GetCliHelp();
-    EXPECT_NE(help.find("library       play, stop, next, status"), std::string::npos);
+    EXPECT_NE(
+        help.find("library       play, stop, next, status, history, clear-history"),
+        std::string::npos);
     EXPECT_NE(help.find("--cli library play"), std::string::npos);
+    EXPECT_NE(
+        help.find("Durable analysis, exploration, recovery, and safety state"),
+        std::string::npos);
 }
 
 TEST(CliContractTests, SchemaDescribesBooleanIdsAndStableExitCodes)
@@ -349,12 +387,12 @@ TEST(CliContractTests, EveryPublishedCommandHasAConsistentParameterSchema)
         "playlist.import", "playlist.export", "playlist.save", "playlist.load",
         "playlist.play", "playlist.play-index", "playlist.stop", "playlist.next",
         "playlist.status", "library.play", "library.stop", "library.next",
-        "library.status", "announcement.list", "announcement.load",
+        "library.status", "library.history", "library.clear-history",
+        "announcement.list", "announcement.load",
         "announcement.unload", "announcement.play", "announcement.stop",
         "announcement.status", "schedule.list", "schedule.add", "schedule.update",
         "schedule.remove", "schedule.reset", "mixer.get", "mixer.set",
-        "wedding.status", "wedding.asset", "wedding.phase", "wedding.next",
-        "wedding.stop", "loudness.status", "loudness.analyze", "loudness.target",
+        "loudness.status", "loudness.analyze", "loudness.target",
         "loudness.clear-cache"
     };
     EXPECT_GE(commands.size(), expectedCurrentCommands.size());
@@ -442,6 +480,32 @@ TEST(CliContractTests, ParameterSchemasExposeTypesDefaultsRangesAndConstraints)
     ASSERT_NE(playlistRemove, commands.end());
     EXPECT_EQ(playlistRemove->at("paramsSchema").at("oneOf").size(), 2u);
 
+    const auto expectAutomaticSegmentSchema = [](
+        const nlohmann::json& properties, const char* omittedBehavior) {
+        const auto& automatic = properties.at("automatic_segment_duration");
+        EXPECT_EQ(automatic.at("type"), "boolean");
+        EXPECT_EQ(automatic.at("x-tsm-omitted"), omittedBehavior);
+
+        for (const char* name : {"min_segment_duration", "max_segment_duration"})
+        {
+            const auto& duration = properties.at(name);
+            EXPECT_EQ(duration.at("type"), "number") << name;
+            EXPECT_EQ(duration.at("minimum"), 0.001) << name;
+            EXPECT_EQ(duration.at("maximum"), 86400.0) << name;
+            EXPECT_EQ(duration.at("x-tsm-omitted"), omittedBehavior) << name;
+        }
+    };
+
+    const auto playlistOptions = findCommand("playlist.options");
+    ASSERT_NE(playlistOptions, commands.end());
+    expectAutomaticSegmentSchema(
+        playlistOptions->at("paramsSchema").at("properties"), "preserve");
+
+    const auto playlistPlay = findCommand("playlist.play");
+    ASSERT_NE(playlistPlay, commands.end());
+    expectAutomaticSegmentSchema(
+        playlistPlay->at("paramsSchema").at("properties"), "inheritPlaylist");
+
     const auto libraryPlay = findCommand("library.play");
     ASSERT_NE(libraryPlay, commands.end());
     EXPECT_TRUE(libraryPlay->at("positionals").empty());
@@ -451,8 +515,19 @@ TEST(CliContractTests, ParameterSchemasExposeTypesDefaultsRangesAndConstraints)
     EXPECT_EQ(
         libraryPlayProperties.at("random_order").at("x-tsm-omitted"),
         "preserveLibrary");
+    expectAutomaticSegmentSchema(libraryPlayProperties, "preserveLibrary");
     EXPECT_EQ(libraryPlayProperties.at("crossfade").at("minimum"), 0.0);
     EXPECT_EQ(libraryPlayProperties.at("crossfade").at("maximum"), 3600.0);
+
+    const auto libraryHistory = findCommand("library.history");
+    ASSERT_NE(libraryHistory, commands.end());
+    EXPECT_EQ(
+        libraryHistory->at("paramsSchema").at("properties")
+            .at("include_buckets").at("default"),
+        false);
+    const auto libraryClearHistory = findCommand("library.clear-history");
+    ASSERT_NE(libraryClearHistory, commands.end());
+    EXPECT_TRUE(libraryClearHistory->at("persistentRecommended"));
 
     const auto scheduleAdd = findCommand("schedule.add");
     ASSERT_NE(scheduleAdd, commands.end());
@@ -520,11 +595,27 @@ TEST_F(CliRuntimeTests, MixerAndPlaylistCrudAreExposed)
     ASSERT_TRUE(result.IsSuccess()) << result.errorMessage;
     result = processor.Execute(
         "playlist.options",
-        {{"name", "CLI playlist"}, {"random_order", true}, {"segment_duration", 25.0}});
+        {{"name", "CLI playlist"},
+         {"random_order", true},
+         {"segment_duration", 25.0},
+         {"automatic_segment_duration", true},
+         {"min_segment_duration", 45.0},
+         {"max_segment_duration", 240.0}});
     ASSERT_TRUE(result.IsSuccess()) << result.errorMessage;
-    EXPECT_TRUE(result.data.at("playlist").at("options").at("randomOrder"));
+    const auto& options = result.data.at("playlist").at("options");
+    EXPECT_TRUE(options.at("randomOrder"));
     EXPECT_FLOAT_EQ(
-        result.data.at("playlist").at("options").at("segmentDuration").get<float>(), 25.0f);
+        options.at("segmentDuration").get<float>(), 25.0f);
+    EXPECT_TRUE(options.at("automaticSegmentDuration"));
+    EXPECT_FLOAT_EQ(options.at("minSegmentDuration").get<float>(), 45.0f);
+    EXPECT_FLOAT_EQ(options.at("maxSegmentDuration").get<float>(), 240.0f);
+
+    result = processor.Execute("playlist.options", {{"name", "CLI playlist"}});
+    ASSERT_TRUE(result.IsSuccess()) << result.errorMessage;
+    const auto& persistedOptions = result.data.at("playlist").at("options");
+    EXPECT_TRUE(persistedOptions.at("automaticSegmentDuration"));
+    EXPECT_FLOAT_EQ(persistedOptions.at("minSegmentDuration").get<float>(), 45.0f);
+    EXPECT_FLOAT_EQ(persistedOptions.at("maxSegmentDuration").get<float>(), 240.0f);
 
     result = processor.Execute("playlist.delete", {{"name", "CLI playlist"}});
     EXPECT_TRUE(result.IsSuccess()) << result.errorMessage;
@@ -547,7 +638,6 @@ TEST_F(CliRuntimeTests, GlobalMusicLibraryIncludesPlaylistAndOrphanMusicOnly)
         {"music_in_playlist", "music"},
         {"music_orphan", "music"},
         {"announcement", "announcement"},
-        {"wedding", "wedding"},
         {"sound_effect", "sfx"}
     };
     for (const auto& [id, kind] : sounds)
@@ -584,7 +674,9 @@ TEST_F(CliRuntimeTests, GlobalMusicLibraryIncludesPlaylistAndOrphanMusicOnly)
 
     result = processor.Execute(
         "library.play",
-        {{"random_order", false}, {"random_segment", false},
+        {{"random_order", false}, {"random_segment", true},
+         {"automatic_segment_duration", true},
+         {"min_segment_duration", 45.0}, {"max_segment_duration", 240.0},
          {"loop", true}, {"crossfade", 2.5}});
     ASSERT_TRUE(result.IsSuccess()) << result.errorMessage;
     const auto& playingLibrary = result.data.at("library");
@@ -592,10 +684,48 @@ TEST_F(CliRuntimeTests, GlobalMusicLibraryIncludesPlaylistAndOrphanMusicOnly)
     EXPECT_EQ(playingLibrary.at("trackCount"), 2u);
     EXPECT_EQ(playingLibrary.at("availableTrackCount"), 2u);
     EXPECT_FALSE(playingLibrary.at("options").at("randomOrder"));
-    EXPECT_FALSE(playingLibrary.at("options").at("randomSegment"));
+    EXPECT_TRUE(playingLibrary.at("options").at("randomSegment"));
+    EXPECT_TRUE(playingLibrary.at("options").at("automaticSegmentDuration"));
+    EXPECT_FLOAT_EQ(
+        playingLibrary.at("options").at("minSegmentDuration").get<float>(), 45.0f);
+    EXPECT_FLOAT_EQ(
+        playingLibrary.at("options").at("maxSegmentDuration").get<float>(), 240.0f);
     EXPECT_TRUE(playingLibrary.at("options").at("loop"));
     EXPECT_FLOAT_EQ(
         playingLibrary.at("options").at("crossfadeDuration").get<float>(), 2.5f);
+
+    runtime.Tick(0.5f);
+    result = processor.Execute(
+        "library.history",
+        {{"id", "music_in_playlist"}, {"include_buckets", true}});
+    ASSERT_TRUE(result.IsSuccess()) << result.errorMessage;
+    const auto& playbackHistory = result.data.at("history");
+    EXPECT_TRUE(playbackHistory.at("persistent"));
+    ASSERT_EQ(playbackHistory.at("tracks").size(), 1u);
+    const auto& trackHistory = playbackHistory.at("tracks").front();
+    EXPECT_EQ(trackHistory.at("id"), "music_in_playlist");
+    EXPECT_GT(trackHistory.at("bucketCount").get<std::size_t>(), 0u);
+    EXPECT_EQ(
+        trackHistory.at("bucketFatigue").size(),
+        trackHistory.at("bucketCount").get<std::size_t>());
+
+    result = processor.Execute(
+        "library.clear-history", {{"id", "music_in_playlist"}});
+    ASSERT_TRUE(result.IsSuccess()) << result.errorMessage;
+    result = processor.Execute(
+        "library.history", {{"id", "music_in_playlist"}});
+    ASSERT_TRUE(result.IsSuccess()) << result.errorMessage;
+    EXPECT_DOUBLE_EQ(
+        result.data.at("history").at("tracks").front()
+            .at("meanFatigue").get<double>(),
+        0.0);
+
+    result = processor.Execute("library.status", nlohmann::json::object());
+    ASSERT_TRUE(result.IsSuccess()) << result.errorMessage;
+    const auto& statusOptions = result.data.at("library").at("options");
+    EXPECT_TRUE(statusOptions.at("automaticSegmentDuration"));
+    EXPECT_FLOAT_EQ(statusOptions.at("minSegmentDuration").get<float>(), 45.0f);
+    EXPECT_FLOAT_EQ(statusOptions.at("maxSegmentDuration").get<float>(), 240.0f);
 
     result = processor.Execute("playlist.status", {{"name", "pre_show"}});
     ASSERT_TRUE(result.IsSuccess()) << result.errorMessage;
@@ -654,11 +784,6 @@ TEST_F(CliRuntimeTests, MutationsValidateCompletelyBeforeChangingState)
     EXPECT_EQ(result.exitCode, CliExitCode::InvalidArgument);
     EXPECT_FLOAT_EQ(MixerState::GetInstance().GetMasterVolume(), originalMaster);
 
-    result = processor.Execute(
-        "wedding.phase", {{"phase", std::uint64_t{4294967297ULL}}});
-    EXPECT_FALSE(result.IsSuccess());
-    EXPECT_EQ(result.exitCode, CliExitCode::InvalidArgument);
-
     result = processor.Execute("playlist.create", {{"name", "atomic"}});
     ASSERT_TRUE(result.IsSuccess()) << result.errorMessage;
     result = processor.Execute(
@@ -668,6 +793,27 @@ TEST_F(CliRuntimeTests, MutationsValidateCompletelyBeforeChangingState)
     const auto* playlist = PlaylistManager::GetInstance().GetPlaylistByName("atomic");
     ASSERT_NE(playlist, nullptr);
     EXPECT_TRUE(playlist->options.randomOrder);
+
+    const PlaylistOptions optionsBeforeInvalidRange = playlist->options;
+    result = processor.Execute(
+        "playlist.options",
+        {{"name", "atomic"},
+         {"random_order", false},
+         {"automatic_segment_duration", true},
+         {"min_segment_duration", 300.0},
+         {"max_segment_duration", 240.0}});
+    EXPECT_FALSE(result.IsSuccess());
+    EXPECT_EQ(result.exitCode, CliExitCode::InvalidArgument);
+    EXPECT_EQ(playlist->options.randomOrder, optionsBeforeInvalidRange.randomOrder);
+    EXPECT_EQ(
+        playlist->options.automaticSegmentDuration,
+        optionsBeforeInvalidRange.automaticSegmentDuration);
+    EXPECT_FLOAT_EQ(
+        playlist->options.minSegmentDuration,
+        optionsBeforeInvalidRange.minSegmentDuration);
+    EXPECT_FLOAT_EQ(
+        playlist->options.maxSegmentDuration,
+        optionsBeforeInvalidRange.maxSegmentDuration);
 }
 
 TEST_F(CliRuntimeTests, MixerBusPreservesPerChannelGain)
@@ -733,91 +879,22 @@ TEST_F(CliRuntimeTests, UnloadRejectsReferencedAndMismatchedResources)
     EXPECT_TRUE(result.IsSuccess()) << result.errorMessage;
 }
 
-TEST_F(CliRuntimeTests, DuckLayersComposeAndWeddingAutomationInterpolates)
+TEST_F(CliRuntimeTests, UserAndAnnouncementDuckLayersCompose)
 {
     auto& mixer = MixerState::GetInstance();
     mixer.SetDuckFactor(0.8f);
-    mixer.SetWeddingDuckFactor(0.5f);
     mixer.SetAnnouncementDuckFactor(0.25f);
-    EXPECT_NEAR(mixer.GetEffectiveDuckFactor(), 0.1f, 0.0001f);
+    EXPECT_NEAR(mixer.GetEffectiveDuckFactor(), 0.2f, 0.0001f);
 
     mixer.SetDuckFactor(1.0f);
-    mixer.SetWeddingDuckFactor(1.0f);
     mixer.SetAnnouncementDuckFactor(1.0f);
-    const std::filesystem::path wave = CreateWave();
-    ASSERT_TRUE(AudioManager::GetInstance().LoadWeddingPhaseSound(2, wave.string()));
-    auto& ui = UIManager::GetInstance();
-    ui.StartWeddingPhase2(false);
-    runtime.Tick(1.0f);
-    EXPECT_GT(mixer.GetWeddingDuckFactor(), 0.0f);
-    EXPECT_LT(mixer.GetWeddingDuckFactor(), 0.05f);
-    ui.StopWeddingMode();
-
-    ASSERT_TRUE(AudioManager::GetInstance().LoadWeddingPhaseSound(3, wave.string()));
-    ui.StartWeddingPhase3(false);
-    runtime.Tick(1.0f);
-    EXPECT_GT(mixer.GetWeddingDuckFactor(), 0.05f);
-    EXPECT_LT(mixer.GetWeddingDuckFactor(), 0.2f);
-    ui.StopWeddingMode();
-}
-
-TEST_F(CliRuntimeTests, WeddingPhaseStopsAnnouncementBeforeGlobalAudioReset)
-{
-    const std::filesystem::path wave = CreateWave();
-    auto& audio = AudioManager::GetInstance();
-    auto& announcements = AnnouncementManager::GetInstance();
-    auto& mixer = MixerState::GetInstance();
-
-    ASSERT_TRUE(audio.LoadAnnouncement("ceremony_notice", wave.string()));
-    ASSERT_TRUE(audio.LoadWeddingPhaseSound(2, wave.string()));
-    announcements.PlayAnnouncement("ceremony_notice", 0.25f, false, false);
-    runtime.Tick(0.5f);
-    ASSERT_TRUE(announcements.IsAnnouncing());
-    ASSERT_LT(mixer.GetAnnouncementDuckFactor(), 1.0f);
-
-    auto& ui = UIManager::GetInstance();
-    ui.StartWeddingPhase2(false);
-
-    EXPECT_FALSE(announcements.IsAnnouncing());
-    EXPECT_EQ(announcements.GetAnnouncementState(), AnnouncementState::IDLE);
-    EXPECT_TRUE(announcements.GetCurrentAnnouncementName().empty());
-    EXPECT_FLOAT_EQ(mixer.GetAnnouncementDuckFactor(), 1.0f);
-    EXPECT_TRUE(ui.IsWeddingModeActive());
-    ui.StopWeddingMode();
-}
-
-TEST_F(CliRuntimeTests, InvalidWeddingAssetReplacementPreservesPreviousAsset)
-{
-    const std::filesystem::path wave = CreateWave();
-    CliCommandProcessor processor(runtime);
-    CliResult result = processor.Execute(
-        "wedding.asset", {{"phase", 1}, {"path", wave.string()}});
-    ASSERT_TRUE(result.IsSuccess()) << result.errorMessage;
-
-    auto& audio = AudioManager::GetInstance();
-    const auto before = audio.GetAllSounds().find("wedding_entrance_sound");
-    ASSERT_NE(before, audio.GetAllSounds().end());
-    FMOD::Sound* const previousSound = before->second.sound;
-    const std::string previousPath = before->second.filePath;
-
-    const std::filesystem::path missing = UniqueTemporaryPath("_missing.wav");
-    ASSERT_FALSE(std::filesystem::exists(missing));
-    result = processor.Execute(
-        "wedding.asset", {{"phase", 1}, {"path", missing.string()}});
-    EXPECT_EQ(result.exitCode, CliExitCode::AudioEngine);
-    EXPECT_EQ(result.errorCode, "wedding_asset_load_failed");
-
-    const auto after = audio.GetAllSounds().find("wedding_entrance_sound");
-    ASSERT_NE(after, audio.GetAllSounds().end());
-    EXPECT_EQ(after->second.sound, previousSound);
-    EXPECT_EQ(after->second.filePath, previousPath);
-    EXPECT_EQ(after->second.kind, AudioManager::SoundKind::Wedding);
+    EXPECT_FLOAT_EQ(mixer.GetEffectiveDuckFactor(), 1.0f);
 }
 
 TEST_F(CliRuntimeTests, MalformedLoudnessCachesAreIgnoredWithoutStoppingTheWorker)
 {
     const std::filesystem::path wave = CreateWave();
-    const std::filesystem::path cachePath = CreateTemporaryPath("_loudness.json");
+    const std::filesystem::path cachePath = stateDirectory / "loudness_cache.json";
     const std::string cacheKey = NormalizedCacheKey(wave);
     auto& audioManager = AudioManager::GetInstance();
     ASSERT_TRUE(audioManager.LoadSound(
@@ -858,7 +935,7 @@ TEST_F(CliRuntimeTests, MalformedLoudnessCachesAreIgnoredWithoutStoppingTheWorke
 TEST_F(CliRuntimeTests, ClearLoudnessCacheInvalidatesReadyGainAndAllowsReanalysis)
 {
     const std::filesystem::path wave = CreateWave();
-    const std::filesystem::path cachePath = CreateTemporaryPath("_loudness.json");
+    const std::filesystem::path cachePath = stateDirectory / "loudness_cache.json";
     const std::string cacheKey = NormalizedCacheKey(wave);
     auto& audioManager = AudioManager::GetInstance();
     ASSERT_TRUE(audioManager.LoadSound(
@@ -898,10 +975,316 @@ TEST_F(CliRuntimeTests, ClearLoudnessCacheInvalidatesReadyGainAndAllowsReanalysi
     EXPECT_FLOAT_EQ(reanalyzed.normalizationGainDb, 8.0f);
 }
 
+TEST_F(CliRuntimeTests, PlaybackFatigueAndTransitionsSurviveApplicationRestart)
+{
+    const std::filesystem::path firstWave = CreateWave();
+    const std::filesystem::path secondWave = CreateWave();
+    auto& audio = AudioManager::GetInstance();
+    ASSERT_TRUE(audio.LoadSound(
+        "restart_memory_a", firstWave.string(), true,
+        AudioManager::SoundKind::Music));
+    ASSERT_TRUE(audio.LoadSound(
+        "restart_memory_b", secondWave.string(), true,
+        AudioManager::SoundKind::Music));
+    ASSERT_TRUE(audio.LoadSound(
+        "restart_memory_alias", firstWave.string(), true,
+        AudioManager::SoundKind::Music));
+
+    constexpr std::int64_t ObservationEpoch = 2'000'000'000;
+    ASSERT_TRUE(audio.RecordListeningCoverage(
+        "restart_memory_a", 0.0, 0.1, 1.0, ObservationEpoch));
+    ASSERT_TRUE(audio.RecordMusicTransition(
+        "restart_memory_a", "restart_memory_b", ObservationEpoch));
+    ASSERT_EQ(
+        audio.GetListeningFatigue("restart_memory_a"),
+        audio.GetListeningFatigue("restart_memory_alias"));
+
+    // No explicit flush: the normal shutdown path is responsible for durable
+    // state, which is the contract an operator gets during an application
+    // restart.
+    runtime.Shutdown();
+    RuntimeOptions options;
+    options.loadConfig = false;
+    options.noSound = true;
+    options.stateDirectory = stateDirectory.string();
+    ASSERT_TRUE(runtime.Initialize(options, error)) << error;
+    ASSERT_TRUE(audio.LoadSound(
+        "restart_memory_alias", firstWave.string(), true,
+        AudioManager::SoundKind::Music));
+    ASSERT_TRUE(audio.LoadSound(
+        "restart_memory_b", secondWave.string(), true,
+        AudioManager::SoundKind::Music));
+    ASSERT_TRUE(audio.LoadSound(
+        "restart_memory_a", firstWave.string(), true,
+        AudioManager::SoundKind::Music));
+
+    const auto* restoredFatigue =
+        audio.GetListeningFatigue("restart_memory_a");
+    ASSERT_NE(restoredFatigue, nullptr);
+    EXPECT_GT(ListeningHeatmap::SegmentAverageFatigue(
+        *restoredFatigue, 0.0, 0.1, ObservationEpoch), 0.99);
+    const auto restoredTransition = audio.GetTransitionMemory(
+        "restart_memory_a", "restart_memory_b", ObservationEpoch);
+    ASSERT_TRUE(restoredTransition.has_value());
+    EXPECT_EQ(restoredTransition->totalCount, 1u);
+    EXPECT_DOUBLE_EQ(
+        restoredTransition->fatigue,
+        TransitionHistory::Config::DefaultFatigueIncrement);
+
+    ASSERT_EQ(
+        audio.GetListeningFatigue("restart_memory_a"),
+        audio.GetListeningFatigue("restart_memory_alias"));
+    std::string clearError;
+    ASSERT_TRUE(audio.ClearPlaybackMemory(
+        std::optional<std::string>("restart_memory_a"), clearError))
+        << clearError;
+    EXPECT_DOUBLE_EQ(ListeningHeatmap::SegmentAverageFatigue(
+        *audio.GetListeningFatigue("restart_memory_alias"),
+        0.0, 0.1, ObservationEpoch), 0.0);
+    EXPECT_FALSE(audio.GetTransitionMemory(
+        "restart_memory_a", "restart_memory_b", ObservationEpoch).has_value());
+
+    runtime.Shutdown();
+    ASSERT_TRUE(runtime.Initialize(options, error)) << error;
+    ASSERT_TRUE(audio.LoadSound(
+        "restart_memory_alias", firstWave.string(), true,
+        AudioManager::SoundKind::Music));
+    ASSERT_TRUE(audio.LoadSound(
+        "restart_memory_a", firstWave.string(), true,
+        AudioManager::SoundKind::Music));
+    ASSERT_TRUE(audio.LoadSound(
+        "restart_memory_b", secondWave.string(), true,
+        AudioManager::SoundKind::Music));
+    EXPECT_DOUBLE_EQ(ListeningHeatmap::SegmentAverageFatigue(
+        *audio.GetListeningFatigue("restart_memory_a"),
+        0.0, 0.1, ObservationEpoch), 0.0);
+    EXPECT_FALSE(audio.GetTransitionMemory(
+        "restart_memory_a", "restart_memory_b", ObservationEpoch).has_value());
+}
+
+TEST_F(
+    CliRuntimeTests,
+    PlaybackMemoryReconfigurePreservesLiveStateWhenReloadIsUnavailable)
+{
+    const std::filesystem::path wave = CreateWave();
+    const std::filesystem::path nextWave = CreateWave();
+    auto& audio = AudioManager::GetInstance();
+    ASSERT_TRUE(audio.LoadSound(
+        "reconfigure_memory_a", wave.string(), true,
+        AudioManager::SoundKind::Music));
+    ASSERT_TRUE(audio.LoadSound(
+        "reconfigure_memory_b", nextWave.string(), true,
+        AudioManager::SoundKind::Music));
+
+    constexpr std::int64_t ObservationEpoch = 2'000'000'000;
+    ASSERT_TRUE(audio.RecordListeningCoverage(
+        "reconfigure_memory_a", 0.0, 0.1, 1.0, ObservationEpoch));
+    ASSERT_TRUE(audio.RecordMusicTransition(
+        "reconfigure_memory_a", "reconfigure_memory_b",
+        ObservationEpoch));
+
+    const std::filesystem::path replacementState =
+        CreateTemporaryPath("_replacement_state");
+    ASSERT_TRUE(std::filesystem::create_directories(replacementState));
+    const std::filesystem::path replacementDatabase =
+        replacementState / PlaybackMemory::Store::DefaultFileName;
+
+    MusicAnalysis::FileIdentity identity;
+    std::string storeError;
+    ASSERT_TRUE(MusicAnalysis::ReadFileIdentity(
+        wave, identity, storeError)) << storeError;
+    ListeningHeatmap::State replacementHeatmap =
+        ListeningHeatmap::CreateState(0.1);
+    ASSERT_TRUE(ListeningHeatmap::RecordCoverage(
+        replacementHeatmap, 0.0, 0.1, 0.5, ObservationEpoch));
+    TransitionHistory::History replacementHistory =
+        audio.GetTransitionHistory();
+    {
+        PlaybackMemory::Store replacementStore(replacementDatabase);
+        ASSERT_TRUE(replacementStore.Initialize(storeError)) << storeError;
+        ASSERT_TRUE(replacementStore.SaveHeatmap(
+            identity, replacementHeatmap, storeError)) << storeError;
+        ASSERT_TRUE(replacementStore.SaveTransitionHistory(
+            replacementHistory, storeError)) << storeError;
+    }
+
+    // The schema and SQLite file remain valid, but each payload becomes
+    // unreadable. Initialize succeeds and the two load calls return
+    // Unavailable, which used to erase the already-valid live state.
+    ASSERT_TRUE(ExecuteSqlite(
+        replacementDatabase,
+        "UPDATE heatmaps SET track_duration_seconds = 'invalid'; "
+        "UPDATE transition_history SET payload_utf8 = '{';"));
+
+    audio.ConfigureLoudness(
+        (replacementState / "loudness_cache.json").string(), -16.0f);
+
+    const ListeningHeatmap::State* retained =
+        audio.GetListeningFatigue("reconfigure_memory_a");
+    ASSERT_NE(retained, nullptr);
+    EXPECT_GT(ListeningHeatmap::SegmentAverageFatigue(
+        *retained, 0.0, 0.1, ObservationEpoch), 0.99);
+    const auto transition = audio.GetTransitionMemory(
+        "reconfigure_memory_a", "reconfigure_memory_b", ObservationEpoch);
+    ASSERT_TRUE(transition.has_value());
+    EXPECT_EQ(transition->totalCount, 1u);
+
+    // New observations must remain usable in RAM, but must not become an
+    // authoritative write until both failed reads have a conclusive retry.
+    ASSERT_TRUE(audio.RecordListeningCoverage(
+        "reconfigure_memory_a", 0.0, 0.1, 0.25, ObservationEpoch));
+    ASSERT_TRUE(audio.RecordMusicTransition(
+        "reconfigure_memory_a", "reconfigure_memory_b",
+        ObservationEpoch));
+    std::string flushError;
+    EXPECT_FALSE(audio.FlushPlaybackMemory(flushError));
+    EXPECT_NE(flushError.find("not yet conclusive"), std::string::npos);
+
+    const std::string activeMemoryPath = audio.GetPlaybackMemoryPath();
+    const std::filesystem::path rejectedState =
+        CreateTemporaryPath("_rejected_state");
+    ASSERT_TRUE(std::filesystem::create_directories(rejectedState));
+    audio.ConfigureLoudness(
+        (rejectedState / "loudness_cache.json").string(), -20.0f);
+    EXPECT_EQ(audio.GetPlaybackMemoryPath(), activeMemoryPath);
+    EXPECT_FLOAT_EQ(audio.GetLoudnessTarget(), -20.0f);
+
+    // Repair the payloads out-of-band. The next explicit flush retries the
+    // reads, merges the bounded RAM deltas, then persists the merged state.
+    {
+        PlaybackMemory::Store replacementStore(replacementDatabase);
+        ASSERT_TRUE(replacementStore.Initialize(storeError)) << storeError;
+        ASSERT_TRUE(replacementStore.SaveHeatmap(
+            identity, replacementHeatmap, storeError)) << storeError;
+        ASSERT_TRUE(replacementStore.SaveTransitionHistory(
+            replacementHistory, storeError)) << storeError;
+    }
+    ASSERT_TRUE(audio.FlushPlaybackMemory(flushError)) << flushError;
+
+    const ListeningHeatmap::State* merged =
+        audio.GetListeningFatigue("reconfigure_memory_a");
+    ASSERT_NE(merged, nullptr);
+    EXPECT_NEAR(ListeningHeatmap::SegmentAverageFatigue(
+        *merged, 0.0, 0.1, ObservationEpoch), 0.75, 1e-12);
+    const auto mergedTransition = audio.GetTransitionMemory(
+        "reconfigure_memory_a", "reconfigure_memory_b", ObservationEpoch);
+    ASSERT_TRUE(mergedTransition.has_value());
+    EXPECT_EQ(mergedTransition->totalCount, 2u);
+}
+
+TEST_F(
+    CliRuntimeTests,
+    PlaybackMemoryDurationMismatchBecomesConclusiveReplacement)
+{
+    const std::filesystem::path wave = CreateWave();
+    auto& audio = AudioManager::GetInstance();
+    ASSERT_TRUE(audio.LoadSound(
+        "mismatched_duration_memory", wave.string(), true,
+        AudioManager::SoundKind::Music));
+
+    MusicAnalysis::FileIdentity identity;
+    std::string storeError;
+    ASSERT_TRUE(MusicAnalysis::ReadFileIdentity(wave, identity, storeError))
+        << storeError;
+    const std::filesystem::path replacementState =
+        CreateTemporaryPath("_duration_mismatch_state");
+    ASSERT_TRUE(std::filesystem::create_directories(replacementState));
+    const std::filesystem::path database =
+        replacementState / PlaybackMemory::Store::DefaultFileName;
+    {
+        PlaybackMemory::Store store(database);
+        ASSERT_TRUE(store.Initialize(storeError)) << storeError;
+        ListeningHeatmap::State incompatible =
+            ListeningHeatmap::CreateState(0.3);
+        ASSERT_TRUE(ListeningHeatmap::RecordCoverage(
+            incompatible, 0.0, 0.3, 1.0, 2'000'000'000));
+        ASSERT_TRUE(store.SaveHeatmap(identity, incompatible, storeError))
+            << storeError;
+    }
+
+    audio.ConfigureLoudness(
+        (replacementState / "loudness_cache.json").string(), -16.0f);
+    const ListeningHeatmap::State* replacement =
+        audio.GetListeningFatigue("mismatched_duration_memory");
+    ASSERT_NE(replacement, nullptr);
+    EXPECT_NEAR(replacement->trackDurationSeconds, 0.1, 0.001);
+    EXPECT_DOUBLE_EQ(ListeningHeatmap::SegmentAverageFatigue(
+        *replacement, 0.0, 0.1, 2'000'000'000), 0.0);
+    ASSERT_TRUE(audio.FlushPlaybackMemory(storeError)) << storeError;
+
+    PlaybackMemory::Store reopened(database);
+    ASSERT_TRUE(reopened.Initialize(storeError)) << storeError;
+    ListeningHeatmap::State persisted;
+    EXPECT_EQ(
+        reopened.LoadHeatmap(identity, persisted, storeError),
+        PlaybackMemory::StoreLookupStatus::Hit);
+    EXPECT_NEAR(persisted.trackDurationSeconds, 0.1, 0.001);
+}
+
+TEST_F(
+    CliRuntimeTests,
+    PlaybackMemoryFlushKeepsPostSnapshotMutationAfterSoundUnload)
+{
+    const std::filesystem::path wave = CreateWave();
+    const std::filesystem::path nextWave = CreateWave();
+    auto& audio = AudioManager::GetInstance();
+    ASSERT_TRUE(audio.LoadSound(
+        "async_restart_memory", wave.string(), true,
+        AudioManager::SoundKind::Music));
+    ASSERT_TRUE(audio.LoadSound(
+        "async_restart_memory_next", nextWave.string(), true,
+        AudioManager::SoundKind::Music));
+
+    constexpr std::int64_t ObservationEpoch = 2'000'000'000;
+    ASSERT_TRUE(audio.RecordListeningCoverage(
+        "async_restart_memory", 0.0, 0.025, 1.0, ObservationEpoch));
+    ASSERT_TRUE(audio.RecordMusicTransition(
+        "async_restart_memory", "async_restart_memory_next",
+        ObservationEpoch));
+
+    // Reaching the periodic deadline starts a detached-state SQLite snapshot.
+    // Mutating immediately afterwards deterministically advances the live
+    // version, regardless of whether the worker itself finishes quickly.
+    audio.Update(5.1f);
+    ASSERT_TRUE(audio.RecordListeningCoverage(
+        "async_restart_memory", 0.025, 0.1, 1.0, ObservationEpoch));
+    ASSERT_TRUE(audio.RecordMusicTransition(
+        "async_restart_memory", "async_restart_memory_next",
+        ObservationEpoch));
+    ASSERT_TRUE(audio.UnloadSound("async_restart_memory"));
+    ASSERT_TRUE(audio.UnloadSound("async_restart_memory_next"));
+
+    // Shutdown must drain the first snapshot and synchronously retry the
+    // retained, newer version even though no SoundData alias remains loaded.
+    runtime.Shutdown();
+    RuntimeOptions options;
+    options.loadConfig = false;
+    options.noSound = true;
+    options.stateDirectory = stateDirectory.string();
+    ASSERT_TRUE(runtime.Initialize(options, error)) << error;
+    ASSERT_TRUE(audio.LoadSound(
+        "async_restart_memory", wave.string(), true,
+        AudioManager::SoundKind::Music));
+    ASSERT_TRUE(audio.LoadSound(
+        "async_restart_memory_next", nextWave.string(), true,
+        AudioManager::SoundKind::Music));
+
+    const ListeningHeatmap::State* restored =
+        audio.GetListeningFatigue("async_restart_memory");
+    ASSERT_NE(restored, nullptr);
+    EXPECT_GT(ListeningHeatmap::SegmentAverageFatigue(
+        *restored, 0.0, 0.1, ObservationEpoch), 0.99);
+    const auto restoredTransition = audio.GetTransitionMemory(
+        "async_restart_memory", "async_restart_memory_next",
+        ObservationEpoch);
+    ASSERT_TRUE(restoredTransition.has_value());
+    EXPECT_EQ(restoredTransition->totalCount, 2u);
+}
+
 TEST_F(CliRuntimeTests, ClearLoudnessCacheCancelsQueuedAnalysis)
 {
     const std::filesystem::path wave = CreateWave();
-    const std::filesystem::path cachePath = CreateTemporaryPath("_loudness.json");
+    const std::filesystem::path cachePath = stateDirectory / "loudness_cache.json";
     const std::string cacheKey = NormalizedCacheKey(wave);
     auto& audioManager = AudioManager::GetInstance();
     ASSERT_TRUE(audioManager.LoadSound(

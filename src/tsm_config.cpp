@@ -197,25 +197,23 @@ bool ParseAppConfigDocument(
             const auto& options = playlistValue.value("options", nlohmann::json::object());
             playlist.options.randomOrder = options.value("randomOrder", true);
             playlist.options.randomSegment = options.value("randomSegment", true);
+            playlist.options.automaticSegmentDuration = options.value(
+                "automaticSegmentDuration", false);
             playlist.options.loopPlaylist = options.value("loopPlaylist", true);
             playlist.options.segmentDuration = options.value(
                 "segmentDuration", PlaylistOptions::DefaultSegmentDuration);
+            playlist.options.minSegmentDuration = options.value(
+                "minSegmentDuration",
+                PlaylistOptions::DefaultMinimumSegmentDuration);
+            playlist.options.maxSegmentDuration = options.value(
+                "maxSegmentDuration",
+                PlaylistOptions::DefaultMaximumSegmentDuration);
             for (const auto& trackValue : playlistValue.value("tracks", nlohmann::json::array()))
             {
                 ConfiguredSound track = ParseSound(trackValue);
                 if (!track.id.empty() && !track.path.empty()) playlist.tracks.push_back(std::move(track));
             }
             if (!playlist.name.empty()) config.playlists.push_back(std::move(playlist));
-        }
-
-        if (root.contains("wedding"))
-        {
-            const auto& wedding = root["wedding"];
-            config.wedding.entrance = wedding.value("entrance", "");
-            config.wedding.ceremony = wedding.value("ceremony", "");
-            config.wedding.exit = wedding.value("exit", "");
-            if (wedding.contains("transitionSfx"))
-                config.wedding.transitionSfx = ParseSound(wedding["transitionSfx"]);
         }
 
         for (const auto& announcementValue : root.value("announcements", nlohmann::json::array()))
@@ -344,25 +342,54 @@ bool ValidateAppConfigDocument(
                 {
                     AddIssue(issues, base + ".options", "Options must be an object.");
                 }
-                else if (playlist["options"].contains("segmentDuration"))
+                else
                 {
-                    const auto& duration = playlist["options"]["segmentDuration"];
-                    if (!duration.is_number() || !std::isfinite(duration.get<double>()) ||
-                        duration.get<double>() <= 0.0)
+                    const auto& options = playlist["options"];
+                    bool rangeValuesValid = true;
+                    for (const char* key : {
+                             "segmentDuration", "minSegmentDuration",
+                             "maxSegmentDuration"})
                     {
-                        AddIssue(
-                            issues, base + ".options.segmentDuration",
-                            "Segment duration must be a finite positive number.");
+                        if (!options.contains(key)) continue;
+                        const auto& duration = options[key];
+                        if (!duration.is_number() ||
+                            !std::isfinite(duration.get<double>()) ||
+                            duration.get<double>() < 0.001 ||
+                            duration.get<double>() > 86400.0)
+                        {
+                            AddIssue(
+                                issues, base + ".options." + key,
+                                "Segment duration must be finite and between "
+                                "0.001 and 86400 seconds.");
+                            if (std::string_view(key) != "segmentDuration")
+                                rangeValuesValid = false;
+                        }
                     }
-                }
-                for (const char* key : {"randomOrder", "randomSegment", "loopPlaylist"})
-                {
-                    if (playlist["options"].contains(key) &&
-                        !playlist["options"][key].is_boolean())
+                    if (rangeValuesValid)
                     {
-                        AddIssue(
-                            issues, base + ".options." + key,
-                            "Value must be a boolean.");
+                        const double minimum = options.contains("minSegmentDuration")
+                            ? options["minSegmentDuration"].get<double>()
+                            : PlaylistOptions::DefaultMinimumSegmentDuration;
+                        const double maximum = options.contains("maxSegmentDuration")
+                            ? options["maxSegmentDuration"].get<double>()
+                            : PlaylistOptions::DefaultMaximumSegmentDuration;
+                        if (minimum > maximum)
+                        {
+                            AddIssue(
+                                issues, base + ".options.minSegmentDuration",
+                                "Minimum segment duration cannot exceed the maximum.");
+                        }
+                    }
+                    for (const char* key : {
+                             "randomOrder", "randomSegment",
+                             "automaticSegmentDuration", "loopPlaylist"})
+                    {
+                        if (options.contains(key) && !options[key].is_boolean())
+                        {
+                            AddIssue(
+                                issues, base + ".options." + key,
+                                "Value must be a boolean.");
+                        }
                     }
                 }
             }
@@ -399,56 +426,6 @@ bool ValidateAppConfigDocument(
                         issues, trackBase + ".id",
                         "A sound ID cannot refer to multiple paths.");
                 }
-            }
-        }
-    }
-
-    if (root.contains("wedding") && !root["wedding"].is_object())
-    {
-        AddIssue(issues, "$.wedding", "Value must be an object.");
-    }
-    else if (root.contains("wedding"))
-    {
-        const auto& wedding = root["wedding"];
-        for (const char* key : {"entrance", "ceremony", "exit"})
-        {
-            if (wedding.contains(key) && !wedding[key].is_string())
-                AddIssue(issues, std::string("$.wedding.") + key, "Value must be a string.");
-        }
-        const std::pair<const char*, const char*> weddingSounds[] = {
-            {"entrance", "wedding_entrance_sound"},
-            {"ceremony", "wedding_ceremony_sound"},
-            {"exit", "wedding_exit_sound"}
-        };
-        for (const auto& [key, id] : weddingSounds)
-        {
-            if (!wedding.contains(key) || !wedding[key].is_string() ||
-                wedding[key].get_ref<const std::string&>().empty())
-                continue;
-            if (!soundPaths.emplace(id, wedding[key].get<std::string>()).second)
-            {
-                AddIssue(
-                    issues, std::string("$.wedding.") + key,
-                    "Wedding asset conflicts with another sound ID.");
-            }
-        }
-        if (wedding.contains("transitionSfx"))
-        {
-            const auto& sfx = wedding["transitionSfx"];
-            if (!sfx.is_object() || !IsNonEmptyString(sfx, "id") || !IsNonEmptyString(sfx, "path"))
-            {
-                AddIssue(
-                    issues, "$.wedding.transitionSfx",
-                    "Transition SFX must contain non-empty string fields 'id' and 'path'.");
-            }
-            else
-            {
-                const std::string id = sfx["id"].get<std::string>();
-                const std::string path = sfx["path"].get<std::string>();
-                if (!soundPaths.emplace(id, path).second)
-                    AddIssue(
-                        issues, "$.wedding.transitionSfx.id",
-                        "Transition SFX ID must not conflict with another sound ID.");
             }
         }
     }

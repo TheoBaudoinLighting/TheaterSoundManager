@@ -246,7 +246,7 @@ class TheaterSoundManagerClient:
                 f"Unsupported schema version: {record.get('schemaVersion')}"
             )
         api_version = record.get("apiVersion")
-        if not isinstance(api_version, str) or api_version.split(".", 1)[0] != "1":
+        if not isinstance(api_version, str) or api_version.split(".", 1)[0] != "2":
             raise TheaterSoundManagerProtocolError(
                 f"Unsupported API version: {api_version}"
             )

@@ -120,7 +120,7 @@ Safety reactions are deliberately asymmetric:
 | manual trip with `play_evacuation=true` | Immediate hard stop | Repeated | Latched |
 
 The normal-audio gate is applied before manager cleanup and at the FMOD channel
-groups, so queued playlist, announcement, wedding, SFX, and Bluetooth work
+groups, so queued playlist, announcement, SFX, and Bluetooth work
 cannot leak through it. Bluetooth is opt-in, unauthenticated, has no safety
 commands, and its pending commands are discarded while playback is inhibited.
 

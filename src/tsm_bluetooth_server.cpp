@@ -36,10 +36,6 @@ enum class BluetoothCommandType
     PlayRandom,
     Stop,
     Next,
-    WeddingPhase1,
-    WeddingPhase2,
-    WeddingPhase3,
-    NextPhase,
     SetVolume
 };
 
@@ -256,26 +252,6 @@ void ProcessCommand(SOCKET clientSocket, const std::string& command)
     else if (command == "NEXT")
     {
         QueueOrRespond(clientSocket, BluetoothCommandType::Next, "Next track queued");
-    }
-    else if (command == "WEDDING_PHASE1")
-    {
-        QueueOrRespond(
-            clientSocket, BluetoothCommandType::WeddingPhase1, "Wedding phase 1 queued");
-    }
-    else if (command == "WEDDING_PHASE2")
-    {
-        QueueOrRespond(
-            clientSocket, BluetoothCommandType::WeddingPhase2, "Wedding phase 2 queued");
-    }
-    else if (command == "WEDDING_PHASE3")
-    {
-        QueueOrRespond(
-            clientSocket, BluetoothCommandType::WeddingPhase3, "Wedding phase 3 queued");
-    }
-    else if (command == "NEXT_PHASE")
-    {
-        QueueOrRespond(
-            clientSocket, BluetoothCommandType::NextPhase, "Next wedding phase queued");
     }
     else if (command.starts_with("SET_VOLUME"))
     {
@@ -594,18 +570,6 @@ void ProcessPendingBluetoothCommands()
                 }
                 break;
             }
-            case BluetoothCommandType::WeddingPhase1:
-                uiManager.StartWeddingPhase1(true);
-                break;
-            case BluetoothCommandType::WeddingPhase2:
-                uiManager.StartWeddingPhase2(true);
-                break;
-            case BluetoothCommandType::WeddingPhase3:
-                uiManager.StartWeddingPhase3();
-                break;
-            case BluetoothCommandType::NextPhase:
-                uiManager.NextWeddingPhase();
-                break;
             case BluetoothCommandType::SetVolume:
                 uiManager.SetMusicVolume(command.value);
                 uiManager.ForceUpdateAllVolumes();

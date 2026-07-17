@@ -27,14 +27,6 @@ struct ConfiguredAnnouncement : ConfiguredSound
     int minute = -1;
 };
 
-struct WeddingConfig
-{
-    std::string entrance;
-    std::string ceremony;
-    std::string exit;
-    ConfiguredSound transitionSfx;
-};
-
 struct CinemaResumeConfig
 {
     bool enabled = true;
@@ -72,7 +64,6 @@ struct AppConfig
     float loudnessTargetLufs = -16.0f;
     std::vector<ConfiguredPlaylist> playlists;
     std::vector<ConfiguredAnnouncement> announcements;
-    WeddingConfig wedding;
     CinemaConfig cinema;
 };
 

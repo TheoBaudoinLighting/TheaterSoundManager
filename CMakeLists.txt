@@ -12,7 +12,7 @@ endif()
 
 project(
     TheaterSoundManager
-    VERSION 1.1.3
+    VERSION 1.2.0
     DESCRIPTION "Production audio automation and safety integration for cinemas"
     LANGUAGES CXX
 )
@@ -56,8 +56,13 @@ set(TSM_CORE_SOURCES
     src/tsm_cli_parser.cpp
     src/tsm_config.cpp
     src/tsm_fmod_wrapper.cpp
+    src/tsm_listening_heatmap.cpp
     src/tsm_mixer.cpp
+    src/tsm_music_analysis.cpp
+    src/tsm_music_analysis_store.cpp
+    src/tsm_playback_memory_store.cpp
     src/tsm_playlist_manager.cpp
+    src/tsm_transition_history.cpp
     src/tsm_runtime.cpp
     src/tsm_safety.cpp
     src/tsm_ui_manager.cpp
@@ -73,12 +78,17 @@ set(TSM_PUBLIC_HEADERS
     src/tsm_cli.h
     src/tsm_config.h
     src/tsm_fmod_wrapper.h
+    src/tsm_listening_heatmap.h
     src/tsm_logger.h
     src/tsm_mixer.h
+    src/tsm_music_analysis.h
+    src/tsm_music_analysis_store.h
+    src/tsm_playback_memory_store.h
     src/tsm_playlist_manager.h
     src/tsm_runtime.h
     src/tsm_safety.h
     src/tsm_transition_logic.h
+    src/tsm_transition_history.h
     src/tsm_ui_manager.h
 )
 
@@ -101,6 +111,7 @@ target_link_libraries(tsm_core
         shell32
         uuid
         ws2_32
+        winsqlite3
 )
 tsm_configure_target(tsm_core)
 set_target_properties(tsm_core PROPERTIES FOLDER "TSM")
@@ -128,10 +139,15 @@ if(BUILD_TESTING)
         tests/tsm_cinema_schedule_tests.cpp
         tests/tsm_cli_tests.cpp
         tests/tsm_config_tests.cpp
+        tests/tsm_listening_heatmap_tests.cpp
+        tests/tsm_music_analysis_tests.cpp
+        tests/tsm_music_analysis_store_tests.cpp
+        tests/tsm_playback_memory_store_tests.cpp
         tests/tsm_playlist_manager_test.cpp
         tests/tsm_playlist_resume_tests.cpp
         tests/tsm_safety_tests.cpp
         tests/tsm_transition_logic_tests.cpp
+        tests/tsm_transition_history_tests.cpp
         tests/tsm_ui_manager_tests.cpp
     )
     target_link_libraries(TheaterSoundManagerTests
@@ -158,7 +174,7 @@ if(BUILD_TESTING)
     )
     set_tests_properties(CliExecutableVersion PROPERTIES
         LABELS "cli;smoke"
-        PASS_REGULAR_EXPRESSION "\"cliApiVersion\":\"1.0\""
+        PASS_REGULAR_EXPRESSION "\"cliApiVersion\":\"2.0\""
         TIMEOUT 10
     )
 
@@ -234,7 +250,7 @@ if(BUILD_TESTING)
             "-DTSM_CONFIGURATION=$<CONFIG>"
             "-DTSM_INSTALL_DIR=${CMAKE_CURRENT_BINARY_DIR}/install-smoke/$<CONFIG>"
             "-DTSM_EXTERNAL_CWD=${CMAKE_CURRENT_BINARY_DIR}/install-smoke-cwd/$<CONFIG>"
-            "-DTSM_EXPECT_EMPTY_CONFIG=$<NOT:$<BOOL:${TSM_INSTALL_ASSETS}>>"
+            "-DTSM_EXPECT_NO_MEDIA=$<NOT:$<BOOL:${TSM_INSTALL_ASSETS}>>"
             "-DTSM_PYTHON_EXECUTABLE=${Python3_EXECUTABLE}"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/cli_install_smoke.cmake"
     )
@@ -253,14 +269,8 @@ install(FILES
 install(FILES
     config/README.md
     config/tsm_config.cinema.example.json
+    config/tsm_config.json
     DESTINATION config)
-if(TSM_INSTALL_ASSETS)
-    install(FILES config/tsm_config.json DESTINATION config)
-else()
-    install(FILES config/tsm_config.empty.json
-        DESTINATION config
-        RENAME tsm_config.json)
-endif()
 install(DIRECTORY docs/ DESTINATION docs)
 install(DIRECTORY examples/ DESTINATION examples)
 install(FILES external/README.md DESTINATION external)
@@ -268,7 +278,11 @@ install(DIRECTORY "${TSM_THIRD_PARTY_LICENSE_DIR}/" DESTINATION licenses)
 install(FILES assets/fonts/Jost-Regular.ttf DESTINATION assets/fonts)
 install(FILES assets/fonts/OFL.txt DESTINATION licenses RENAME Jost.txt)
 if(TSM_INSTALL_ASSETS)
-    install(DIRECTORY assets/ DESTINATION assets PATTERN "fonts" EXCLUDE)
+    install(DIRECTORY assets/ DESTINATION assets
+        PATTERN "fonts" EXCLUDE
+        PATTERN "wedding" EXCLUDE
+        PATTERN "PreShowMariage" EXCLUDE
+        PATTERN "DisneyShine_SFX.mp3" EXCLUDE)
 endif()
 install(FILES README.md LICENSE DESTINATION ".")
 

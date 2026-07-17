@@ -121,6 +121,9 @@ TEST(ConfigTests, LoadsPlaylistLoudnessAndSchedule)
     ASSERT_EQ(config.playlists.size(), 1u);
     EXPECT_EQ(config.playlists[0].name, "test");
     EXPECT_FLOAT_EQ(config.playlists[0].options.segmentDuration, 42.0f);
+    EXPECT_FALSE(config.playlists[0].options.automaticSegmentDuration);
+    EXPECT_FLOAT_EQ(config.playlists[0].options.minSegmentDuration, 45.0f);
+    EXPECT_FLOAT_EQ(config.playlists[0].options.maxSegmentDuration, 240.0f);
     ASSERT_EQ(config.playlists[0].tracks.size(), 1u);
     ASSERT_EQ(config.announcements.size(), 1u);
     EXPECT_EQ(config.announcements[0].hour, 9);
@@ -128,6 +131,51 @@ TEST(ConfigTests, LoadsPlaylistLoudnessAndSchedule)
 
     std::error_code removeError;
     std::filesystem::remove(path, removeError);
+}
+
+TEST(ConfigTests, LoadsAutomaticSegmentDurationRange)
+{
+    nlohmann::json document = MinimalCinemaDocument();
+    document["playlists"][0]["options"] = {
+        {"randomSegment", true},
+        {"automaticSegmentDuration", true},
+        {"minSegmentDuration", 45.0},
+        {"maxSegmentDuration", 240.0}
+    };
+    const TemporaryConfigFile file(
+        "tsm_automatic_segment_duration.json", document);
+
+    AppConfig config;
+    std::vector<ConfigValidationIssue> issues;
+    std::string error;
+    ASSERT_TRUE(LoadValidatedAppConfig(
+        file.Path().string(), config, issues, error)) << error;
+    ASSERT_TRUE(issues.empty());
+    ASSERT_EQ(config.playlists.size(), 1u);
+    EXPECT_TRUE(config.playlists[0].options.randomSegment);
+    EXPECT_TRUE(config.playlists[0].options.automaticSegmentDuration);
+    EXPECT_FLOAT_EQ(config.playlists[0].options.minSegmentDuration, 45.0f);
+    EXPECT_FLOAT_EQ(config.playlists[0].options.maxSegmentDuration, 240.0f);
+}
+
+TEST(ConfigTests, RejectsReversedAutomaticSegmentDurationRange)
+{
+    nlohmann::json document = MinimalCinemaDocument();
+    document["playlists"][0]["options"] = {
+        {"automaticSegmentDuration", true},
+        {"minSegmentDuration", 240.0},
+        {"maxSegmentDuration", 45.0}
+    };
+    const TemporaryConfigFile file(
+        "tsm_reversed_segment_duration.json", document);
+
+    std::vector<ConfigValidationIssue> issues;
+    std::string error;
+    EXPECT_FALSE(ValidateAppConfig(file.Path().string(), issues, error));
+    EXPECT_TRUE(error.empty());
+    EXPECT_TRUE(HasIssuePath(issues, ".options.minSegmentDuration"));
+    EXPECT_TRUE(HasIssueMessage(
+        issues, "Minimum segment duration cannot exceed the maximum"));
 }
 
 TEST(ConfigTests, LoadsCinemaCalendarResumeAndSafetyConfiguration)
@@ -290,7 +338,7 @@ TEST(ConfigTests, ShippedCinemaExampleValidatesAndParses)
     EXPECT_EQ(config.cinema.safety.evacuationAnnouncementId, "evacuation_fr");
 }
 
-TEST(ConfigTests, ShippedDefaultKeepsWeddingAssetsOptIn)
+TEST(ConfigTests, ShippedDefaultLoadsNoImplicitMedia)
 {
     const std::filesystem::path path = FindRepositoryFile("config/tsm_config.json");
     ASSERT_FALSE(path.empty());
@@ -306,14 +354,12 @@ TEST(ConfigTests, ShippedDefaultKeepsWeddingAssetsOptIn)
         return std::any_of(config.playlists.begin(), config.playlists.end(),
             [&](const ConfiguredPlaylist& playlist) { return playlist.name == name; });
     };
+    ASSERT_EQ(config.playlists.size(), 2u);
     EXPECT_TRUE(hasPlaylist("playlist_PreShow"));
     EXPECT_TRUE(hasPlaylist("playlist_PostShow"));
-    EXPECT_FALSE(config.announcements.empty());
-    EXPECT_TRUE(config.wedding.entrance.empty());
-    EXPECT_TRUE(config.wedding.ceremony.empty());
-    EXPECT_TRUE(config.wedding.exit.empty());
-    EXPECT_TRUE(config.wedding.transitionSfx.id.empty());
-    EXPECT_TRUE(config.wedding.transitionSfx.path.empty());
+    for (const auto& playlist : config.playlists)
+        EXPECT_TRUE(playlist.tracks.empty()) << playlist.name;
+    EXPECT_TRUE(config.announcements.empty());
 }
 
 TEST(ConfigTests, CinemaValidationHandlesWrongJsonTypesWithoutThrowing)

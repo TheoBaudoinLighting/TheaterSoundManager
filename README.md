@@ -2,9 +2,9 @@
 
 Theater Sound Manager is a Windows x64 desktop application and versioned CLI for
 music playlists, cinema seasonal calendars, scheduled announcements, restart
-recovery, fail-closed safety interlocks, live-event transitions, and loudness
-normalization. The application uses SDL2, OpenGL, ImGui, FMOD, spdlog, and
-nlohmann/json.
+recovery, fail-closed safety interlocks, live-event transitions, loudness
+normalization, and fatigue-aware musical exploration. The application uses
+SDL2, OpenGL, ImGui, FMOD, spdlog, and nlohmann/json.
 
 ## Repository layout
 
@@ -84,8 +84,16 @@ configuration use `build/runtime/` as their disposable working directory.
 
 In the GUI, `No playlist` is the global music-library mode: it plays every
 loaded music track once per sequence snapshot, whether or not that track belongs
-to a named playlist. Announcements, SFX, wedding assets, and emergency audio are
-never included in this pool.
+to a named playlist. Announcements, SFX, and emergency audio are never included
+in this pool.
+
+Automatic segment selection analyzes musical entry/exit points offline, favours
+the configured target duration, matches the outgoing texture, and progressively
+explores underused ten-second regions. Recent segment and track-pair fatigue
+is stored transactionally in `playback_memory.sqlite3` across application
+restarts and decays by five percent per day, so long area loops naturally
+become available again instead of converging forever on the same transitions. See
+[docs/MUSIC_EXPLORATION.md](docs/MUSIC_EXPLORATION.md).
 
 ## CLI and application integration
 
@@ -106,8 +114,8 @@ the GUI as its no-argument default:
 Persistent mode keeps FMOD and playback state alive, accepts one JSON request per
 line on stdin, and returns one correlated JSON response per line on stdout. Logs
 are isolated on stderr. Sound, playlists, announcements, daily and seasonal
-schedules, the global music library, mixer, recovery, safety state, wedding mode,
-and LUFS diagnostics are all controllable through the same API.
+schedules, the global music library, mixer, recovery, safety state, and LUFS
+diagnostics are all controllable through the same API.
 
 See [docs/CLI.md](docs/CLI.md) for the full command contract, exit codes,
 deployment rules, and integration examples. A dependency-free Python client is
@@ -141,7 +149,7 @@ reproducible and does not redistribute machine-specific or unlicensed content.
 
 Set `TSM_INSTALL_ASSETS=ON` only for a controlled deployment whose local media
 and FMOD redistribution rights have been verified. That mode installs the
-populated development configuration together with `assets/`.
+source-tree configuration together with `assets/`.
 
 A ZIP package can be produced with:
 
@@ -153,7 +161,7 @@ cmake --build build --config Release --target package
 
 - `TSM_FMOD_ROOT`: path to the FMOD `api/core` directory.
 - `TSM_WARNINGS_AS_ERRORS`: promote project warnings to errors.
-- `TSM_INSTALL_ASSETS`: include the local media library and populated config;
+- `TSM_INSTALL_ASSETS`: include the local media library and source-tree config;
   defaults to `OFF`.
 - `BUILD_TESTING`: build and register the test suite.
 
@@ -173,9 +181,9 @@ cmake -E remove_directory build
 
 Deleting `build/` removes every generated build artifact and downloaded
 open-source dependency without touching source files, FMOD, configuration, or
-media. Runtime log, layout, and LUFS-cache files live under the current user's
-local application data (or the OS temporary directory as a fallback), never in
-the repository working directory.
+media. Runtime logs, layout, analysis caches, playback memory, and recovery files
+live under the current user's local application data (or the OS temporary
+directory as a fallback), never in the repository working directory.
 
 ## License
 

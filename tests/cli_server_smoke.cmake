@@ -35,7 +35,7 @@ endif()
 string(JSON ready_schema ERROR_VARIABLE json_error GET "${ready_line}" schemaVersion)
 string(JSON ready_api ERROR_VARIABLE json_error GET "${ready_line}" apiVersion)
 string(JSON ready_data_type ERROR_VARIABLE json_error TYPE "${ready_line}" data)
-if(json_error OR NOT ready_schema EQUAL 1 OR NOT ready_api STREQUAL "1.0" OR
+if(json_error OR NOT ready_schema EQUAL 1 OR NOT ready_api STREQUAL "2.0" OR
    NOT ready_data_type STREQUAL "OBJECT")
     message(FATAL_ERROR "Ready event violates the versioned contract: ${ready_line}")
 endif()

@@ -173,7 +173,6 @@ bool RequiresPersistentRuntime(const std::string& command)
     return command == "sound.play" || command == "playlist.play" ||
            command == "playlist.play-index" || command == "library.play" ||
            command == "announcement.play" ||
-           command == "wedding.phase" || command == "wedding.next" ||
            command == "loudness.analyze";
 }
 
@@ -182,7 +181,9 @@ bool RequiresServer(const std::string& command, const nlohmann::json& parameters
     if (command == "playlist.options")
     {
         static const std::set<std::string_view> mutationParameters = {
-            "random_order", "random_segment", "segment_duration", "loop", "crossfade"};
+            "random_order", "random_segment", "segment_duration",
+            "automatic_segment_duration", "min_segment_duration",
+            "max_segment_duration", "loop", "crossfade"};
         for (const std::string_view parameter : mutationParameters)
         {
             if (parameters.contains(parameter)) return true;
@@ -201,10 +202,10 @@ bool RequiresServer(const std::string& command, const nlohmann::json& parameters
         "playlist.duplicate", "playlist.add", "playlist.remove",
         "playlist.clear", "playlist.move",
         "playlist.import", "playlist.load", "playlist.stop", "playlist.next",
-        "library.stop", "library.next",
+        "library.stop", "library.next", "library.clear-history",
         "announcement.load", "announcement.unload", "announcement.stop",
         "schedule.add", "schedule.update", "schedule.remove", "schedule.reset",
-        "mixer.set", "wedding.asset", "wedding.next", "wedding.stop"
+        "mixer.set"
     };
     return commands.contains(command);
 }
@@ -452,8 +453,8 @@ int RunServer(const CliInvocation& invocation)
     CliCommandProcessor processor(runtime);
     const CliResult status = processor.Execute("system.status", nlohmann::json::object());
     WriteJson({
-        {"schemaVersion", 1},
-        {"apiVersion", "1.0"},
+        {"schemaVersion", CliSchemaVersion},
+        {"apiVersion", CliApiVersion},
         {"event", "ready"},
         {"data", status.data}
     }, false);
@@ -558,7 +559,7 @@ Usage:
 Global options:
   --config PATH       Configuration file (auto-detected by default)
   --no-config         Start an empty session
-  --state-dir PATH    Durable cinema/safety state directory
+  --state-dir PATH    Durable analysis, exploration, recovery, and safety state
   --no-sound          Use FMOD's no-sound output (testing/automation)
   --bluetooth         Attempt to start the Bluetooth server in this process
   --wait SECONDS      Keep a one-shot playback/analysis command alive
@@ -581,11 +582,11 @@ Command groups:
   playlist      list, show, create, delete, rename, duplicate, add,
                 remove, clear, move, options, import, export, save,
                 load, play, play-index, stop, next, status
-  library       play, stop, next, status (all imported music)
+  library       play, stop, next, status, history, clear-history
+                (all imported music)
   announcement  list, load, unload, play, stop, status
   schedule      list, add, update, remove, reset
   mixer         get, set
-  wedding       status, asset, phase, next, stop
   loudness      status, analyze, target, clear-cache
 
 Examples:
@@ -648,8 +649,8 @@ int RunCli(const std::vector<std::string>& arguments)
             WriteJson({
                 {"name", "TheaterSoundManager"},
                 {"version", TSM_VERSION},
-                {"cliApiVersion", "1.0"},
-                {"schemaVersion", 1}
+                {"cliApiVersion", CliApiVersion},
+                {"schemaVersion", CliSchemaVersion}
             }, invocation.pretty);
             return 0;
         }
